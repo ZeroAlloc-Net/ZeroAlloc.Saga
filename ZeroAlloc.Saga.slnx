@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ZeroAlloc.Saga/ZeroAlloc.Saga.csproj" />
+    <Project Path="src/ZeroAlloc.Saga.Generator/ZeroAlloc.Saga.Generator.csproj" />
+  </Folder>
+</Solution>
