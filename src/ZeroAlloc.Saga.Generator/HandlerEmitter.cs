@@ -229,6 +229,12 @@ internal static class HandlerEmitter
         sb.AppendLine("                }");
         sb.AppendLine();
         sb.AppendLine("                // Reverse-cascade compensation: walk back from stateAtFailure to Step1.");
+        sb.AppendLine("                // Re-dispatch contract: if RemoveAsync below throws an EF Core conflict");
+        sb.AppendLine("                // (third party deleted/updated row mid-compensation), the surrounding");
+        sb.AppendLine("                // retry loop re-enters this try block. On retry, TryLoadAsync may return");
+        sb.AppendLine("                // null (just-deleted) and the handler returns silently; otherwise the");
+        sb.AppendLine("                // compensation commands below may be dispatched a second time. The");
+        sb.AppendLine("                // \"idempotency is the user's responsibility\" contract (ZASAGA015) covers this.");
         sb.AppendLine("                switch (stateAtFailure)");
         sb.AppendLine("                {");
         for (int i = model.Steps.Count - 1; i >= 0; i--)

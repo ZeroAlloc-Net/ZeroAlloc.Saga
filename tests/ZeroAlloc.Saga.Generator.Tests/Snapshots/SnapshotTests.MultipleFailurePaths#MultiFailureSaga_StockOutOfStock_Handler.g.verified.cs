@@ -53,6 +53,12 @@ internal sealed class MultiFailureSaga_StockOutOfStock_Handler : INotificationHa
                 }
 
                 // Reverse-cascade compensation: walk back from stateAtFailure to Step1.
+                // Re-dispatch contract: if RemoveAsync below throws an EF Core conflict
+                // (third party deleted/updated row mid-compensation), the surrounding
+                // retry loop re-enters this try block. On retry, TryLoadAsync may return
+                // null (just-deleted) and the handler returns silently; otherwise the
+                // compensation commands below may be dispatched a second time. The
+                // "idempotency is the user's responsibility" contract (ZASAGA015) covers this.
                 switch (stateAtFailure)
                 {
                     case MultiFailureSagaFsm.State.Step1:
