@@ -67,6 +67,87 @@ public sealed class OccTests
     }
 
     [Fact]
+    public async Task OCC_RaceOnLoadOrCreate_UniqueConstraintRetryHandled()
+    {
+        // Two processes both call LoadOrCreateAsync for a fresh correlation
+        // key, both INSERT, second hits a unique-constraint violation
+        // (DbUpdateException, NOT DbUpdateConcurrencyException). The
+        // generator-emitted handler retry loop must catch the broadened
+        // exception type and recover on the next attempt.
+        await using var fx = new SqliteFixture();
+        await fx.EnsureCreatedAsync();
+        SagaStoreRegistrar.Reset();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddMediator();
+        services.AddDbContext<TestDbContext>(opts => opts.UseSqlite(fx.Connection),
+            ServiceLifetime.Scoped);
+        services.AddSaga()
+            .WithEfCoreStore<TestDbContext>(opts => { opts.MaxRetryAttempts = 3; opts.RetryBaseDelay = TimeSpan.FromMilliseconds(1); opts.UseExponentialBackoff = false; })
+            .AddOrderFulfillmentSaga();
+
+        // Replace the saga store with a wrapper that throws DbUpdateException
+        // exactly once on the first SaveAsync (simulating a unique-constraint
+        // violation when a parallel writer beats us to the INSERT). The retry
+        // loop should catch DbUpdateException via the broadened catch and
+        // succeed on the second attempt.
+        for (int i = services.Count - 1; i >= 0; i--)
+        {
+            if (services[i].ServiceType == typeof(ISagaStore<OrderFulfillmentSaga, OrderId>))
+            {
+                services.RemoveAt(i);
+            }
+        }
+        services.AddScoped<ISagaStore<OrderFulfillmentSaga, OrderId>>(sp =>
+        {
+            var inner = new EfCoreSagaStore<OrderFulfillmentSaga, OrderId>(
+                sp.GetRequiredService<TestDbContext>(),
+                NullLogger<EfCoreSagaStore<OrderFulfillmentSaga, OrderId>>.Instance);
+            return new OneShotInsertRaceStore(inner);
+        });
+
+        var sp = services.BuildServiceProvider();
+        var ledger = new CommandLedger();
+        CommandLedger.Current = ledger;
+
+        var orderId = new OrderId(404);
+        // Should NOT throw — the retry loop swallows the DbUpdateException
+        // (NOT a DbUpdateConcurrencyException, which is what the original
+        // narrower catch handled) and succeeds on the retry.
+        await PublishAsync(sp, new OrderPlaced(orderId, 5m));
+
+        // ReserveStock dispatched on at least one attempt (idempotency is
+        // the user's responsibility; both attempts may dispatch).
+        Assert.True(ledger.CommandsOfType<ReserveStockCommand>().Count >= 1,
+            "Expected ReserveStock to be dispatched after the INSERT-race retry");
+    }
+
+    private sealed class OneShotInsertRaceStore : ISagaStore<OrderFulfillmentSaga, OrderId>
+    {
+        private readonly ISagaStore<OrderFulfillmentSaga, OrderId> _inner;
+        private int _attemptedSaves;
+        public OneShotInsertRaceStore(ISagaStore<OrderFulfillmentSaga, OrderId> inner) => _inner = inner;
+
+        public ValueTask<OrderFulfillmentSaga?> TryLoadAsync(OrderId key, CancellationToken ct)
+            => _inner.TryLoadAsync(key, ct);
+        public ValueTask<OrderFulfillmentSaga> LoadOrCreateAsync(OrderId key, CancellationToken ct)
+            => _inner.LoadOrCreateAsync(key, ct);
+        public ValueTask SaveAsync(OrderId key, OrderFulfillmentSaga saga, CancellationToken ct)
+        {
+            if (System.Threading.Interlocked.Increment(ref _attemptedSaves) == 1)
+            {
+                // Simulate a unique-constraint INSERT race: DbUpdateException,
+                // NOT a DbUpdateConcurrencyException. Pre-Fix-C1 the handler
+                // retry loop would have let this escape.
+                throw new DbUpdateException("Unique-constraint INSERT race (test).");
+            }
+            return _inner.SaveAsync(key, saga, ct);
+        }
+        public ValueTask RemoveAsync(OrderId key, CancellationToken ct) => _inner.RemoveAsync(key, ct);
+    }
+
+    [Fact]
     public async Task OCC_HandlerRetryLoop_RecoversFromTransientConflict()
     {
         // Replace the store with a wrapper that throws DbUpdateConcurrencyException
