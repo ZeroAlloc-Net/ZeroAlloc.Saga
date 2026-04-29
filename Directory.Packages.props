@@ -5,9 +5,9 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- Runtime deps -->
-    <PackageVersion Include="ZeroAlloc.Mediator" Version="2.0.*" />
+    <PackageVersion Include="ZeroAlloc.Mediator" Version="3.0.*" />
     <PackageVersion Include="ZeroAlloc.Pipeline" Version="1.0.*" />
-    <PackageVersion Include="ZeroAlloc.Mediator.Generator" Version="2.0.*" />
+    <PackageVersion Include="ZeroAlloc.Mediator.Generator" Version="3.0.*" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="9.0.3" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.3" />
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="9.0.3" />
