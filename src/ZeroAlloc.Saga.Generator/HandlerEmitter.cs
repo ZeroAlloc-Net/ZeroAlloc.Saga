@@ -12,8 +12,22 @@ namespace ZeroAlloc.Saga.Generator;
 /// Compensate handlers TryFire to Compensating, walk the reverse cascade,
 /// fire <c>Trigger.CompensateDone</c>, and remove the saga.
 /// </summary>
+/// <remarks>
+/// Each emitted handler wraps the load/fire/dispatch/save flow in an OCC
+/// retry loop. The catch block matches <c>DbUpdateConcurrencyException</c>
+/// by string-name (<c>ex.GetType().FullName == ...</c>) so the generator
+/// output never references <c>Microsoft.EntityFrameworkCore</c> — InMemory
+/// users compile cleanly without the EF Core package, and the catch is
+/// dormant for them because <see cref="ZeroAlloc.Saga.InMemorySagaStore{TSaga,TKey}"/>
+/// never throws concurrency exceptions. The retry budget is read from
+/// <see cref="ZeroAlloc.Saga.SagaRetryOptions"/>, registered with
+/// defaults by <c>AddSaga()</c> and overridden by
+/// <c>WithEfCoreStore&lt;TContext&gt;()</c> when EfCore is wired.
+/// </remarks>
 internal static class HandlerEmitter
 {
+    private const string DbUpdateConcurrencyExceptionFullName = "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException";
+
     public static void Emit(SourceProductionContext spc, SagaModel model)
     {
         foreach (var step in model.Steps)
@@ -58,15 +72,17 @@ internal static class HandlerEmitter
         sb.Append("    private readonly ISagaStore<").Append(model.ClassName).Append(", ").Append(keyType).AppendLine("> _store;");
         sb.Append("    private readonly SagaLockManager<").Append(keyType).AppendLine("> _locks;");
         sb.AppendLine("    private readonly IMediator _mediator;");
+        sb.AppendLine("    private readonly SagaRetryOptions _retry;");
         sb.Append("    private readonly ILogger<").Append(handlerName).AppendLine("> _log;");
         sb.AppendLine();
         sb.Append("    public ").Append(handlerName).Append("(ISagaStore<").Append(model.ClassName)
           .Append(", ").Append(keyType).Append("> store, SagaLockManager<").Append(keyType)
-          .Append("> locks, IMediator mediator, ILogger<").Append(handlerName).AppendLine("> log)");
+          .Append("> locks, IMediator mediator, SagaRetryOptions retry, ILogger<").Append(handlerName).AppendLine("> log)");
         sb.AppendLine("    {");
         sb.AppendLine("        _store = store;");
         sb.AppendLine("        _locks = locks;");
         sb.AppendLine("        _mediator = mediator;");
+        sb.AppendLine("        _retry = retry;");
         sb.AppendLine("        _log = log;");
         sb.AppendLine("    }");
         sb.AppendLine();
@@ -75,25 +91,52 @@ internal static class HandlerEmitter
         sb.Append("        var key = ").Append(model.ClassName).AppendLine("CorrelationDispatch.GetKey(@event);");
         sb.AppendLine("        using var _ = await _locks.AcquireAsync(key, ct).ConfigureAwait(false);");
         sb.AppendLine();
-        sb.AppendLine("        var saga = await _store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);");
-        sb.Append("        if (!saga.Fsm.TryFire(").Append(fsmType).Append(".Trigger.").Append(eventSimple).AppendLine("))");
+        sb.AppendLine("        var attempts = 0;");
+        sb.AppendLine("        while (true)");
         sb.AppendLine("        {");
-        sb.Append("            _log.LogDebug(\"Saga {Saga}: late ").Append(eventSimple).AppendLine(" for key {Key}; ignored\", \"" + model.ClassName + "\", key);");
-        sb.AppendLine("            return;");
-        sb.AppendLine("        }");
+        sb.AppendLine("            try");
+        sb.AppendLine("            {");
+        sb.AppendLine("                var saga = await _store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);");
+        sb.Append("                if (!saga.Fsm.TryFire(").Append(fsmType).Append(".Trigger.").Append(eventSimple).AppendLine("))");
+        sb.AppendLine("                {");
+        sb.Append("                    _log.LogDebug(\"Saga {Saga}: late ").Append(eventSimple).AppendLine(" for key {Key}; ignored\", \"" + model.ClassName + "\", key);");
+        sb.AppendLine("                    return;");
+        sb.AppendLine("                }");
         sb.AppendLine();
-        sb.Append("        var cmd = saga.").Append(step.MethodName).AppendLine("(@event);");
-        sb.AppendLine("        await _mediator.Send(cmd, ct).ConfigureAwait(false);");
+        sb.Append("                var cmd = saga.").Append(step.MethodName).AppendLine("(@event);");
+        sb.AppendLine("                await _mediator.Send(cmd, ct).ConfigureAwait(false);");
         sb.AppendLine();
         if (isLastStep)
         {
-            sb.Append("        saga.Fsm.TryFire(").Append(fsmType).AppendLine(".Trigger.Complete);");
-            sb.AppendLine("        await _store.RemoveAsync(key, ct).ConfigureAwait(false);");
+            sb.Append("                saga.Fsm.TryFire(").Append(fsmType).AppendLine(".Trigger.Complete);");
+            sb.AppendLine("                await _store.RemoveAsync(key, ct).ConfigureAwait(false);");
         }
         else
         {
-            sb.AppendLine("        await _store.SaveAsync(key, saga, ct).ConfigureAwait(false);");
+            sb.AppendLine("                await _store.SaveAsync(key, saga, ct).ConfigureAwait(false);");
         }
+        sb.AppendLine("                return;");
+        sb.AppendLine("            }");
+        // String-based type-name catch avoids referencing Microsoft.EntityFrameworkCore
+        // from generator output; InMemory users get a dormant catch (their store
+        // never raises concurrency exceptions).
+        sb.Append("            catch (Exception ex) when (ex.GetType().FullName == \"")
+          .Append(DbUpdateConcurrencyExceptionFullName).AppendLine("\" && attempts < _retry.MaxRetryAttempts)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                attempts++;");
+        sb.Append("                _log.LogWarning(\"Saga {Saga}: OCC conflict on key {Key}, retry {Attempt}/{Max}\", \"")
+          .Append(model.ClassName).AppendLine("\", key, attempts, _retry.MaxRetryAttempts);");
+        sb.AppendLine("                var delay = _retry.UseExponentialBackoff");
+        sb.AppendLine("                    ? TimeSpan.FromTicks(_retry.RetryBaseDelay.Ticks * (1L << attempts))");
+        sb.AppendLine("                    : _retry.RetryBaseDelay;");
+        sb.AppendLine("                await Task.Delay(delay, ct).ConfigureAwait(false);");
+        sb.AppendLine("            }");
+        sb.Append("            catch (Exception ex) when (ex.GetType().FullName == \"")
+          .Append(DbUpdateConcurrencyExceptionFullName).AppendLine("\")");
+        sb.AppendLine("            {");
+        sb.Append("                throw new SagaConcurrencyException(\"").Append(model.ClassName).AppendLine("\", key.ToString() ?? string.Empty, attempts, ex);");
+        sb.AppendLine("            }");
+        sb.AppendLine("        }");
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
@@ -130,15 +173,17 @@ internal static class HandlerEmitter
         sb.Append("    private readonly ISagaStore<").Append(model.ClassName).Append(", ").Append(keyType).AppendLine("> _store;");
         sb.Append("    private readonly SagaLockManager<").Append(keyType).AppendLine("> _locks;");
         sb.AppendLine("    private readonly IMediator _mediator;");
+        sb.AppendLine("    private readonly SagaRetryOptions _retry;");
         sb.Append("    private readonly ILogger<").Append(handlerName).AppendLine("> _log;");
         sb.AppendLine();
         sb.Append("    public ").Append(handlerName).Append("(ISagaStore<").Append(model.ClassName)
           .Append(", ").Append(keyType).Append("> store, SagaLockManager<").Append(keyType)
-          .Append("> locks, IMediator mediator, ILogger<").Append(handlerName).AppendLine("> log)");
+          .Append("> locks, IMediator mediator, SagaRetryOptions retry, ILogger<").Append(handlerName).AppendLine("> log)");
         sb.AppendLine("    {");
         sb.AppendLine("        _store = store;");
         sb.AppendLine("        _locks = locks;");
         sb.AppendLine("        _mediator = mediator;");
+        sb.AppendLine("        _retry = retry;");
         sb.AppendLine("        _log = log;");
         sb.AppendLine("    }");
         sb.AppendLine();
@@ -148,45 +193,66 @@ internal static class HandlerEmitter
         sb.Append("        var key = ").Append(model.ClassName).AppendLine("CorrelationDispatch.GetKey(@event);");
         sb.AppendLine("        using var _ = await _locks.AcquireAsync(key, ct).ConfigureAwait(false);");
         sb.AppendLine();
-        sb.AppendLine("        var saga = await _store.TryLoadAsync(key, ct).ConfigureAwait(false);");
-        sb.AppendLine("        if (saga is null)");
+        sb.AppendLine("        var attempts = 0;");
+        sb.AppendLine("        while (true)");
         sb.AppendLine("        {");
-        sb.Append("            _log.LogWarning(\"Saga {Saga}: orphan ").Append(eventSimple).AppendLine(" for key {Key}; no instance to compensate\", \"" + model.ClassName + "\", key);");
-        sb.AppendLine("            return;");
-        sb.AppendLine("        }");
+        sb.AppendLine("            try");
+        sb.AppendLine("            {");
+        sb.AppendLine("                var saga = await _store.TryLoadAsync(key, ct).ConfigureAwait(false);");
+        sb.AppendLine("                if (saga is null)");
+        sb.AppendLine("                {");
+        sb.Append("                    _log.LogWarning(\"Saga {Saga}: orphan ").Append(eventSimple).AppendLine(" for key {Key}; no instance to compensate\", \"" + model.ClassName + "\", key);");
+        sb.AppendLine("                    return;");
+        sb.AppendLine("                }");
         sb.AppendLine();
-        sb.Append("        var stateAtFailure = saga.Fsm.Current;");
+        sb.Append("                var stateAtFailure = saga.Fsm.Current;");
         sb.AppendLine();
-        sb.Append("        if (!saga.Fsm.TryFire(").Append(fsmType).Append(".Trigger.").Append(eventSimple).AppendLine("))");
-        sb.AppendLine("        {");
-        sb.Append("            _log.LogDebug(\"Saga {Saga}: ").Append(eventSimple).AppendLine(" not valid in state {State} for key {Key}; ignored\", \"" + model.ClassName + "\", stateAtFailure, key);");
-        sb.AppendLine("            return;");
-        sb.AppendLine("        }");
+        sb.Append("                if (!saga.Fsm.TryFire(").Append(fsmType).Append(".Trigger.").Append(eventSimple).AppendLine("))");
+        sb.AppendLine("                {");
+        sb.Append("                    _log.LogDebug(\"Saga {Saga}: ").Append(eventSimple).AppendLine(" not valid in state {State} for key {Key}; ignored\", \"" + model.ClassName + "\", stateAtFailure, key);");
+        sb.AppendLine("                    return;");
+        sb.AppendLine("                }");
         sb.AppendLine();
-        sb.AppendLine("        // Reverse-cascade compensation: walk back from stateAtFailure to Step1.");
-        sb.AppendLine("        switch (stateAtFailure)");
-        sb.AppendLine("        {");
-        // Steps that have a CompensateOn matching this event define entry points.
-        // For each entry-point step (descending order), emit a switch case that runs
-        // each prior step's compensation in reverse.
+        sb.AppendLine("                // Reverse-cascade compensation: walk back from stateAtFailure to Step1.");
+        sb.AppendLine("                switch (stateAtFailure)");
+        sb.AppendLine("                {");
         for (int i = model.Steps.Count - 1; i >= 0; i--)
         {
             var entry = model.Steps[i];
             if (entry.CompensateOnEventTypeFqn != compEventFqn) continue;
-            sb.Append("            case ").Append(fsmType).Append(".State.Step").Append(i + 1).AppendLine(":");
+            sb.Append("                    case ").Append(fsmType).Append(".State.Step").Append(i + 1).AppendLine(":");
             for (int j = i; j >= 0; j--)
             {
                 var s = model.Steps[j];
                 if (s.CompensateMethodName is null) continue;
-                sb.Append("                await _mediator.Send(saga.").Append(s.CompensateMethodName).AppendLine("(), ct).ConfigureAwait(false);");
+                sb.Append("                        await _mediator.Send(saga.").Append(s.CompensateMethodName).AppendLine("(), ct).ConfigureAwait(false);");
             }
-            sb.AppendLine("                break;");
+            sb.AppendLine("                        break;");
         }
-        sb.AppendLine("            default: break;");
-        sb.AppendLine("        }");
+        sb.AppendLine("                    default: break;");
+        sb.AppendLine("                }");
         sb.AppendLine();
-        sb.Append("        saga.Fsm.TryFire(").Append(fsmType).AppendLine(".Trigger.CompensateDone);");
-        sb.AppendLine("        await _store.RemoveAsync(key, ct).ConfigureAwait(false);");
+        sb.Append("                saga.Fsm.TryFire(").Append(fsmType).AppendLine(".Trigger.CompensateDone);");
+        sb.AppendLine("                await _store.RemoveAsync(key, ct).ConfigureAwait(false);");
+        sb.AppendLine("                return;");
+        sb.AppendLine("            }");
+        sb.Append("            catch (Exception ex) when (ex.GetType().FullName == \"")
+          .Append(DbUpdateConcurrencyExceptionFullName).AppendLine("\" && attempts < _retry.MaxRetryAttempts)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                attempts++;");
+        sb.Append("                _log.LogWarning(\"Saga {Saga}: OCC conflict on compensation for key {Key}, retry {Attempt}/{Max}\", \"")
+          .Append(model.ClassName).AppendLine("\", key, attempts, _retry.MaxRetryAttempts);");
+        sb.AppendLine("                var delay = _retry.UseExponentialBackoff");
+        sb.AppendLine("                    ? TimeSpan.FromTicks(_retry.RetryBaseDelay.Ticks * (1L << attempts))");
+        sb.AppendLine("                    : _retry.RetryBaseDelay;");
+        sb.AppendLine("                await Task.Delay(delay, ct).ConfigureAwait(false);");
+        sb.AppendLine("            }");
+        sb.Append("            catch (Exception ex) when (ex.GetType().FullName == \"")
+          .Append(DbUpdateConcurrencyExceptionFullName).AppendLine("\")");
+        sb.AppendLine("            {");
+        sb.Append("                throw new SagaConcurrencyException(\"").Append(model.ClassName).AppendLine("\", key.ToString() ?? string.Empty, attempts, ex);");
+        sb.AppendLine("            }");
+        sb.AppendLine("        }");
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
