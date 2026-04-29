@@ -45,6 +45,7 @@ public sealed class SagaGenerator : IIncrementalGenerator
                 HandlerEmitter.Emit(spc, result.Model);
                 CorrelationDispatchEmitter.Emit(spc, result.Model);
                 BuilderExtensionsEmitter.Emit(spc, result.Model);
+                SnapshotRestoreEmitter.Emit(spc, result.Model);
             }
         });
 

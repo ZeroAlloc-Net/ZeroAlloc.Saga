@@ -439,11 +439,60 @@ internal sealed record SagaModel(
             return new StateFieldInfo(memberName, typeFqn, StateFieldKind.TypedId, null, true, null, valuePrimitiveKind, location);
         }
 
+        // Common pattern: a positional `record struct Foo(TPrim Value)` (or named other than
+        // Value) used as a typed wrapper around a primitive. Treat the same as [TypedId] —
+        // the wire encoding is the underlying primitive, and rehydrate with the
+        // single-arg primary ctor.
+        if (type.IsValueType && type is INamedTypeSymbol nts
+            && nts.IsRecord
+            && TryFindRecordPositionalPrimitive(nts, out var ctorParamName, out var ctorPrimKind))
+        {
+            return new StateFieldInfo(
+                memberName, typeFqn, StateFieldKind.TypedId, null,
+                IsTypedId: true,
+                InnerKind: null,
+                TypedIdValuePrimitiveKind: ctorPrimKind,
+                Location: location)
+            { RecordPositionalParamName = ctorParamName };
+        }
+
         // Anything else: ZASAGA014.
         diagnostics.Add(DiagnosticInfo.Create(
             Diagnostics.SagaDiagnostics.UnsupportedFieldType,
             location, memberName, className, typeFqn));
         return new StateFieldInfo(memberName, typeFqn, StateFieldKind.Unsupported, null, false, null, null, location);
+    }
+
+    /// <summary>
+    /// Detects the <c>record struct Foo(TPrim Bar)</c> shape — a struct with a
+    /// primary constructor of one parameter whose type is a supported primitive.
+    /// Captures the parameter name so the emitter can read it back via the
+    /// generated property.
+    /// </summary>
+    private static bool TryFindRecordPositionalPrimitive(
+        INamedTypeSymbol nts,
+        out string? paramName,
+        out StateFieldKind? primKind)
+    {
+        paramName = null;
+        primKind = null;
+        // Look for the primary constructor — Roslyn synthesises one for record
+        // structs with positional parameters; we approximate by finding a public
+        // single-param ctor.
+        foreach (var ctor in nts.InstanceConstructors)
+        {
+            if (ctor.IsImplicitlyDeclared && nts.InstanceConstructors.Length > 1) continue;
+            if (ctor.Parameters.Length != 1) continue;
+            var p = ctor.Parameters[0];
+            var k = MapPrimitiveSpecial(p.Type.SpecialType);
+            if (k is null && string.Equals(StripGlobalPrefix(p.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)), "System.Guid", System.StringComparison.Ordinal))
+                k = StateFieldKind.Guid;
+            if (k is null) continue;
+            paramName = p.Name;
+            primKind = k;
+            return true;
+        }
+        return false;
     }
 
     private static StateFieldKind? MapPrimitiveSpecial(SpecialType st) => st switch
@@ -458,8 +507,10 @@ internal sealed record SagaModel(
         SpecialType.System_UInt64 => StateFieldKind.UInt64,
         SpecialType.System_Single => StateFieldKind.Single,
         SpecialType.System_Double => StateFieldKind.Double,
+        SpecialType.System_Decimal => StateFieldKind.Decimal,
         SpecialType.System_Boolean => StateFieldKind.Boolean,
         SpecialType.System_String => StateFieldKind.String,
+        SpecialType.System_DateTime => StateFieldKind.DateTime,
         _ => null,
     };
 
@@ -544,7 +595,17 @@ internal sealed record StateFieldInfo(
     StateFieldKind? InnerKind,
     /// <summary>For TypedId: the kind of the .Value primitive.</summary>
     StateFieldKind? TypedIdValuePrimitiveKind,
-    Location? Location);
+    Location? Location)
+{
+    /// <summary>
+    /// For TypedId-shaped value types reachable via a single positional record
+    /// ctor (e.g. <c>record struct OrderId(int Value)</c>), the name of the
+    /// underlying property — used by the emitter to read back via
+    /// <c>field.&lt;Param&gt;</c> in <c>Snapshot()</c>. Null for [TypedId]-attributed
+    /// types where <c>.Value</c> is the canonical accessor.
+    /// </summary>
+    public string? RecordPositionalParamName { get; init; }
+}
 
 internal enum StateFieldKind
 {
