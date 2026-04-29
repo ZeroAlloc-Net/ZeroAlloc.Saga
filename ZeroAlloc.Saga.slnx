@@ -6,5 +6,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/ZeroAlloc.Saga.Tests/ZeroAlloc.Saga.Tests.csproj" />
     <Project Path="tests/ZeroAlloc.Saga.Generator.Tests/ZeroAlloc.Saga.Generator.Tests.csproj" />
+    <Project Path="tests/ZeroAlloc.Saga.Diagnostics.Tests/ZeroAlloc.Saga.Diagnostics.Tests.csproj" />
   </Folder>
 </Solution>
