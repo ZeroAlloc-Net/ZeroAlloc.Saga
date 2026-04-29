@@ -22,8 +22,13 @@
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.*" />
     <PackageVersion Include="Verify.SourceGenerators" Version="2.*" />
     <PackageVersion Include="Verify.Xunit" Version="28.*" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing" Version="1.*" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing.XUnit" Version="1.*" />
+    <!--
+      Note: Microsoft.CodeAnalysis.CSharp.Analyzer.Testing and friends are not
+      pinned here. PR 3 implements its own light-weight test harness on top of
+      CSharpGeneratorDriver / AdhocWorkspace because the published Roslyn
+      testing packages still pull in Microsoft.CodeAnalysis.* 3.8 and
+      conflict with our 4.11 pin.
+    -->
 
     <!-- Analyzer deps (transitive via Directory.Build.props) -->
     <PackageVersion Include="Meziantou.Analyzer" Version="3.0.*" />
