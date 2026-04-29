@@ -26,4 +26,6 @@ public partial class FulfillmentSagaFsm
         _state = next.Value;
         return true;
     }
+
+    public void SetCurrentState(State state) => _state = state;
 }

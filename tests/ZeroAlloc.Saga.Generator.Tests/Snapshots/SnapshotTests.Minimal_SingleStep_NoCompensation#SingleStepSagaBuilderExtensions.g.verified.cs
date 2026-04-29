@@ -15,7 +15,12 @@ public static class SingleStepSagaBuilderExtensions
 {
     public static ISagaBuilder AddSingleStepSaga(this ISagaBuilder builder)
     {
+        builder.Services.AddMediator();
         builder.Services.TryAddSingleton<ISagaStore<SingleStepSaga, global::Sample.OrderId>, InMemorySagaStore<SingleStepSaga, global::Sample.OrderId>>();
+        if (builder.IsEfCoreBackend)
+        {
+            global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<SingleStepSaga, global::Sample.OrderId>(builder);
+        }
         builder.Services.TryAddSingleton<SagaLockManager<global::Sample.OrderId>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<SingleStepSaga>, SingleStepSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<SingleStepSaga, global::Sample.OrderId>, SagaManager<SingleStepSaga, global::Sample.OrderId>>();

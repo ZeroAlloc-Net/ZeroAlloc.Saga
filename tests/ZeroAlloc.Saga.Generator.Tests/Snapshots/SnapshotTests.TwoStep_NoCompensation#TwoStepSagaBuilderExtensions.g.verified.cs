@@ -15,7 +15,12 @@ public static class TwoStepSagaBuilderExtensions
 {
     public static ISagaBuilder AddTwoStepSaga(this ISagaBuilder builder)
     {
+        builder.Services.AddMediator();
         builder.Services.TryAddSingleton<ISagaStore<TwoStepSaga, global::Sample.OrderId>, InMemorySagaStore<TwoStepSaga, global::Sample.OrderId>>();
+        if (builder.IsEfCoreBackend)
+        {
+            global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<TwoStepSaga, global::Sample.OrderId>(builder);
+        }
         builder.Services.TryAddSingleton<SagaLockManager<global::Sample.OrderId>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<TwoStepSaga>, TwoStepSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<TwoStepSaga, global::Sample.OrderId>, SagaManager<TwoStepSaga, global::Sample.OrderId>>();
