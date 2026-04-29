@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v1.1.0...ZeroAlloc.Saga-v1.2.0) (2026-04-29)
+
+
+### Features
+
+* **saga.efcore:** full implementation + comprehensive test suite ([781f134](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/781f1342d392aa6727ed5ead5d5d91f43603e55f))
+* **saga:** typed registrar + backend-agnostic retry options ([c737002](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/c737002e530436f426f8cf1ab77da7855fc97777))
+
 ## [1.1.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v1.1.0...ZeroAlloc.Saga-v1.1.0) (2026-04-29)
 
 
