@@ -160,4 +160,25 @@ public ref struct SagaStateReader
         _position += len;
         return bytes;
     }
+
+    /// <summary>
+    /// Reads a length-prefixed byte sequence, distinguishing <c>null</c>
+    /// (length <c>-1</c>) from an empty array (length <c>0</c>). Pair with
+    /// <see cref="SagaStateWriter.WriteBytes(byte[])"/> on the write side.
+    /// </summary>
+    /// <remarks>
+    /// Wire format is identical to <see cref="ReadBytes"/>; this overload is
+    /// kept distinct only to make the null-preservation contract explicit at
+    /// the call site emitted by the source generator for <c>byte[]?</c> fields.
+    /// </remarks>
+    public byte[]? ReadBytesNullable()
+    {
+        var len = ReadInt32();
+        if (len < 0) return null;
+        if (len == 0) return Array.Empty<byte>();
+        var data = _data;
+        var bytes = data.Slice(_position, len).ToArray();
+        _position += len;
+        return bytes;
+    }
 }

@@ -427,10 +427,15 @@ internal sealed record SagaModel(
                 return new StateFieldInfo(memberName, typeFqn, StateFieldKind.Guid, null, false, null, null, location);
         }
 
-        // byte[] — supported as length-prefixed bytes.
+        // byte[] — supported as length-prefixed bytes. NRT-annotated `byte[]?` uses
+        // the dedicated nullable kind so the emitter routes to the WriteBytes(byte[]?)
+        // overload and ReadBytesNullable(), preserving null-vs-empty round-trip.
         if (type is IArrayTypeSymbol arr && arr.ElementType.SpecialType == SpecialType.System_Byte)
         {
-            return new StateFieldInfo(memberName, typeFqn, StateFieldKind.ByteArray, null, false, null, null, location);
+            var kind = type.NullableAnnotation == NullableAnnotation.Annotated
+                ? StateFieldKind.ByteArrayNullable
+                : StateFieldKind.ByteArray;
+            return new StateFieldInfo(memberName, typeFqn, kind, null, false, null, null, location);
         }
 
         // [TypedId] structs — read .Value primitive.
@@ -617,6 +622,12 @@ internal enum StateFieldKind
     Nullable,
     TypedId,
     ByteArray,
+    /// <summary>
+    /// <c>byte[]?</c> with NRT-annotated nullable. Distinct from
+    /// <see cref="ByteArray"/> so the generator can emit the nullable
+    /// writer/reader overloads that round-trip null vs empty.
+    /// </summary>
+    ByteArrayNullable,
     Unsupported,
 }
 

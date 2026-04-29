@@ -106,6 +106,10 @@ internal static class SnapshotRestoreEmitter
             StateFieldKind.TimeSpan => $"{writer}.WriteTimeSpan({accessor});",
             StateFieldKind.Guid => $"{writer}.WriteGuid({accessor});",
             StateFieldKind.ByteArray => $"{writer}.WriteBytes({accessor});",
+            // For byte[]? we route through the nullable overload by casting at the
+            // call site — overload resolution then picks WriteBytes(byte[]?), which
+            // encodes length=-1 for null.
+            StateFieldKind.ByteArrayNullable => $"{writer}.WriteBytes((byte[]?){accessor});",
             StateFieldKind.Enum => EmitEnumWrite(field, writer, accessor),
             StateFieldKind.TypedId => EmitTypedIdWrite(field, writer, accessor),
             StateFieldKind.Nullable => EmitNullableWrite(field, writer, accessor),
@@ -164,6 +168,7 @@ internal static class SnapshotRestoreEmitter
             StateFieldKind.TimeSpan => $"{accessor} = {reader}.ReadTimeSpan();",
             StateFieldKind.Guid => $"{accessor} = {reader}.ReadGuid();",
             StateFieldKind.ByteArray => $"{accessor} = {reader}.ReadBytes()!;",
+            StateFieldKind.ByteArrayNullable => $"{accessor} = {reader}.ReadBytesNullable();",
             StateFieldKind.Enum => EmitEnumRead(field, reader, accessor),
             StateFieldKind.TypedId => EmitTypedIdRead(field, reader, accessor),
             StateFieldKind.Nullable => EmitNullableRead(field, reader, accessor),
@@ -223,6 +228,7 @@ internal static class SnapshotRestoreEmitter
             StateFieldKind.TimeSpan => "global::System.TimeSpan",
             StateFieldKind.Guid => "global::System.Guid",
             StateFieldKind.ByteArray => "byte[]",
+            StateFieldKind.ByteArrayNullable => "byte[]?",
             StateFieldKind.Enum or StateFieldKind.TypedId => "global::" + field.TypeFqn,
             _ => "object",
         };

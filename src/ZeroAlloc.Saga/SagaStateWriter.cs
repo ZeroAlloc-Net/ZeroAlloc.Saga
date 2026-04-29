@@ -138,7 +138,9 @@ public readonly ref struct SagaStateWriter
 
     /// <summary>
     /// Writes a length-prefixed byte sequence. A length of <c>-1</c> encodes
-    /// a null reference; <c>0</c> encodes an empty array.
+    /// a null reference; <c>0</c> encodes an empty array. The <see cref="ReadOnlySpan{T}"/>
+    /// overload always emits a non-negative length — pass an array via the
+    /// <c>byte[]?</c> overload to round-trip a null reference.
     /// </summary>
     public void WriteBytes(ReadOnlySpan<byte> value)
     {
@@ -146,6 +148,26 @@ public readonly ref struct SagaStateWriter
         if (value.Length == 0) return;
         var span = _buffer.GetSpan(value.Length);
         value.CopyTo(span);
+        _buffer.Advance(value.Length);
+    }
+
+    /// <summary>
+    /// Writes a length-prefixed byte sequence, distinguishing <c>null</c>
+    /// from an empty array. A null reference is encoded as length <c>-1</c>;
+    /// an empty array as length <c>0</c>. Pair with
+    /// <see cref="SagaStateReader.ReadBytesNullable"/> on the read side.
+    /// </summary>
+    public void WriteBytes(byte[]? value)
+    {
+        if (value is null)
+        {
+            WriteInt32(-1);
+            return;
+        }
+        WriteInt32(value.Length);
+        if (value.Length == 0) return;
+        var span = _buffer.GetSpan(value.Length);
+        value.AsSpan().CopyTo(span);
         _buffer.Advance(value.Length);
     }
 }

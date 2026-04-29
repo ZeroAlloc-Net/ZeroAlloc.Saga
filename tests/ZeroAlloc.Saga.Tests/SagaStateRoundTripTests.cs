@@ -226,6 +226,31 @@ public class SagaStateRoundTripTests
     }
 
     [Fact]
+    public void Bytes_Null_RoundTrips_AsNull()
+    {
+        // The byte[]? overload encodes a null reference as length=-1 and
+        // ReadBytesNullable() decodes it back to null. The existing
+        // ReadOnlySpan<byte> overload cannot represent null on the write
+        // side because span has no null state — that case is exercised by
+        // Bytes_Empty_RoundTrips above.
+        var buf = NewBuffer();
+        new SagaStateWriter(buf).WriteBytes((byte[]?)null);
+        Assert.Null(new SagaStateReader(buf.WrittenSpan).ReadBytesNullable());
+    }
+
+    [Fact]
+    public void Bytes_Empty_RoundTrips_AsEmpty_ViaNullableOverload()
+    {
+        // The byte[]? overload must distinguish empty (length=0) from null
+        // (length=-1) when the reader uses ReadBytesNullable.
+        var buf = NewBuffer();
+        new SagaStateWriter(buf).WriteBytes(Array.Empty<byte>());
+        var rt = new SagaStateReader(buf.WrittenSpan).ReadBytesNullable();
+        Assert.NotNull(rt);
+        Assert.Empty(rt!);
+    }
+
+    [Fact]
     public void Multiple_Fields_InOrder_RoundTrip()
     {
         var buf = NewBuffer();
