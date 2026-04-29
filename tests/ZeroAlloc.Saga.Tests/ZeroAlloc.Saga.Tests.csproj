@@ -2,8 +2,14 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
-    <!-- MA0048: test types intentionally grouped; MA0051: test methods may be long. -->
-    <NoWarn>$(NoWarn);MA0048;MA0051</NoWarn>
+    <!--
+      MA0048: test types intentionally grouped; MA0051: test methods may be long.
+      ZAM003: Mediator's "use readonly record struct" hint — saga commands are
+              record class on purpose (saga state may include reference fields).
+      EPC12:  ErrorProne hits Mediator-generator-emitted try/catch that observes
+              only ex.Message; harmless and from a separate codegen we don't own.
+    -->
+    <NoWarn>$(NoWarn);MA0048;MA0051;ZAM003;EPC12</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
@@ -12,6 +18,10 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="ZeroAlloc.Mediator" />
+    <!-- Mediator source generator: emits IMediator.Send/Publish overloads for the
+         in-project IRequest<T> / INotificationHandler<T> types (the latter come
+         from the Saga generator's emitted handlers). Wired as analyzer asset. -->
+    <PackageReference Include="ZeroAlloc.Mediator.Generator" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />

@@ -5,11 +5,18 @@
     <IsPackable>false</IsPackable>
     <RootNamespace>OrderFulfillment</RootNamespace>
     <AssemblyName>OrderFulfillment</AssemblyName>
-    <!-- Sample code: relax docs/style rules that don't apply to demos. -->
-    <NoWarn>$(NoWarn);MA0004;MA0011;MA0048;MA0051;CA1812;CA1822;CA1305;CA2007</NoWarn>
+    <!-- Sample code: relax docs/style rules that don't apply to demos.
+         ZAM003: Mediator's "use readonly record struct" hint — saga commands are
+                 record class on purpose (saga state may include reference fields).
+         EPC12:  ErrorProne hits Mediator-generator-emitted try/catch on ex.Message;
+                 from a separate codegen we don't own. -->
+    <NoWarn>$(NoWarn);MA0004;MA0011;MA0048;MA0051;CA1812;CA1822;CA1305;CA2007;ZAM003;EPC12</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="ZeroAlloc.Mediator" />
+    <!-- Mediator source generator emits IMediator.Send overloads + the static
+         dispatcher for the in-project IRequestHandler implementations. -->
+    <PackageReference Include="ZeroAlloc.Mediator.Generator" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />

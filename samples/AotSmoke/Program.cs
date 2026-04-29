@@ -55,22 +55,46 @@ public partial class OrderFulfillmentSaga
 }
 
 /// <summary>
-/// Recording mediator — counts every command it sees so the smoke test
-/// can assert against the ledger.
+/// Per-command counters surfaced via an ambient slot so each handler can record
+/// without ctor injection (the Mediator dispatcher's no-factory fallback path
+/// requires a parameterless ctor, so we avoid DI for handlers).
 /// </summary>
-internal sealed class RecordingMediator : IMediator
+internal sealed class CommandCounters
 {
-    public int Reserve { get; private set; }
-    public int Charge { get; private set; }
-    public int Ship { get; private set; }
-    public int Cancel { get; private set; }
-    public int Refund { get; private set; }
+    public int Reserve;
+    public int Charge;
+    public int Ship;
+    public int Cancel;
+    public int Refund;
 
-    public ValueTask<Unit> Send(ReserveStockCommand req, CancellationToken ct = default) { Reserve++; return new(Unit.Value); }
-    public ValueTask<Unit> Send(ChargeCustomerCommand req, CancellationToken ct = default) { Charge++; return new(Unit.Value); }
-    public ValueTask<Unit> Send(ShipOrderCommand req, CancellationToken ct = default) { Ship++; return new(Unit.Value); }
-    public ValueTask<Unit> Send(CancelReservationCommand req, CancellationToken ct = default) { Cancel++; return new(Unit.Value); }
-    public ValueTask<Unit> Send(RefundPaymentCommand req, CancellationToken ct = default) { Refund++; return new(Unit.Value); }
+    public static CommandCounters? Current { get; set; }
+}
+
+// Recording IRequestHandlers — light up real IMediator.Send dispatch end-to-end.
+internal sealed class ReserveStockHandler : IRequestHandler<ReserveStockCommand, Unit>
+{
+    public ValueTask<Unit> Handle(ReserveStockCommand req, CancellationToken ct)
+    { CommandCounters.Current!.Reserve++; return new(Unit.Value); }
+}
+internal sealed class ChargeCustomerHandler : IRequestHandler<ChargeCustomerCommand, Unit>
+{
+    public ValueTask<Unit> Handle(ChargeCustomerCommand req, CancellationToken ct)
+    { CommandCounters.Current!.Charge++; return new(Unit.Value); }
+}
+internal sealed class ShipOrderHandler : IRequestHandler<ShipOrderCommand, Unit>
+{
+    public ValueTask<Unit> Handle(ShipOrderCommand req, CancellationToken ct)
+    { CommandCounters.Current!.Ship++; return new(Unit.Value); }
+}
+internal sealed class CancelReservationHandler : IRequestHandler<CancelReservationCommand, Unit>
+{
+    public ValueTask<Unit> Handle(CancelReservationCommand req, CancellationToken ct)
+    { CommandCounters.Current!.Cancel++; return new(Unit.Value); }
+}
+internal sealed class RefundPaymentHandler : IRequestHandler<RefundPaymentCommand, Unit>
+{
+    public ValueTask<Unit> Handle(RefundPaymentCommand req, CancellationToken ct)
+    { CommandCounters.Current!.Refund++; return new(Unit.Value); }
 }
 
 internal static class Program
@@ -88,16 +112,20 @@ internal static class Program
     {
         Console.WriteLine("AotSmoke: starting saga end-to-end");
 
+        var counters = new CommandCounters();
+        CommandCounters.Current = counters;
+
         var services = new ServiceCollection();
         services.AddLogging(b => b.AddProvider(NullLoggerProvider.Instance));
-        services.AddSingleton<RecordingMediator>();
-        services.AddSingleton<IMediator>(sp => sp.GetRequiredService<RecordingMediator>());
+
+        // Real IMediator wired by the Mediator source generator.
+        services.AddMediator();
+
         services.AddSaga()
             .AddOrderFulfillmentSaga();
         var sp = services.BuildServiceProvider();
 
         var orderId = new OrderId(42);
-        var mediator = sp.GetRequiredService<RecordingMediator>();
         var manager = sp.GetRequiredService<ISagaManager<OrderFulfillmentSaga, OrderId>>();
 
         // Step 1 → 2 → 3 — full happy path.
@@ -106,11 +134,11 @@ internal static class Program
         await PublishAsync(sp, new PaymentCharged(orderId));
 
         // Assertions: each forward command dispatched exactly once.
-        if (mediator.Reserve != 1) return Fail($"Expected Reserve=1, got {mediator.Reserve}");
-        if (mediator.Charge != 1) return Fail($"Expected Charge=1, got {mediator.Charge}");
-        if (mediator.Ship != 1) return Fail($"Expected Ship=1, got {mediator.Ship}");
-        if (mediator.Cancel != 0) return Fail($"Expected Cancel=0, got {mediator.Cancel}");
-        if (mediator.Refund != 0) return Fail($"Expected Refund=0, got {mediator.Refund}");
+        if (counters.Reserve != 1) return Fail($"Expected Reserve=1, got {counters.Reserve}");
+        if (counters.Charge != 1) return Fail($"Expected Charge=1, got {counters.Charge}");
+        if (counters.Ship != 1) return Fail($"Expected Ship=1, got {counters.Ship}");
+        if (counters.Cancel != 0) return Fail($"Expected Cancel=0, got {counters.Cancel}");
+        if (counters.Refund != 0) return Fail($"Expected Refund=0, got {counters.Refund}");
 
         // Saga removed from store after Step 3 (terminal Completed state).
         var saga = await manager.GetAsync(orderId, default);

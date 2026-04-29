@@ -18,7 +18,7 @@ internal static class Program
         var services = new ServiceCollection();
         services.AddLogging(b => b.AddProvider(NullLoggerProvider.Instance));
 
-        // Fake mediator + deferred-publish queue + driver.
+        // Real Mediator + deferred-publish queue + driver + per-command handlers.
         services.AddFakeMediator();
 
         // The saga framework + the generator-emitted per-saga registration extension.
@@ -26,10 +26,15 @@ internal static class Program
             .AddOrderFulfillmentSaga();
 
         var sp = services.BuildServiceProvider();
+
         var driver = sp.GetRequiredService<SagaDriver>();
         var manager = sp.GetRequiredService<ISagaManager<OrderFulfillmentSaga, OrderId>>();
         var policy = sp.GetRequiredService<ChargeReactionPolicy>();
-        var fakeMediator = (FakeMediator)sp.GetRequiredService<IMediator>();
+        var fakeMediator = sp.GetRequiredService<FakeMediator>();
+
+        // Publish the singleton FakeMediator into the ambient slot the per-command
+        // IRequestHandlers read. (Done after BuildServiceProvider so the singleton exists.)
+        FakeMediator.Current = fakeMediator;
 
         // ── Scenario 1: happy path — saga completes ─────────────────────
         Console.WriteLine("Scenario 1: order #1 — happy path");
