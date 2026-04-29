@@ -1,0 +1,7 @@
+mode: ContinuousDeployment
+tag-prefix: v
+branches:
+  main:
+    regex: ^main$
+    mode: ContinuousDeployment
+    increment: Patch
