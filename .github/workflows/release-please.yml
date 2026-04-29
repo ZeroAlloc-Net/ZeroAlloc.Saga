@@ -12,42 +12,60 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
-      version: ${{ steps.release.outputs.version }}
+      releases_created: ${{ steps.release.outputs.releases_created }}
+      paths_released: ${{ steps.release.outputs.paths_released }}
     steps:
       - name: Release Please
         uses: googleapis/release-please-action@v4
         id: release
         with:
-          release-type: simple
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
           token: ${{ secrets.GITHUB_TOKEN }}
 
   publish:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created }}
+    if: needs.release-please.outputs.releases_created == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Restore
+        run: dotnet restore ZeroAlloc.Saga.slnx
 
       - name: Build
-        run: dotnet build -c Release -p:Version=${{ needs.release-please.outputs.version }}
+        run: dotnet build ZeroAlloc.Saga.slnx -c Release --no-restore
 
       - name: Test
-        run: dotnet test -c Release --no-build
+        run: dotnet test ZeroAlloc.Saga.slnx -c Release --no-build
 
-      - name: Pack
+      - name: Pack each package at its release version
+        env:
+          PATHS_RELEASED: ${{ needs.release-please.outputs.paths_released }}
         run: |
-          dotnet pack src/ZeroAlloc.Saga/ZeroAlloc.Saga.csproj -c Release --no-build -p:PackageVersion=${{ needs.release-please.outputs.version }} -o ./nupkg
+          mkdir -p ./nupkg
+          # paths_released is a JSON array of paths that got bumped this run.
+          # For each path, read its version.txt (release-please updated it) and pack at that version.
+          for path in $(echo "$PATHS_RELEASED" | jq -r '.[]'); do
+            version=$(cat "$path/version.txt")
+            csproj=$(ls "$path"/*.csproj | head -1)
+            echo "Packing $csproj at version $version"
+            dotnet pack "$csproj" -c Release --no-build \
+              -p:PackageVersion="$version" -o ./nupkg
+          done
+          ls -la ./nupkg
 
       - name: Push to NuGet
-        run: dotnet nuget push ./nupkg/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
-
-      - name: Upload to GitHub Release
-        run: gh release upload ${{ needs.release-please.outputs.tag_name }} ./nupkg/*.nupkg
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          dotnet nuget push ./nupkg/*.nupkg \
+            --api-key ${{ secrets.NUGET_API_KEY }} \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
