@@ -11,8 +11,11 @@ namespace ZeroAlloc.Saga.EfCore;
 /// EF Core-backed <see cref="ISagaStore{TSaga,TKey}"/> implementation. Persists
 /// each saga instance as a row in the shared <c>SagaInstance</c> table, keyed
 /// by <c>(SagaType, CorrelationKey)</c>. Optimistic concurrency is driven by
-/// the <see cref="SagaInstanceEntity.RowVersion"/> column (mapped via
-/// <c>IsRowVersion()</c>); <see cref="SaveAsync"/> propagates
+/// the <see cref="SagaInstanceEntity.RowVersion"/> column, mapped via
+/// <c>IsConcurrencyToken()</c> with a manual <see cref="Guid.NewGuid"/>
+/// rotation per save (SQLite has no native row-version, so we manage the
+/// token in code; EF still includes the OLD value in the WHERE clause for
+/// the OCC check). <see cref="SaveAsync"/> propagates
 /// <see cref="DbUpdateConcurrencyException"/> to the caller so the
 /// generator-emitted notification handler can retry the entire fire/dispatch/save flow.
 /// </summary>
