@@ -2,7 +2,10 @@
 
 Source-generated long-running process orchestration for the ZeroAlloc ecosystem.
 
-> **Status:** v1.0 — AOT compatible, single-package install, durable backends in v1.1.
+> **Status:** v1.1 — AOT compatible, single-package install. v1.1 adds
+> `ISagaPersistableState` + byte serializer (paving the way for durable
+> backends; `ZeroAlloc.Saga.EfCore` ships from the same repo immediately
+> after this release). InMemory remains the default backend.
 
 [![build](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/actions/workflows/build.yml/badge.svg)](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/actions/workflows/build.yml)
 [![aot-smoke](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/actions/workflows/aot-smoke.yml/badge.svg)](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/actions/workflows/aot-smoke.yml)
@@ -50,7 +53,8 @@ public partial class OrderFulfillmentSaga
 Wiring (one line per saga):
 
 ```csharp
-services.AddMediator();
+// AddSaga() implicitly calls AddMediator() in v1.1 — separate AddMediator()
+// call is no longer needed, though it remains harmless (idempotent TryAdd*).
 services.AddSaga()
     .AddOrderFulfillmentSaga();           // generator-emitted extension
 ```
@@ -60,6 +64,28 @@ itself: each `[Step]` runs in correlation-key order, returned commands flow
 through `IMediator.Send`, downstream events advance the FSM, and a terminal
 `Completed` (or `Compensated`) state removes the saga from the store
 automatically.
+
+## What's new in v1.1
+
+- **`ISagaPersistableState`** + zero-allocation `SagaStateWriter` /
+  `SagaStateReader` ref structs. Every `[Saga]` class implements the
+  interface via a generator-emitted partial; backends use it to round-trip
+  saga state across process boundaries. Supported state shapes: primitives,
+  enums, `string`, `DateTime` / `DateTimeOffset` / `TimeSpan` / `Guid`,
+  `[TypedId]`-attributed types, the common `record struct Foo(TPrim Bar)`
+  shape, `byte[]`, and `Nullable<T>` wrappers thereof.
+- **`[NotSagaState]`** escape-hatch attribute — exclude transient or
+  computed members from generator-emitted Snapshot/Restore.
+- **2 new diagnostics**:
+  - `ZASAGA014` (Error) — saga state field has an unsupported type.
+  - `ZASAGA015` (Info, suppressible) — saga commands should be idempotent
+    under durable backends; fires when `WithEfCoreStore` / `WithRedisStore`
+    is detected in the same compilation.
+- **Implicit `AddMediator()`** — `AddSaga()` no longer requires a separate
+  `services.AddMediator()` call.
+- **InMemory backend unchanged** — v1.0 users see no behavioural change.
+  Durable backends (starting with `ZeroAlloc.Saga.EfCore` 1.0.0) ship from
+  the same repo in subsequent PRs.
 
 ## Documentation
 

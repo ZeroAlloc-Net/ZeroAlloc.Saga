@@ -5,6 +5,82 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.1.0
+
+Additive release that prepares the runtime + generator for v1.1 durable
+backends. The first durable backend, `ZeroAlloc.Saga.EfCore` 1.0.0, ships
+in subsequent PRs from the same repo.
+
+### Features
+
+- **`ISagaPersistableState`** — every `[Saga]` class implements it via a
+  generator-emitted partial. Backends use the interface to round-trip
+  saga state across process boundaries.
+- **`SagaStateWriter` / `SagaStateReader`** — zero-allocation, AOT-safe
+  ref structs for typed binary serialization. Cover all primitives,
+  `string` (UTF-8), `Guid`, `DateTime`, `DateTimeOffset`, `TimeSpan`,
+  `byte[]`, plus Nullable wrappers.
+- **`SagaStateVersionMismatchException`** + **`SagaConcurrencyException`** —
+  surfaced by backends on version-byte mismatch and exhausted OCC retries.
+- **`[NotSagaState]`** — escape hatch attribute to exclude a property/field
+  from generator-emitted Snapshot/Restore.
+- **Generator emits Snapshot/Restore** per `[Saga]` class via field
+  inspection — supports primitives, enums, `string`, well-known structs
+  (DateTime/DateTimeOffset/TimeSpan/Guid), `[TypedId]`-attributed types
+  and the common `record struct Foo(TPrim Bar)` shape, `byte[]`, and
+  Nullable wrappers thereof.
+- **Conditional store registration** — generator-emitted `AddXxxSaga()`
+  inspects `ISagaBuilder.IsEfCoreBackend` at composition time. Default
+  remains `InMemorySagaStore<,>`; durable backends flip the flag and
+  install their concrete store via the new `SagaStoreRegistrar`
+  indirection point.
+- **Implicit `AddMediator()`** — generator-emitted `AddXxxSaga()` now
+  calls `services.AddMediator()` first. Users no longer need a separate
+  `services.AddMediator()` call before `AddSaga()`.
+- **2 new diagnostics**:
+  - `ZASAGA014` (Error) — Saga state field has an unsupported type.
+    Tells the user what's supported and how to escape with `[NotSagaState]`.
+  - `ZASAGA015` (Info, suppressible) — saga commands should be idempotent
+    under durable backends. Fires when `WithEfCoreStore`/`WithRedisStore`
+    is detected in the same compilation.
+
+### Public API additions
+
+```csharp
+namespace ZeroAlloc.Saga;
+public interface ISagaPersistableState
+{
+    byte[] Snapshot();
+    void Restore(ReadOnlySpan<byte> data);
+    string CurrentFsmStateName { get; }
+    void SetFsmStateFromName(string stateName);
+}
+public readonly ref struct SagaStateWriter;
+public ref struct SagaStateReader;
+public sealed class SagaStateVersionMismatchException : Exception;
+public sealed class SagaConcurrencyException : Exception;
+[AttributeUsage(...)] public sealed class NotSagaStateAttribute : Attribute;
+public interface ISagaBuilderMutable { bool IsEfCoreBackend { get; set; } }
+public static class SagaBuilderMutationExtensions { void SetEfCoreBackend(this ISagaBuilder); }
+public static class SagaStoreRegistrar
+{
+    static void SetRegistrar(Action<ISagaBuilder> registrar);
+    static void Apply<TSaga, TKey>(ISagaBuilder builder);
+    static void OverrideStore<TSaga, TKey, TStore>(ISagaBuilder builder);
+}
+```
+
+### Backwards compatibility
+
+- Existing `[Saga]` classes from v1.0 continue to compile and run unchanged.
+  The new `Snapshot()`/`Restore()` methods are emitted by the generator
+  automatically as part of the partial-class completion.
+- `InMemorySagaStore<,>` remains the default backend — no behavioural
+  change for users who don't opt into a durable backend.
+- `AddSaga()`'s shape is unchanged; the implicit `AddMediator()` is
+  idempotent (`TryAdd*`) so users who still call it explicitly suffer
+  nothing.
+
 ## 1.0.0 (2026-04-29)
 
 
