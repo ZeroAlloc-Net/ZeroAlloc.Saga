@@ -87,6 +87,11 @@ public sealed class EfCoreSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
         ArgumentNullException.ThrowIfNull(saga);
 
         var persistable = (ISagaPersistableState)saga;
+        // GetEntityAsync hits EF's ChangeTracker cache (no DB roundtrip)
+        // because the DbContext is request-scoped and TryLoadAsync was the
+        // last op that materialised this row inside LoadOrCreateAsync. The
+        // cached entry is returned with the original RowVersion in EF's
+        // snapshot, which is what we need for the OCC check on save.
         var entity = await GetEntityAsync(key, ct).ConfigureAwait(false);
         var newState = persistable.Snapshot();
         var newFsmState = persistable.CurrentFsmStateName;
