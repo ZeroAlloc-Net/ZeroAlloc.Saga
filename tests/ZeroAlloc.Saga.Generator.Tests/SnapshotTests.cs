@@ -183,6 +183,154 @@ public class SnapshotTests
     }
 
     [Fact]
+    public Task Saga_With_PrimitiveFields_EmitsCorrectWriteCalls()
+    {
+        var src = Header + """
+
+            namespace Sample;
+
+            public sealed record Started(int Id) : INotification;
+            public sealed record DoIt(int Id) : IRequest;
+
+            [Saga]
+            public partial class PrimitiveFieldsSaga
+            {
+                public int Count { get; set; }
+                public string Name { get; set; } = "";
+                public bool IsActive { get; set; }
+                public double Amount { get; set; }
+
+                [CorrelationKey] public int Correlation(Started e) => e.Id;
+                [Step(Order = 1)] public DoIt Step1(Started e) => new(e.Id);
+            }
+            """;
+        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+    }
+
+    [Fact]
+    public Task Saga_With_TypedIdField_EmitsUnderlyingPrimitiveWriteCalls()
+    {
+        var src = Header + """
+
+            namespace Sample;
+
+            public readonly record struct CustomerId(System.Guid Value) : IEquatable<CustomerId>;
+
+            public sealed record Activated(CustomerId Id) : INotification;
+            public sealed record GreetCommand(CustomerId Id) : IRequest;
+
+            [Saga]
+            public partial class TypedIdFieldSaga
+            {
+                public CustomerId CustomerId { get; set; }
+
+                [CorrelationKey] public CustomerId Correlation(Activated e) => e.Id;
+                [Step(Order = 1)] public GreetCommand Greet(Activated e) => new(e.Id);
+            }
+            """;
+        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+    }
+
+    [Fact]
+    public Task Saga_With_NullableField_EmitsFlagBytePrefix()
+    {
+        var src = Header + """
+
+            namespace Sample;
+
+            public sealed record Started(int Id) : INotification;
+            public sealed record DoIt(int Id) : IRequest;
+
+            [Saga]
+            public partial class NullableFieldSaga
+            {
+                public int? OptionalCount { get; set; }
+                public System.DateTime? LastSeen { get; set; }
+
+                [CorrelationKey] public int Correlation(Started e) => e.Id;
+                [Step(Order = 1)] public DoIt Step1(Started e) => new(e.Id);
+            }
+            """;
+        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+    }
+
+    [Fact]
+    public Task Saga_With_EnumField_EmitsUnderlyingType()
+    {
+        var src = Header + """
+
+            namespace Sample;
+
+            public enum OrderStatus : byte { Pending, Shipped, Cancelled }
+
+            public sealed record Started(int Id) : INotification;
+            public sealed record DoIt(int Id) : IRequest;
+
+            [Saga]
+            public partial class EnumFieldSaga
+            {
+                public OrderStatus Status { get; set; }
+
+                [CorrelationKey] public int Correlation(Started e) => e.Id;
+                [Step(Order = 1)] public DoIt Step1(Started e) => new(e.Id);
+            }
+            """;
+        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+    }
+
+    [Fact]
+    public Task Saga_With_NotSagaState_FieldExcluded()
+    {
+        var src = Header + """
+
+            namespace Sample;
+            using System.Collections.Generic;
+
+            public sealed record Started(int Id) : INotification;
+            public sealed record DoIt(int Id) : IRequest;
+
+            [Saga]
+            public partial class ExcludedFieldSaga
+            {
+                public int IncludedCount { get; set; }
+
+                [NotSagaState]
+                public List<string> ExcludedDiagnostics { get; set; } = new();
+
+                [CorrelationKey] public int Correlation(Started e) => e.Id;
+                [Step(Order = 1)] public DoIt Step1(Started e) => new(e.Id);
+            }
+            """;
+        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+    }
+
+    [Fact]
+    public Task Saga_With_MultipleFields_EmitsCorrectFieldOrder()
+    {
+        var src = Header + """
+
+            namespace Sample;
+
+            public sealed record Started(int Id) : INotification;
+            public sealed record DoIt(int Id) : IRequest;
+
+            [Saga]
+            public partial class MultiFieldOrderSaga
+            {
+                public int A { get; set; }
+                public string B { get; set; } = "";
+                public bool C { get; set; }
+                public System.Guid D { get; set; }
+                public decimal E { get; set; }
+
+                [CorrelationKey] public int Correlation(Started e) => e.Id;
+                [Step(Order = 1)] public DoIt Step1(Started e) => new(e.Id);
+            }
+            """;
+        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+    }
+
+    [Fact]
     public Task TwoSagasInSameProject()
     {
         var src = Header + """
