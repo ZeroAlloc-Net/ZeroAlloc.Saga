@@ -118,4 +118,18 @@ internal static class SagaDiagnostics
         messageFormat: "Sagas '{0}' and '{1}' both correlate on event '{2}' but use different correlation key types ('{3}' vs '{4}')",
         severity: DiagnosticSeverity.Warning,
         description: "Multiple sagas may legitimately observe the same event, but using different correlation key types for the same event makes the dispatch boundary ambiguous.");
+
+    public static readonly DiagnosticDescriptor UnsupportedFieldType = Make(
+        id: "ZASAGA014",
+        title: "Saga state field has an unsupported type",
+        messageFormat: "Field '{0}' on saga '{1}' has type '{2}' which is not supported by the v1.1 byte serializer. Supported types: primitives, enums, string, DateTime/DateTimeOffset/TimeSpan/Guid, [TypedId] types, byte[], and Nullable<T> of supported types. Mark with [NotSagaState] to exclude from persistence, or wait for the v1.x extension point (BACKLOG #18).",
+        severity: DiagnosticSeverity.Error,
+        description: "The v1.1 saga byte serializer covers the common-case state shapes — primitives, enums, well-known structs, [TypedId]s, byte[], and nullable wrappers thereof. Other shapes (collections, custom records, polymorphism) are deferred to a later extension point.");
+
+    public static readonly DiagnosticDescriptor IdempotencyHint = Make(
+        id: "ZASAGA015",
+        title: "Saga commands should be idempotent under durable backends",
+        messageFormat: "Saga '{0}' uses a durable backend (WithEfCoreStore/WithRedisStore). Commands dispatched by [Step] methods should be idempotent — under OCC retry-after-conflict semantics, a step's command may be dispatched twice. Suppress with `#pragma warning disable ZASAGA015` if intentional, or use Saga.Outbox bridge (Phase 3) for at-least-once delivery without double-dispatch.",
+        severity: DiagnosticSeverity.Info,
+        description: "Durable saga backends use optimistic concurrency control (OCC). Under contention the entire notification handler — including the user's [Step] method and its emitted command — is retried. Idempotent commands tolerate that; non-idempotent ones may double-charge, double-ship, etc.");
 }
