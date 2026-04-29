@@ -16,6 +16,7 @@ namespace ZeroAlloc.Saga.EfCore.Tests;
 /// backing store; the row-version concurrency token (rotated by the store on
 /// every save) drives the conflict path.
 /// </summary>
+[Collection(EfCoreStaticStateCollection.Name)]
 public sealed class OccTests
 {
     private static EfCoreSagaStore<OrderFulfillmentSaga, OrderId> CreateStore(DbContext ctx)

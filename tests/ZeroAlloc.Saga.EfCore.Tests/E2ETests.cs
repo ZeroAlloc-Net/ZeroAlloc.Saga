@@ -15,6 +15,7 @@ namespace ZeroAlloc.Saga.EfCore.Tests;
 /// notification handlers, EfCoreSagaStore, mediator, and SQLite — to verify
 /// the saga progresses correctly with the durable backend wired in.
 /// </summary>
+[Collection(EfCoreStaticStateCollection.Name)]
 public sealed class E2ETests
 {
     private static IServiceProvider BuildHost(SqliteFixture fx)
