@@ -12,4 +12,18 @@ public interface ISagaBuilder
 {
     /// <summary>The underlying service collection being configured.</summary>
     IServiceCollection Services { get; }
+
+    /// <summary>
+    /// True when a durable backend (e.g. <c>WithEfCoreStore</c>) has been
+    /// configured on this builder. Read by generator-emitted
+    /// <c>AddXxxSaga()</c> at composition time to choose between
+    /// <c>InMemorySagaStore&lt;,&gt;</c> (default) and the durable backend's
+    /// concrete store type.
+    /// </summary>
+    /// <remarks>
+    /// Default <see langword="false"/>. Backend packages
+    /// (<c>ZeroAlloc.Saga.EfCore</c> in v1.1, <c>ZeroAlloc.Saga.Redis</c>
+    /// later) flip this via the <see cref="ISagaBuilderMutable"/> contract.
+    /// </remarks>
+    bool IsEfCoreBackend { get; }
 }
