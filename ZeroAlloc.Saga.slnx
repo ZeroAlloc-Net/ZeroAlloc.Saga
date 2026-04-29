@@ -3,4 +3,8 @@
     <Project Path="src/ZeroAlloc.Saga/ZeroAlloc.Saga.csproj" />
     <Project Path="src/ZeroAlloc.Saga.Generator/ZeroAlloc.Saga.Generator.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ZeroAlloc.Saga.Tests/ZeroAlloc.Saga.Tests.csproj" />
+    <Project Path="tests/ZeroAlloc.Saga.Generator.Tests/ZeroAlloc.Saga.Generator.Tests.csproj" />
+  </Folder>
 </Solution>

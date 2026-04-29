@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <!-- MA0048: test types intentionally grouped; MA0051: snapshot helpers may be long. -->
+    <NoWarn>$(NoWarn);MA0048;MA0051</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Verify.Xunit" />
+    <PackageReference Include="Verify.SourceGenerators" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="ZeroAlloc.Mediator" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="VerifyXunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ZeroAlloc.Saga\ZeroAlloc.Saga.csproj" />
+    <ProjectReference Include="..\..\src\ZeroAlloc.Saga.Generator\ZeroAlloc.Saga.Generator.csproj" />
+  </ItemGroup>
+</Project>
