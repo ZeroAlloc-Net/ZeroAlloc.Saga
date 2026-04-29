@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.0.0 (2026-04-29)
+
+
+### Features
+
+* add ISagaBuilder + AddSaga() DI extension ([cce4e12](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/cce4e129981ea481d64a04c54f8429866dd47f63))
+* add ISagaManager + SagaManager + ISagaCompensationDispatcher ([3ea663f](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/3ea663fac7f8b9e1119e7bd9fffd588430e84a03))
+* add ISagaStore&lt;TSaga,TKey&gt; + InMemorySagaStore default ([42f2dba](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/42f2dba935370d76bfa4cd54b64bd2001eaefb5f))
+* add public Saga, Step, CorrelationKey attributes ([8386152](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/83861522d35e23d877c29486a845d0a6189ca2b7))
+* add SagaLockManager&lt;TKey&gt; for per-saga serialization ([0b8ca8a](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/0b8ca8a4c9588570de9e7a4d3e7b7d4acfcf8c4c))
+* AOT smoke + sample + docs + 1.0.0 release ([8423492](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/842349245aa2b88c1b54ffa89b93d40751784220))
+* diagnostics ZASAGA001-013 + 3 code-fix providers ([fb8a2ca](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/fb8a2cacb03180c7eb19677ce2e8a550b8dabb5e))
+* **diagnostics:** code-fix providers for ZASAGA001/007/009 ([cd3dc3d](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/cd3dc3d61162a4ea18eb9705e798ef8a9498a997))
+* **diagnostics:** wire ZASAGA001-013 reporting into generator ([8b87196](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/8b871966bf7daa54100359724c47b486c395e06e))
+* **generator:** emit AOT-safe AddXxxSaga DI extension and compensation dispatcher ([60d9db4](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/60d9db4a32e90ab29bbeebac84af0e70fca3ddcc))
+* **generator:** emit Fsm property on user's saga partial class ([19e4fd0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/19e4fd09318f2f31106d1bda324e9d43afbec7c2))
+* **generator:** emit inline FSM partial class per [Saga] ([0f4cebd](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/0f4cebdeb7f3c4930228a6a8e91e4d58ed31f68a))
+* **generator:** emit per-event INotificationHandler with forward and compensation cascade ([23ea815](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/23ea815f0007fb380af16e04f1c921fe6f4b894a))
+* **generator:** emit static correlation-dispatch class per [Saga] ([5c638b1](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/5c638b1da9d8677913a3ba67996bb0d40c482988))
+* **generator:** SagaGenerator skeleton + SagaModel ([0072efa](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/0072efa24ce138c3dceb345c69a15660bf482dc9))
+* runtime + source generator + happy-path tests ([19647f2](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/19647f23cc0f0a7b03042c6f9d9b6e54e8e0e666))
+* **samples:** add AotSmoke — minimal saga e2e for AOT publish ([3509c61](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/3509c61c0f5d5cfce2c56983aae7b746d9e7ccc9))
+* **samples:** add OrderFulfillment demo ([00eb426](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/00eb4263f376be700827cfc5daec2b0b0dd6f4cc))
+
+
+### Documentation
+
+* **changelog:** add 1.0.0 entry ([1e91e37](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/1e91e374095e6dd78e859195de8cbad1fe2c1ce5))
+
 ## 1.0.0
 
 Initial stable release of `ZeroAlloc.Saga` — source-generated, AOT-compatible
