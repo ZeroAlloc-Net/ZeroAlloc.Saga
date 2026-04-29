@@ -99,6 +99,9 @@ public sealed class EfCoreSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
                 CurrentFsmState = newFsmState,
                 CreatedAt = now,
                 UpdatedAt = now,
+                // Initialize the concurrency token. EF picks up the new value
+                // on INSERT and includes it in subsequent UPDATE WHERE clauses.
+                RowVersion = Guid.NewGuid().ToByteArray(),
             });
             _log.LogDebug("Inserting new saga row {SagaType}/{Key}", s_sagaTypeKey, key);
         }
@@ -107,6 +110,12 @@ public sealed class EfCoreSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
             entity.State = newState;
             entity.CurrentFsmState = newFsmState;
             entity.UpdatedAt = now;
+            // Rotate the concurrency token. Because RowVersion is mapped as a
+            // concurrency token (not IsRowVersion), EF includes the OLD value
+            // in the UPDATE WHERE clause — affecting zero rows when another
+            // writer changed the value underneath, surfacing as
+            // DbUpdateConcurrencyException.
+            entity.RowVersion = Guid.NewGuid().ToByteArray();
             _log.LogDebug("Updating saga row {SagaType}/{Key}", s_sagaTypeKey, key);
         }
 
