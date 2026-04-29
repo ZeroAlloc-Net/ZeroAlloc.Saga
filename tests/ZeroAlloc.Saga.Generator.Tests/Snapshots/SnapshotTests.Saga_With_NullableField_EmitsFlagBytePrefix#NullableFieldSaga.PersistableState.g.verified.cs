@@ -24,8 +24,8 @@ public partial class NullableFieldSaga : global::ZeroAlloc.Saga.ISagaPersistable
         var __version = __r.ReadByte();
         if (__version != SagaStateVersion)
             throw new global::ZeroAlloc.Saga.SagaStateVersionMismatchException("Sample.NullableFieldSaga", SagaStateVersion, __version);
-        if (__r.ReadBoolean()) { int __nv_OptionalCount = default!; __nv_OptionalCount = __r.ReadInt32(); this.OptionalCount = __nv_OptionalCount; } else { this.OptionalCount = null; }
-        if (__r.ReadBoolean()) { global::System.DateTime __nv_LastSeen = default!; __nv_LastSeen = __r.ReadDateTime(); this.LastSeen = __nv_LastSeen; } else { this.LastSeen = null; }
+        if (__r.ReadBoolean()) { int __nv_OptionalCount; __nv_OptionalCount = __r.ReadInt32(); this.OptionalCount = __nv_OptionalCount; } else { this.OptionalCount = null; }
+        if (__r.ReadBoolean()) { global::System.DateTime __nv_LastSeen; __nv_LastSeen = __r.ReadDateTime(); this.LastSeen = __nv_LastSeen; } else { this.LastSeen = null; }
     }
 
     public string CurrentFsmStateName => Fsm.Current.ToString();

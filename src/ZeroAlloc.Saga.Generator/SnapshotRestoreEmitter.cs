@@ -199,7 +199,7 @@ internal static class SnapshotRestoreEmitter
         var innerRead = EmitRead(innerField, reader, tmp);
         // Inner read includes the assignment "tmp = reader.ReadX();" — strip the leading
         // "var "? It's just an assignment target; we can pre-declare tmp.
-        return $"if ({reader}.ReadBoolean()) {{ {InnerCSharpType(innerField)} {tmp} = default!; {innerRead} {accessor} = {tmp}; }} else {{ {accessor} = null; }}";
+        return $"if ({reader}.ReadBoolean()) {{ {InnerCSharpType(innerField)} {tmp}; {innerRead} {accessor} = {tmp}; }} else {{ {accessor} = null; }}";
     }
 
     private static string InnerCSharpType(StateFieldInfo field) =>
