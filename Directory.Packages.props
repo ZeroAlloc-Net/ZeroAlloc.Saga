@@ -13,7 +13,7 @@
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="9.0.3" />
 
     <!-- EfCore backend deps -->
-    <PackageVersion Include="ZeroAlloc.Saga" Version="1.1.*" />
+    <PackageVersion Include="ZeroAlloc.Saga" Version="1.2.*" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.3" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.3" />
     <PackageVersion Include="ZeroAlloc.ValueObjects.EfCore" Version="1.3.*" />
