@@ -23,16 +23,40 @@ public static class SagaEfCoreBuilderExtensions
     /// <param name="configure">Optional <see cref="EfCoreSagaStoreOptions"/> tweaks.</param>
     /// <returns>The same builder for chaining.</returns>
     /// <remarks>
-    /// Must be called BEFORE per-saga <c>AddXxxSaga()</c> registrations so
-    /// the generator-emitted code can dispatch to the EF Core registrar
-    /// rather than installing the in-memory default.
+    /// <para>
+    /// MUST be called BEFORE per-saga <c>AddXxxSaga()</c> registrations.
+    /// Order-sensitive because per-saga registrations capture
+    /// <see cref="SagaRetryOptions"/> at registration time; calling
+    /// <see cref="WithEfCoreStore{TContext}"/> after a saga is added would
+    /// rebind the options after handlers were already wired to the old
+    /// instance, producing silently-wrong retry behaviour. Violations are
+    /// detected and throw <see cref="InvalidOperationException"/> with a
+    /// reorder hint.
+    /// </para>
     /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when a per-saga <c>AddXxxSaga()</c> registration has already
+    /// happened on this builder. Reorder the fluent chain so
+    /// <see cref="WithEfCoreStore{TContext}"/> is called first.
+    /// </exception>
     public static ISagaBuilder WithEfCoreStore<TContext>(
         this ISagaBuilder builder,
         Action<EfCoreSagaStoreOptions>? configure = null)
         where TContext : DbContext
     {
         ArgumentNullException.ThrowIfNull(builder);
+
+        // Order violation guard: a per-saga AddXxxSaga() registers
+        // ISagaCompensationDispatcher<TSaga>. If we see ANY descriptor whose
+        // ServiceType is closed-generic ISagaCompensationDispatcher<>, we
+        // know a per-saga registration has already happened.
+        if (HasAnySagaRegistrations(builder.Services))
+        {
+            throw new InvalidOperationException(
+                "WithEfCoreStore<TContext>() must be called BEFORE per-saga AddXxxSaga() registrations. " +
+                "Reorder your fluent chain so the EF Core backend is configured first " +
+                "(e.g. services.AddSaga().WithEfCoreStore<TContext>().AddOrderFulfillmentSaga()).");
+        }
 
         builder.SetEfCoreBackend();
 
@@ -63,6 +87,24 @@ public static class SagaEfCoreBuilderExtensions
         SagaStoreRegistrar.SetTypedRegistrar(EfCoreSagaStoreRegistrar.Instance);
 
         return builder;
+    }
+
+    private static bool HasAnySagaRegistrations(IServiceCollection services)
+    {
+        // ISagaCompensationDispatcher<TSaga> is registered per-saga by the
+        // generator-emitted AddXxxSaga() extension. A closed-generic
+        // descriptor of that interface is an unambiguous "a saga has been
+        // added" marker, regardless of which saga or which key type.
+        for (int i = 0; i < services.Count; i++)
+        {
+            var st = services[i].ServiceType;
+            if (st.IsGenericType && !st.IsGenericTypeDefinition
+                && st.GetGenericTypeDefinition() == typeof(ISagaCompensationDispatcher<>))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private sealed class EfCoreSagaStoreRegistrar : ISagaStoreRegistrar
