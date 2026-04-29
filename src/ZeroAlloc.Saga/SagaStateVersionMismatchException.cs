@@ -12,28 +12,17 @@ namespace ZeroAlloc.Saga;
 /// sagas before upgrading, or wait for state-shape migration support
 /// (BACKLOG #14) in a later version.
 /// </remarks>
+// RCS1194: Roslynator suggests the framework-convention ctors (parameterless,
+// message-only, message+inner). We deliberately omit those — this is a sealed
+// exception with a strict three-argument contract; constructing it without
+// SagaType/Expected/Actual would produce misleading instances.
+#pragma warning disable RCS1194
 public sealed class SagaStateVersionMismatchException : System.Exception
+#pragma warning restore RCS1194
 {
     public string SagaType { get; }
     public byte Expected { get; }
     public byte Actual { get; }
-
-    public SagaStateVersionMismatchException()
-    {
-        SagaType = string.Empty;
-    }
-
-    public SagaStateVersionMismatchException(string message)
-        : base(message)
-    {
-        SagaType = string.Empty;
-    }
-
-    public SagaStateVersionMismatchException(string message, System.Exception innerException)
-        : base(message, innerException)
-    {
-        SagaType = string.Empty;
-    }
 
     public SagaStateVersionMismatchException(string sagaType, byte expected, byte actual)
         : base($"Saga state for '{sagaType}' was persisted with format version {actual}, " +

@@ -14,31 +14,17 @@ namespace ZeroAlloc.Saga;
 /// command dispatch transactional with state writes, sidestepping the at-most-once
 /// dispatch concern that motivates retries.
 /// </remarks>
+// RCS1194: Roslynator suggests the framework-convention ctors (parameterless,
+// message-only, message+inner). We deliberately omit those — this is a sealed
+// exception with a strict four-argument contract; constructing it without
+// SagaType/CorrelationKey/Attempts would produce misleading instances.
+#pragma warning disable RCS1194
 public sealed class SagaConcurrencyException : System.Exception
+#pragma warning restore RCS1194
 {
     public string SagaType { get; }
     public string CorrelationKey { get; }
     public int Attempts { get; }
-
-    public SagaConcurrencyException()
-    {
-        SagaType = string.Empty;
-        CorrelationKey = string.Empty;
-    }
-
-    public SagaConcurrencyException(string message)
-        : base(message)
-    {
-        SagaType = string.Empty;
-        CorrelationKey = string.Empty;
-    }
-
-    public SagaConcurrencyException(string message, System.Exception innerException)
-        : base(message, innerException)
-    {
-        SagaType = string.Empty;
-        CorrelationKey = string.Empty;
-    }
 
     public SagaConcurrencyException(string sagaType, string correlationKey, int attempts, System.Exception? inner)
         : base($"Saga '{sagaType}' for correlation key '{correlationKey}' failed after " +
