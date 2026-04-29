@@ -8,5 +8,5 @@ internal static class PrimitiveFieldsSagaCorrelationDispatch
 {
     private static readonly PrimitiveFieldsSaga _probe = new PrimitiveFieldsSaga();
 
-    public static global::int GetKey(global::Sample.Started e) => _probe.Correlation(e);
+    public static int GetKey(global::Sample.Started e) => _probe.Correlation(e);
 }

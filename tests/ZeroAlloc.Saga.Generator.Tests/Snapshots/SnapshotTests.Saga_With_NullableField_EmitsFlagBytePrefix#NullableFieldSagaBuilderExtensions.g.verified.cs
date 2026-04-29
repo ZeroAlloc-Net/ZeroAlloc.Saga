@@ -16,14 +16,14 @@ public static class NullableFieldSagaBuilderExtensions
     public static ISagaBuilder AddNullableFieldSaga(this ISagaBuilder builder)
     {
         builder.Services.AddMediator();
-        builder.Services.TryAddSingleton<ISagaStore<NullableFieldSaga, global::int>, InMemorySagaStore<NullableFieldSaga, global::int>>();
+        builder.Services.TryAddSingleton<ISagaStore<NullableFieldSaga, int>, InMemorySagaStore<NullableFieldSaga, int>>();
         if (builder.IsEfCoreBackend)
         {
-            global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<NullableFieldSaga, global::int>(builder);
+            global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<NullableFieldSaga, int>(builder);
         }
-        builder.Services.TryAddSingleton<SagaLockManager<global::int>>();
+        builder.Services.TryAddSingleton<SagaLockManager<int>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<NullableFieldSaga>, NullableFieldSagaCompensationDispatcher>();
-        builder.Services.TryAddTransient<ISagaManager<NullableFieldSaga, global::int>, SagaManager<NullableFieldSaga, global::int>>();
+        builder.Services.TryAddTransient<ISagaManager<NullableFieldSaga, int>, SagaManager<NullableFieldSaga, int>>();
 
         builder.Services.AddTransient<INotificationHandler<global::Sample.Started>, NullableFieldSaga_Started_Handler>();
         return builder;

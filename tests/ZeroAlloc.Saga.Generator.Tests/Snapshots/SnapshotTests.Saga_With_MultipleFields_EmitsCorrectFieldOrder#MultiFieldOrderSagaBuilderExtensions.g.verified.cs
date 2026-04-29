@@ -16,14 +16,14 @@ public static class MultiFieldOrderSagaBuilderExtensions
     public static ISagaBuilder AddMultiFieldOrderSaga(this ISagaBuilder builder)
     {
         builder.Services.AddMediator();
-        builder.Services.TryAddSingleton<ISagaStore<MultiFieldOrderSaga, global::int>, InMemorySagaStore<MultiFieldOrderSaga, global::int>>();
+        builder.Services.TryAddSingleton<ISagaStore<MultiFieldOrderSaga, int>, InMemorySagaStore<MultiFieldOrderSaga, int>>();
         if (builder.IsEfCoreBackend)
         {
-            global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<MultiFieldOrderSaga, global::int>(builder);
+            global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<MultiFieldOrderSaga, int>(builder);
         }
-        builder.Services.TryAddSingleton<SagaLockManager<global::int>>();
+        builder.Services.TryAddSingleton<SagaLockManager<int>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<MultiFieldOrderSaga>, MultiFieldOrderSagaCompensationDispatcher>();
-        builder.Services.TryAddTransient<ISagaManager<MultiFieldOrderSaga, global::int>, SagaManager<MultiFieldOrderSaga, global::int>>();
+        builder.Services.TryAddTransient<ISagaManager<MultiFieldOrderSaga, int>, SagaManager<MultiFieldOrderSaga, int>>();
 
         builder.Services.AddTransient<INotificationHandler<global::Sample.Started>, MultiFieldOrderSaga_Started_Handler>();
         return builder;

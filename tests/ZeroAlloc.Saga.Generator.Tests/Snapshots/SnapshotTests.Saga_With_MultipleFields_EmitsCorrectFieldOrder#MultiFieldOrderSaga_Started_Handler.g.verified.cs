@@ -12,12 +12,12 @@ namespace Sample;
 
 internal sealed class MultiFieldOrderSaga_Started_Handler : INotificationHandler<global::Sample.Started>
 {
-    private readonly ISagaStore<MultiFieldOrderSaga, global::int> _store;
-    private readonly SagaLockManager<global::int> _locks;
+    private readonly ISagaStore<MultiFieldOrderSaga, int> _store;
+    private readonly SagaLockManager<int> _locks;
     private readonly IMediator _mediator;
     private readonly ILogger<MultiFieldOrderSaga_Started_Handler> _log;
 
-    public MultiFieldOrderSaga_Started_Handler(ISagaStore<MultiFieldOrderSaga, global::int> store, SagaLockManager<global::int> locks, IMediator mediator, ILogger<MultiFieldOrderSaga_Started_Handler> log)
+    public MultiFieldOrderSaga_Started_Handler(ISagaStore<MultiFieldOrderSaga, int> store, SagaLockManager<int> locks, IMediator mediator, ILogger<MultiFieldOrderSaga_Started_Handler> log)
     {
         _store = store;
         _locks = locks;

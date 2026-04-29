@@ -12,12 +12,12 @@ namespace Sample;
 
 internal sealed class NullableFieldSaga_Started_Handler : INotificationHandler<global::Sample.Started>
 {
-    private readonly ISagaStore<NullableFieldSaga, global::int> _store;
-    private readonly SagaLockManager<global::int> _locks;
+    private readonly ISagaStore<NullableFieldSaga, int> _store;
+    private readonly SagaLockManager<int> _locks;
     private readonly IMediator _mediator;
     private readonly ILogger<NullableFieldSaga_Started_Handler> _log;
 
-    public NullableFieldSaga_Started_Handler(ISagaStore<NullableFieldSaga, global::int> store, SagaLockManager<global::int> locks, IMediator mediator, ILogger<NullableFieldSaga_Started_Handler> log)
+    public NullableFieldSaga_Started_Handler(ISagaStore<NullableFieldSaga, int> store, SagaLockManager<int> locks, IMediator mediator, ILogger<NullableFieldSaga_Started_Handler> log)
     {
         _store = store;
         _locks = locks;

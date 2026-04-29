@@ -8,5 +8,5 @@ internal static class ExcludedFieldSagaCorrelationDispatch
 {
     private static readonly ExcludedFieldSaga _probe = new ExcludedFieldSaga();
 
-    public static global::int GetKey(global::Sample.Started e) => _probe.Correlation(e);
+    public static int GetKey(global::Sample.Started e) => _probe.Correlation(e);
 }

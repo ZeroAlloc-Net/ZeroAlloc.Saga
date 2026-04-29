@@ -12,12 +12,12 @@ namespace Sample;
 
 internal sealed class PrimitiveFieldsSaga_Started_Handler : INotificationHandler<global::Sample.Started>
 {
-    private readonly ISagaStore<PrimitiveFieldsSaga, global::int> _store;
-    private readonly SagaLockManager<global::int> _locks;
+    private readonly ISagaStore<PrimitiveFieldsSaga, int> _store;
+    private readonly SagaLockManager<int> _locks;
     private readonly IMediator _mediator;
     private readonly ILogger<PrimitiveFieldsSaga_Started_Handler> _log;
 
-    public PrimitiveFieldsSaga_Started_Handler(ISagaStore<PrimitiveFieldsSaga, global::int> store, SagaLockManager<global::int> locks, IMediator mediator, ILogger<PrimitiveFieldsSaga_Started_Handler> log)
+    public PrimitiveFieldsSaga_Started_Handler(ISagaStore<PrimitiveFieldsSaga, int> store, SagaLockManager<int> locks, IMediator mediator, ILogger<PrimitiveFieldsSaga_Started_Handler> log)
     {
         _store = store;
         _locks = locks;

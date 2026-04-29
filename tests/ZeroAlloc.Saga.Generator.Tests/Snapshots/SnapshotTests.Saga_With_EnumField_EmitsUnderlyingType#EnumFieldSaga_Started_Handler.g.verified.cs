@@ -12,12 +12,12 @@ namespace Sample;
 
 internal sealed class EnumFieldSaga_Started_Handler : INotificationHandler<global::Sample.Started>
 {
-    private readonly ISagaStore<EnumFieldSaga, global::int> _store;
-    private readonly SagaLockManager<global::int> _locks;
+    private readonly ISagaStore<EnumFieldSaga, int> _store;
+    private readonly SagaLockManager<int> _locks;
     private readonly IMediator _mediator;
     private readonly ILogger<EnumFieldSaga_Started_Handler> _log;
 
-    public EnumFieldSaga_Started_Handler(ISagaStore<EnumFieldSaga, global::int> store, SagaLockManager<global::int> locks, IMediator mediator, ILogger<EnumFieldSaga_Started_Handler> log)
+    public EnumFieldSaga_Started_Handler(ISagaStore<EnumFieldSaga, int> store, SagaLockManager<int> locks, IMediator mediator, ILogger<EnumFieldSaga_Started_Handler> log)
     {
         _store = store;
         _locks = locks;

@@ -8,5 +8,5 @@ internal static class NullableFieldSagaCorrelationDispatch
 {
     private static readonly NullableFieldSaga _probe = new NullableFieldSaga();
 
-    public static global::int GetKey(global::Sample.Started e) => _probe.Correlation(e);
+    public static int GetKey(global::Sample.Started e) => _probe.Correlation(e);
 }

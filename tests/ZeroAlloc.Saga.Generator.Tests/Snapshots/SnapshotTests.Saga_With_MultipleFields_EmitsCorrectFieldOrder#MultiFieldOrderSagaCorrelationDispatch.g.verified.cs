@@ -8,5 +8,5 @@ internal static class MultiFieldOrderSagaCorrelationDispatch
 {
     private static readonly MultiFieldOrderSaga _probe = new MultiFieldOrderSaga();
 
-    public static global::int GetKey(global::Sample.Started e) => _probe.Correlation(e);
+    public static int GetKey(global::Sample.Started e) => _probe.Correlation(e);
 }

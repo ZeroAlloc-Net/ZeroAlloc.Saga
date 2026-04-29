@@ -16,14 +16,14 @@ public static class EnumFieldSagaBuilderExtensions
     public static ISagaBuilder AddEnumFieldSaga(this ISagaBuilder builder)
     {
         builder.Services.AddMediator();
-        builder.Services.TryAddSingleton<ISagaStore<EnumFieldSaga, global::int>, InMemorySagaStore<EnumFieldSaga, global::int>>();
+        builder.Services.TryAddSingleton<ISagaStore<EnumFieldSaga, int>, InMemorySagaStore<EnumFieldSaga, int>>();
         if (builder.IsEfCoreBackend)
         {
-            global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<EnumFieldSaga, global::int>(builder);
+            global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<EnumFieldSaga, int>(builder);
         }
-        builder.Services.TryAddSingleton<SagaLockManager<global::int>>();
+        builder.Services.TryAddSingleton<SagaLockManager<int>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<EnumFieldSaga>, EnumFieldSagaCompensationDispatcher>();
-        builder.Services.TryAddTransient<ISagaManager<EnumFieldSaga, global::int>, SagaManager<EnumFieldSaga, global::int>>();
+        builder.Services.TryAddTransient<ISagaManager<EnumFieldSaga, int>, SagaManager<EnumFieldSaga, int>>();
 
         builder.Services.AddTransient<INotificationHandler<global::Sample.Started>, EnumFieldSaga_Started_Handler>();
         return builder;
