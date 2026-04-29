@@ -8,4 +8,8 @@
     <Project Path="tests/ZeroAlloc.Saga.Generator.Tests/ZeroAlloc.Saga.Generator.Tests.csproj" />
     <Project Path="tests/ZeroAlloc.Saga.Diagnostics.Tests/ZeroAlloc.Saga.Diagnostics.Tests.csproj" />
   </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/OrderFulfillment/OrderFulfillment.csproj" />
+    <Project Path="samples/AotSmoke/AotSmoke.csproj" />
+  </Folder>
 </Solution>
