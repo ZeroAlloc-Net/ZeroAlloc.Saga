@@ -2,10 +2,11 @@
 
 Source-generated long-running process orchestration for the ZeroAlloc ecosystem.
 
-> **Status:** v1.1 — AOT compatible, single-package install. v1.1 adds
-> `ISagaPersistableState` + byte serializer (paving the way for durable
-> backends; `ZeroAlloc.Saga.EfCore` ships from the same repo immediately
-> after this release). InMemory remains the default backend.
+> **Status:** v1.1 — AOT compatible. v1.1 ships durable persistence via
+> `ZeroAlloc.Saga.EfCore` 1.0.0 (single shared `SagaInstance` table,
+> row-version OCC, retry-on-conflict). InMemory remains the default
+> backend; switch to EfCore with one fluent call. See
+> [`docs/persistence-efcore.md`](docs/persistence-efcore.md).
 
 [![NuGet](https://img.shields.io/nuget/v/ZeroAlloc.Saga.svg)](https://www.nuget.org/packages/ZeroAlloc.Saga)
 [![Build](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/actions/workflows/build.yml/badge.svg)](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/actions/workflows/build.yml)
@@ -69,6 +70,8 @@ automatically.
 
 ## What's new in v1.1
 
+### `ZeroAlloc.Saga` 1.2.0
+
 - **`ISagaPersistableState`** + zero-allocation `SagaStateWriter` /
   `SagaStateReader` ref structs. Every `[Saga]` class implements the
   interface via a generator-emitted partial; backends use it to round-trip
@@ -78,6 +81,13 @@ automatically.
   shape, `byte[]`, and `Nullable<T>` wrappers thereof.
 - **`[NotSagaState]`** escape-hatch attribute — exclude transient or
   computed members from generator-emitted Snapshot/Restore.
+- **`SagaRetryOptions`** + **`ISagaStoreRegistrar`** — backend-agnostic
+  retry knobs and a typed registrar indirection so durable backends
+  swap themselves in without `MakeGenericType`.
+- **EfCore-aware handler emit** — when the generator detects
+  `WithEfCoreStore` in the same compilation, the emitted notification
+  handlers wrap the load → step → save loop in a configurable retry
+  catching `DbUpdateConcurrencyException`.
 - **2 new diagnostics**:
   - `ZASAGA014` (Error) — saga state field has an unsupported type.
   - `ZASAGA015` (Info, suppressible) — saga commands should be idempotent
@@ -86,29 +96,56 @@ automatically.
 - **Implicit `AddMediator()`** — `AddSaga()` no longer requires a separate
   `services.AddMediator()` call.
 - **InMemory backend unchanged** — v1.0 users see no behavioural change.
-  Durable backends (starting with `ZeroAlloc.Saga.EfCore` 1.0.0) ship from
-  the same repo in subsequent PRs.
+
+### `ZeroAlloc.Saga.EfCore` 1.0.0 (new package)
+
+First durable backend for `ZeroAlloc.Saga`. Single shared `SagaInstance`
+table keyed by `(SagaType, CorrelationKey)`; provider-agnostic row-version
+optimistic concurrency; automatic retry-on-conflict driven by
+`EfCoreSagaStoreOptions`. See
+[`docs/persistence-efcore.md`](docs/persistence-efcore.md) for the full
+guide.
+
+```csharp
+services.AddDbContext<AppDbContext>(opts => opts.UseSqlServer(connStr));
+
+services.AddSaga()
+    .WithEfCoreStore<AppDbContext>()
+    .AddOrderFulfillmentSaga();
+```
+
+Plus, in your `DbContext`:
+
+```csharp
+protected override void OnModelCreating(ModelBuilder mb) => mb.AddSagas();
+```
 
 ## Documentation
 
 - [`docs/concepts.md`](docs/concepts.md) — saga lifecycle, generator output, AOT story
 - [`docs/correlation.md`](docs/correlation.md) — `[CorrelationKey]` rules, multi-saga subscription, composite keys
 - [`docs/compensation.md`](docs/compensation.md) — `Compensate` / `CompensateOn`, reverse cascade, `ISagaManager.CompensateAsync`
+- [`docs/persistence-efcore.md`](docs/persistence-efcore.md) — durable persistence with `ZeroAlloc.Saga.EfCore`: setup, migrations, OCC, idempotency, AOT story
 - [`docs/diagnostics.md`](docs/diagnostics.md) — every `ZASAGA0XX` diagnostic with examples and fixes
 
 ## Samples
 
-- [`samples/OrderFulfillment/`](samples/OrderFulfillment/) — full demo with happy path, compensation, orphan-event handling, and operator-initiated compensation. `dotnet run --project samples/OrderFulfillment/`.
+- [`samples/OrderFulfillment/`](samples/OrderFulfillment/) — full demo with happy path, compensation, orphan-event handling, and operator-initiated compensation. `dotnet run --project samples/OrderFulfillment/` (InMemory) or `dotnet run --project samples/OrderFulfillment/ -- --efcore` (EfCore + SQLite).
 - [`samples/AotSmoke/`](samples/AotSmoke/) — minimal saga end-to-end published with `PublishAot=true`. Run by the `aot-smoke` CI job on every push.
+- [`samples/AotSmokeEfCore/`](samples/AotSmokeEfCore/) — EfCore variant of the smoke. Builds under the same AOT/trim analyzer set; runs end-to-end with SQLite in-memory verifying RowVersion rotation and Completed-state row removal.
 
 ## Install
 
 ```bash
-dotnet add package ZeroAlloc.Saga
+dotnet add package ZeroAlloc.Saga          # runtime + generator (single package)
+
+# Optional — for durable persistence over an EF Core DbContext:
+dotnet add package ZeroAlloc.Saga.EfCore
 ```
 
-The single package contains both the runtime and the source generator
-(bundled as an analyzer asset). No separate `.Generator` package to install.
+The base `ZeroAlloc.Saga` package contains both the runtime and the source
+generator (bundled as an analyzer asset). No separate `.Generator` package to
+install.
 
 Hard dependencies pulled in transitively:
 
@@ -139,28 +176,35 @@ Hard dependencies pulled in transitively:
 Every diagnostic links to [`docs/diagnostics.md`](docs/diagnostics.md) with a
 worked example.
 
-## v1.0 known limitations
+## v1.1 known limitations
 
 - **InMemory persistence is not durable.** Process crash loses all in-flight
-  sagas. EfCore/Redis bridges arrive in v1.1.
+  sagas. Switch to `ZeroAlloc.Saga.EfCore` for durability.
+- **`ZeroAlloc.Saga.EfCore` Native AOT publish** — the runtime library
+  itself is AOT-clean, but a fully `PublishAot=true` binary is blocked
+  upstream by EF Core 9.0's experimental AOT story (precompiled queries
+  don't yet cover the store's tracked `Set<>().AsTracking()...` shape).
+  Use the EfCore backend on JITted hosts; stay on InMemory for AOT-published
+  hosts. See [`docs/persistence-efcore.md`](docs/persistence-efcore.md).
 - **`SagaLockManager` grows monotonically** — one `SemaphoreSlim` per unique
   correlation key seen, never evicted. Bounded by process lifetime; ~80 bytes
   each. Eviction lands in v1.x for high-cardinality workloads.
-- **No timeouts.** v1.0 sagas wait indefinitely for the next event. Phase 4
+- **No timeouts.** v1.1 sagas wait indefinitely for the next event. Phase 4
   (v1.3) adds `[Step(TimeoutMs = ...)]` via Scheduling integration.
-- **No telemetry.** v1.0 emits no spans, counters, or histograms. Phase 5
+- **No telemetry.** v1.1 emits no spans, counters, or histograms. Phase 5
   (v1.4) ships `ZeroAlloc.Saga.Telemetry` bridge.
 
 ## Roadmap
 
 | Phase | Package | Adds |
 |---|---|---|
-| **v1.0** (this release) | `ZeroAlloc.Saga` | runtime + generator + InMemory + diagnostics + AOT |
-| v1.1 | `ZeroAlloc.Saga.EfCore`, `ZeroAlloc.Saga.Redis` | durable persistence, snapshot/rehydrate |
-| v1.2 | `ZeroAlloc.Saga.Outbox`, `ZeroAlloc.Saga.Resilience` | transactional outbox, retry policies |
-| v1.3 | (Scheduling integration) | per-step timeouts, deadlines |
-| v1.4 | `ZeroAlloc.Saga.Telemetry`, `ZeroAlloc.Saga.Dashboard` | OTel spans/metrics, ops dashboard |
-| v1.5 stretch | `ZeroAlloc.Saga.EventSourcing` | ES-backed store, choreography mode |
+| v1.0 | `ZeroAlloc.Saga` 1.0 | runtime + generator + InMemory + diagnostics + AOT |
+| **v1.1** (this release) | `ZeroAlloc.Saga` 1.2, `ZeroAlloc.Saga.EfCore` 1.0 | durable persistence (EfCore), retry-on-OCC-conflict, snapshot/rehydrate via `ISagaPersistableState` |
+| v1.2 | `ZeroAlloc.Saga.Redis` | second durable backend |
+| v1.3 | `ZeroAlloc.Saga.Outbox`, `ZeroAlloc.Saga.Resilience` | transactional outbox, retry policies |
+| v1.4 | (Scheduling integration) | per-step timeouts, deadlines |
+| v1.5 | `ZeroAlloc.Saga.Telemetry`, `ZeroAlloc.Saga.Dashboard` | OTel spans/metrics, ops dashboard |
+| v1.6 stretch | `ZeroAlloc.Saga.EventSourcing` | ES-backed store, choreography mode |
 
 ## License
 
