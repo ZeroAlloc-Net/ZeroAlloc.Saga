@@ -1,0 +1,32 @@
+# Changelog
+
+## [1.1.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v1.1.0...ZeroAlloc.Saga-v1.1.0) (2026-04-29)
+
+
+### Features
+
+* add ISagaBuilder + AddSaga() DI extension ([cce4e12](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/cce4e129981ea481d64a04c54f8429866dd47f63))
+* add ISagaManager + SagaManager + ISagaCompensationDispatcher ([3ea663f](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/3ea663fac7f8b9e1119e7bd9fffd588430e84a03))
+* add ISagaStore&lt;TSaga,TKey&gt; + InMemorySagaStore default ([42f2dba](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/42f2dba935370d76bfa4cd54b64bd2001eaefb5f))
+* add public Saga, Step, CorrelationKey attributes ([8386152](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/83861522d35e23d877c29486a845d0a6189ca2b7))
+* add SagaLockManager&lt;TKey&gt; for per-saga serialization ([0b8ca8a](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/0b8ca8a4c9588570de9e7a4d3e7b7d4acfcf8c4c))
+* runtime + source generator + happy-path tests ([19647f2](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/19647f23cc0f0a7b03042c6f9d9b6e54e8e0e666))
+* **saga.efcore:** scaffold csproj + multi-package release-please config ([85df40a](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/85df40ad3fdfbead3399f8da370b0ba8ef4acd00))
+* **saga:** add [NotSagaState] escape-hatch attribute ([bb5d2e1](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/bb5d2e10edc85a814bc0062caac2593c03406b10))
+* **saga:** add ISagaPersistableState interface for backend state round-trip ([8ae2400](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/8ae240076429954b49fea70672878c771b7144a7))
+* **saga:** add SagaStateReader ref struct mirroring writer ([a077b9a](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/a077b9aaf250e34fc7c46a043a57c424a3497303))
+* **saga:** add SagaStateVersionMismatchException + SagaConcurrencyException ([e1bc7f8](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/e1bc7f8e6c198c509d27f0e8b7b9813c9e39df80))
+* **saga:** add SagaStateWriter ref struct for state serialization ([683b7d5](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/683b7d5949a9c700c97dcdbc3458e15db878c7bf))
+* **saga:** expose IsEfCoreBackend flag + SagaStoreRegistrar indirection ([f3383d0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/f3383d036ec0a69c7eb8fa9d153e7861407e571d))
+* **saga:** v1.1 — ISagaPersistableState, byte serializer, ZASAGA014/015 ([5ac16a4](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/5ac16a4013f9034e887a113a983f7e9f268ac3c1))
+
+
+### Bug Fixes
+
+* **saga:** drop framework-convention auxiliary ctors on sealed exceptions ([ca45925](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/ca45925f47fd9920ac9c8d29bc0094737e87b0d6))
+* **saga:** preserve null-vs-empty round-trip for byte[]? state fields ([489e5bc](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/489e5bc9f931eafc64121fa95149d2c58104217d))
+
+
+### Miscellaneous
+
+* **release:** tag v1.1.0 ([7ac8399](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/7ac83990fc6eac0bab2fc022c9a26100154d1edf))
