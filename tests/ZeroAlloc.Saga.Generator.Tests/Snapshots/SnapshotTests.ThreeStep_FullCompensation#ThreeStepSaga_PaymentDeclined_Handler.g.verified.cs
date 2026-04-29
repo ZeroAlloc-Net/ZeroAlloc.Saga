@@ -15,13 +15,15 @@ internal sealed class ThreeStepSaga_PaymentDeclined_Handler : INotificationHandl
     private readonly ISagaStore<ThreeStepSaga, global::Sample.OrderId> _store;
     private readonly SagaLockManager<global::Sample.OrderId> _locks;
     private readonly IMediator _mediator;
+    private readonly SagaRetryOptions _retry;
     private readonly ILogger<ThreeStepSaga_PaymentDeclined_Handler> _log;
 
-    public ThreeStepSaga_PaymentDeclined_Handler(ISagaStore<ThreeStepSaga, global::Sample.OrderId> store, SagaLockManager<global::Sample.OrderId> locks, IMediator mediator, ILogger<ThreeStepSaga_PaymentDeclined_Handler> log)
+    public ThreeStepSaga_PaymentDeclined_Handler(ISagaStore<ThreeStepSaga, global::Sample.OrderId> store, SagaLockManager<global::Sample.OrderId> locks, IMediator mediator, SagaRetryOptions retry, ILogger<ThreeStepSaga_PaymentDeclined_Handler> log)
     {
         _store = store;
         _locks = locks;
         _mediator = mediator;
+        _retry = retry;
         _log = log;
     }
 
@@ -31,31 +33,52 @@ internal sealed class ThreeStepSaga_PaymentDeclined_Handler : INotificationHandl
         var key = ThreeStepSagaCorrelationDispatch.GetKey(@event);
         using var _ = await _locks.AcquireAsync(key, ct).ConfigureAwait(false);
 
-        var saga = await _store.TryLoadAsync(key, ct).ConfigureAwait(false);
-        if (saga is null)
+        var attempts = 0;
+        while (true)
         {
-            _log.LogWarning("Saga {Saga}: orphan PaymentDeclined for key {Key}; no instance to compensate", "ThreeStepSaga", key);
-            return;
-        }
+            try
+            {
+                var saga = await _store.TryLoadAsync(key, ct).ConfigureAwait(false);
+                if (saga is null)
+                {
+                    _log.LogWarning("Saga {Saga}: orphan PaymentDeclined for key {Key}; no instance to compensate", "ThreeStepSaga", key);
+                    return;
+                }
 
-        var stateAtFailure = saga.Fsm.Current;
-        if (!saga.Fsm.TryFire(ThreeStepSagaFsm.Trigger.PaymentDeclined))
-        {
-            _log.LogDebug("Saga {Saga}: PaymentDeclined not valid in state {State} for key {Key}; ignored", "ThreeStepSaga", stateAtFailure, key);
-            return;
-        }
+                var stateAtFailure = saga.Fsm.Current;
+                if (!saga.Fsm.TryFire(ThreeStepSagaFsm.Trigger.PaymentDeclined))
+                {
+                    _log.LogDebug("Saga {Saga}: PaymentDeclined not valid in state {State} for key {Key}; ignored", "ThreeStepSaga", stateAtFailure, key);
+                    return;
+                }
 
-        // Reverse-cascade compensation: walk back from stateAtFailure to Step1.
-        switch (stateAtFailure)
-        {
-            case ThreeStepSagaFsm.State.Step2:
-                await _mediator.Send(saga.Refund(), ct).ConfigureAwait(false);
-                await _mediator.Send(saga.CancelReservation(), ct).ConfigureAwait(false);
-                break;
-            default: break;
-        }
+                // Reverse-cascade compensation: walk back from stateAtFailure to Step1.
+                switch (stateAtFailure)
+                {
+                    case ThreeStepSagaFsm.State.Step2:
+                        await _mediator.Send(saga.Refund(), ct).ConfigureAwait(false);
+                        await _mediator.Send(saga.CancelReservation(), ct).ConfigureAwait(false);
+                        break;
+                    default: break;
+                }
 
-        saga.Fsm.TryFire(ThreeStepSagaFsm.Trigger.CompensateDone);
-        await _store.RemoveAsync(key, ct).ConfigureAwait(false);
+                saga.Fsm.TryFire(ThreeStepSagaFsm.Trigger.CompensateDone);
+                await _store.RemoveAsync(key, ct).ConfigureAwait(false);
+                return;
+            }
+            catch (Exception ex) when (ex.GetType().FullName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException" && attempts < _retry.MaxRetryAttempts)
+            {
+                attempts++;
+                _log.LogWarning("Saga {Saga}: OCC conflict on compensation for key {Key}, retry {Attempt}/{Max}", "ThreeStepSaga", key, attempts, _retry.MaxRetryAttempts);
+                var delay = _retry.UseExponentialBackoff
+                    ? TimeSpan.FromTicks(_retry.RetryBaseDelay.Ticks * (1L << attempts))
+                    : _retry.RetryBaseDelay;
+                await Task.Delay(delay, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex.GetType().FullName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException")
+            {
+                throw new SagaConcurrencyException("ThreeStepSaga", key.ToString() ?? string.Empty, attempts, ex);
+            }
+        }
     }
 }

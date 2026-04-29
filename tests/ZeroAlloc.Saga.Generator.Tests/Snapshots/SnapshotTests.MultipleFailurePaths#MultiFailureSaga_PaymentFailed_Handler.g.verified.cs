@@ -15,13 +15,15 @@ internal sealed class MultiFailureSaga_PaymentFailed_Handler : INotificationHand
     private readonly ISagaStore<MultiFailureSaga, global::Sample.OrderId> _store;
     private readonly SagaLockManager<global::Sample.OrderId> _locks;
     private readonly IMediator _mediator;
+    private readonly SagaRetryOptions _retry;
     private readonly ILogger<MultiFailureSaga_PaymentFailed_Handler> _log;
 
-    public MultiFailureSaga_PaymentFailed_Handler(ISagaStore<MultiFailureSaga, global::Sample.OrderId> store, SagaLockManager<global::Sample.OrderId> locks, IMediator mediator, ILogger<MultiFailureSaga_PaymentFailed_Handler> log)
+    public MultiFailureSaga_PaymentFailed_Handler(ISagaStore<MultiFailureSaga, global::Sample.OrderId> store, SagaLockManager<global::Sample.OrderId> locks, IMediator mediator, SagaRetryOptions retry, ILogger<MultiFailureSaga_PaymentFailed_Handler> log)
     {
         _store = store;
         _locks = locks;
         _mediator = mediator;
+        _retry = retry;
         _log = log;
     }
 
@@ -31,31 +33,52 @@ internal sealed class MultiFailureSaga_PaymentFailed_Handler : INotificationHand
         var key = MultiFailureSagaCorrelationDispatch.GetKey(@event);
         using var _ = await _locks.AcquireAsync(key, ct).ConfigureAwait(false);
 
-        var saga = await _store.TryLoadAsync(key, ct).ConfigureAwait(false);
-        if (saga is null)
+        var attempts = 0;
+        while (true)
         {
-            _log.LogWarning("Saga {Saga}: orphan PaymentFailed for key {Key}; no instance to compensate", "MultiFailureSaga", key);
-            return;
-        }
+            try
+            {
+                var saga = await _store.TryLoadAsync(key, ct).ConfigureAwait(false);
+                if (saga is null)
+                {
+                    _log.LogWarning("Saga {Saga}: orphan PaymentFailed for key {Key}; no instance to compensate", "MultiFailureSaga", key);
+                    return;
+                }
 
-        var stateAtFailure = saga.Fsm.Current;
-        if (!saga.Fsm.TryFire(MultiFailureSagaFsm.Trigger.PaymentFailed))
-        {
-            _log.LogDebug("Saga {Saga}: PaymentFailed not valid in state {State} for key {Key}; ignored", "MultiFailureSaga", stateAtFailure, key);
-            return;
-        }
+                var stateAtFailure = saga.Fsm.Current;
+                if (!saga.Fsm.TryFire(MultiFailureSagaFsm.Trigger.PaymentFailed))
+                {
+                    _log.LogDebug("Saga {Saga}: PaymentFailed not valid in state {State} for key {Key}; ignored", "MultiFailureSaga", stateAtFailure, key);
+                    return;
+                }
 
-        // Reverse-cascade compensation: walk back from stateAtFailure to Step1.
-        switch (stateAtFailure)
-        {
-            case MultiFailureSagaFsm.State.Step2:
-                await _mediator.Send(saga.Refund(), ct).ConfigureAwait(false);
-                await _mediator.Send(saga.CancelReserve(), ct).ConfigureAwait(false);
-                break;
-            default: break;
-        }
+                // Reverse-cascade compensation: walk back from stateAtFailure to Step1.
+                switch (stateAtFailure)
+                {
+                    case MultiFailureSagaFsm.State.Step2:
+                        await _mediator.Send(saga.Refund(), ct).ConfigureAwait(false);
+                        await _mediator.Send(saga.CancelReserve(), ct).ConfigureAwait(false);
+                        break;
+                    default: break;
+                }
 
-        saga.Fsm.TryFire(MultiFailureSagaFsm.Trigger.CompensateDone);
-        await _store.RemoveAsync(key, ct).ConfigureAwait(false);
+                saga.Fsm.TryFire(MultiFailureSagaFsm.Trigger.CompensateDone);
+                await _store.RemoveAsync(key, ct).ConfigureAwait(false);
+                return;
+            }
+            catch (Exception ex) when (ex.GetType().FullName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException" && attempts < _retry.MaxRetryAttempts)
+            {
+                attempts++;
+                _log.LogWarning("Saga {Saga}: OCC conflict on compensation for key {Key}, retry {Attempt}/{Max}", "MultiFailureSaga", key, attempts, _retry.MaxRetryAttempts);
+                var delay = _retry.UseExponentialBackoff
+                    ? TimeSpan.FromTicks(_retry.RetryBaseDelay.Ticks * (1L << attempts))
+                    : _retry.RetryBaseDelay;
+                await Task.Delay(delay, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex.GetType().FullName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException")
+            {
+                throw new SagaConcurrencyException("MultiFailureSaga", key.ToString() ?? string.Empty, attempts, ex);
+            }
+        }
     }
 }

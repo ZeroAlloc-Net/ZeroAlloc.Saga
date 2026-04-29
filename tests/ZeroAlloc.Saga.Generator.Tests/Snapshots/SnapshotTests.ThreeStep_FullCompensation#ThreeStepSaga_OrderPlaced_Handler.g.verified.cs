@@ -15,13 +15,15 @@ internal sealed class ThreeStepSaga_OrderPlaced_Handler : INotificationHandler<g
     private readonly ISagaStore<ThreeStepSaga, global::Sample.OrderId> _store;
     private readonly SagaLockManager<global::Sample.OrderId> _locks;
     private readonly IMediator _mediator;
+    private readonly SagaRetryOptions _retry;
     private readonly ILogger<ThreeStepSaga_OrderPlaced_Handler> _log;
 
-    public ThreeStepSaga_OrderPlaced_Handler(ISagaStore<ThreeStepSaga, global::Sample.OrderId> store, SagaLockManager<global::Sample.OrderId> locks, IMediator mediator, ILogger<ThreeStepSaga_OrderPlaced_Handler> log)
+    public ThreeStepSaga_OrderPlaced_Handler(ISagaStore<ThreeStepSaga, global::Sample.OrderId> store, SagaLockManager<global::Sample.OrderId> locks, IMediator mediator, SagaRetryOptions retry, ILogger<ThreeStepSaga_OrderPlaced_Handler> log)
     {
         _store = store;
         _locks = locks;
         _mediator = mediator;
+        _retry = retry;
         _log = log;
     }
 
@@ -30,16 +32,37 @@ internal sealed class ThreeStepSaga_OrderPlaced_Handler : INotificationHandler<g
         var key = ThreeStepSagaCorrelationDispatch.GetKey(@event);
         using var _ = await _locks.AcquireAsync(key, ct).ConfigureAwait(false);
 
-        var saga = await _store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);
-        if (!saga.Fsm.TryFire(ThreeStepSagaFsm.Trigger.OrderPlaced))
+        var attempts = 0;
+        while (true)
         {
-            _log.LogDebug("Saga {Saga}: late OrderPlaced for key {Key}; ignored", "ThreeStepSaga", key);
-            return;
+            try
+            {
+                var saga = await _store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);
+                if (!saga.Fsm.TryFire(ThreeStepSagaFsm.Trigger.OrderPlaced))
+                {
+                    _log.LogDebug("Saga {Saga}: late OrderPlaced for key {Key}; ignored", "ThreeStepSaga", key);
+                    return;
+                }
+
+                var cmd = saga.Reserve(@event);
+                await _mediator.Send(cmd, ct).ConfigureAwait(false);
+
+                await _store.SaveAsync(key, saga, ct).ConfigureAwait(false);
+                return;
+            }
+            catch (Exception ex) when (ex.GetType().FullName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException" && attempts < _retry.MaxRetryAttempts)
+            {
+                attempts++;
+                _log.LogWarning("Saga {Saga}: OCC conflict on key {Key}, retry {Attempt}/{Max}", "ThreeStepSaga", key, attempts, _retry.MaxRetryAttempts);
+                var delay = _retry.UseExponentialBackoff
+                    ? TimeSpan.FromTicks(_retry.RetryBaseDelay.Ticks * (1L << attempts))
+                    : _retry.RetryBaseDelay;
+                await Task.Delay(delay, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex.GetType().FullName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException")
+            {
+                throw new SagaConcurrencyException("ThreeStepSaga", key.ToString() ?? string.Empty, attempts, ex);
+            }
         }
-
-        var cmd = saga.Reserve(@event);
-        await _mediator.Send(cmd, ct).ConfigureAwait(false);
-
-        await _store.SaveAsync(key, saga, ct).ConfigureAwait(false);
     }
 }

@@ -15,13 +15,15 @@ internal sealed class ExcludedFieldSaga_Started_Handler : INotificationHandler<g
     private readonly ISagaStore<ExcludedFieldSaga, int> _store;
     private readonly SagaLockManager<int> _locks;
     private readonly IMediator _mediator;
+    private readonly SagaRetryOptions _retry;
     private readonly ILogger<ExcludedFieldSaga_Started_Handler> _log;
 
-    public ExcludedFieldSaga_Started_Handler(ISagaStore<ExcludedFieldSaga, int> store, SagaLockManager<int> locks, IMediator mediator, ILogger<ExcludedFieldSaga_Started_Handler> log)
+    public ExcludedFieldSaga_Started_Handler(ISagaStore<ExcludedFieldSaga, int> store, SagaLockManager<int> locks, IMediator mediator, SagaRetryOptions retry, ILogger<ExcludedFieldSaga_Started_Handler> log)
     {
         _store = store;
         _locks = locks;
         _mediator = mediator;
+        _retry = retry;
         _log = log;
     }
 
@@ -30,17 +32,38 @@ internal sealed class ExcludedFieldSaga_Started_Handler : INotificationHandler<g
         var key = ExcludedFieldSagaCorrelationDispatch.GetKey(@event);
         using var _ = await _locks.AcquireAsync(key, ct).ConfigureAwait(false);
 
-        var saga = await _store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);
-        if (!saga.Fsm.TryFire(ExcludedFieldSagaFsm.Trigger.Started))
+        var attempts = 0;
+        while (true)
         {
-            _log.LogDebug("Saga {Saga}: late Started for key {Key}; ignored", "ExcludedFieldSaga", key);
-            return;
+            try
+            {
+                var saga = await _store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);
+                if (!saga.Fsm.TryFire(ExcludedFieldSagaFsm.Trigger.Started))
+                {
+                    _log.LogDebug("Saga {Saga}: late Started for key {Key}; ignored", "ExcludedFieldSaga", key);
+                    return;
+                }
+
+                var cmd = saga.Step1(@event);
+                await _mediator.Send(cmd, ct).ConfigureAwait(false);
+
+                saga.Fsm.TryFire(ExcludedFieldSagaFsm.Trigger.Complete);
+                await _store.RemoveAsync(key, ct).ConfigureAwait(false);
+                return;
+            }
+            catch (Exception ex) when (ex.GetType().FullName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException" && attempts < _retry.MaxRetryAttempts)
+            {
+                attempts++;
+                _log.LogWarning("Saga {Saga}: OCC conflict on key {Key}, retry {Attempt}/{Max}", "ExcludedFieldSaga", key, attempts, _retry.MaxRetryAttempts);
+                var delay = _retry.UseExponentialBackoff
+                    ? TimeSpan.FromTicks(_retry.RetryBaseDelay.Ticks * (1L << attempts))
+                    : _retry.RetryBaseDelay;
+                await Task.Delay(delay, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex.GetType().FullName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException")
+            {
+                throw new SagaConcurrencyException("ExcludedFieldSaga", key.ToString() ?? string.Empty, attempts, ex);
+            }
         }
-
-        var cmd = saga.Step1(@event);
-        await _mediator.Send(cmd, ct).ConfigureAwait(false);
-
-        saga.Fsm.TryFire(ExcludedFieldSagaFsm.Trigger.Complete);
-        await _store.RemoveAsync(key, ct).ConfigureAwait(false);
     }
 }
