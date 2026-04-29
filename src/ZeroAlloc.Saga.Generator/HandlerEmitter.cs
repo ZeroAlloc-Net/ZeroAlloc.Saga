@@ -14,12 +14,18 @@ namespace ZeroAlloc.Saga.Generator;
 /// </summary>
 /// <remarks>
 /// Each emitted handler wraps the load/fire/dispatch/save flow in an OCC
-/// retry loop. The catch block matches <c>DbUpdateConcurrencyException</c>
-/// by string-name (<c>ex.GetType().FullName == ...</c>) so the generator
-/// output never references <c>Microsoft.EntityFrameworkCore</c> — InMemory
-/// users compile cleanly without the EF Core package, and the catch is
-/// dormant for them because <see cref="ZeroAlloc.Saga.InMemorySagaStore{TSaga,TKey}"/>
-/// never throws concurrency exceptions. The retry budget is read from
+/// retry loop. The catch block matches <c>DbUpdateException</c> AND
+/// <c>DbUpdateConcurrencyException</c> by string-name
+/// (<c>ex.GetType().FullName == ...</c>) so the generator output never
+/// references <c>Microsoft.EntityFrameworkCore</c> — InMemory users compile
+/// cleanly without the EF Core package, and the catch is dormant for them
+/// because <see cref="ZeroAlloc.Saga.InMemorySagaStore{TSaga,TKey}"/> never
+/// throws those exceptions. Both base (<c>DbUpdateException</c>, raised on
+/// unique-constraint INSERT races) and derived
+/// (<c>DbUpdateConcurrencyException</c>, raised on row-version OCC
+/// conflicts) are handled by the same retry path so a fresh-key INSERT
+/// race between two processes is recovered just like an UPDATE OCC clash.
+/// The retry budget is read from
 /// <see cref="ZeroAlloc.Saga.SagaRetryOptions"/>, registered with
 /// defaults by <c>AddSaga()</c> and overridden by
 /// <c>WithEfCoreStore&lt;TContext&gt;()</c> when EfCore is wired.
@@ -27,6 +33,7 @@ namespace ZeroAlloc.Saga.Generator;
 internal static class HandlerEmitter
 {
     private const string DbUpdateConcurrencyExceptionFullName = "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException";
+    private const string DbUpdateExceptionFullName = "Microsoft.EntityFrameworkCore.DbUpdateException";
 
     public static void Emit(SourceProductionContext spc, SagaModel model)
     {
@@ -119,9 +126,11 @@ internal static class HandlerEmitter
         sb.AppendLine("            }");
         // String-based type-name catch avoids referencing Microsoft.EntityFrameworkCore
         // from generator output; InMemory users get a dormant catch (their store
-        // never raises concurrency exceptions).
-        sb.Append("            catch (Exception ex) when (ex.GetType().FullName == \"")
-          .Append(DbUpdateConcurrencyExceptionFullName).AppendLine("\" && attempts < _retry.MaxRetryAttempts)");
+        // never raises those exceptions). Both DbUpdateException (e.g. a
+        // unique-constraint INSERT race when two processes both create a fresh
+        // saga row) and DbUpdateConcurrencyException (UPDATE OCC clash) are
+        // recovered by the same retry path.
+        sb.AppendLine("            catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsEfCoreConflict(ex))");
         sb.AppendLine("            {");
         sb.AppendLine("                attempts++;");
         sb.Append("                _log.LogWarning(\"Saga {Saga}: OCC conflict on key {Key}, retry {Attempt}/{Max}\", \"")
@@ -131,12 +140,18 @@ internal static class HandlerEmitter
         sb.AppendLine("                    : _retry.RetryBaseDelay;");
         sb.AppendLine("                await Task.Delay(delay, ct).ConfigureAwait(false);");
         sb.AppendLine("            }");
-        sb.Append("            catch (Exception ex) when (ex.GetType().FullName == \"")
-          .Append(DbUpdateConcurrencyExceptionFullName).AppendLine("\")");
+        sb.AppendLine("            catch (Exception ex) when (IsEfCoreConflict(ex))");
         sb.AppendLine("            {");
         sb.Append("                throw new SagaConcurrencyException(\"").Append(model.ClassName).AppendLine("\", key.ToString() ?? string.Empty, attempts, ex);");
         sb.AppendLine("            }");
         sb.AppendLine("        }");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    private static bool IsEfCoreConflict(Exception ex)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var typeName = ex.GetType().FullName;");
+        sb.Append("        return typeName == \"").Append(DbUpdateExceptionFullName).AppendLine("\"");
+        sb.Append("            || typeName == \"").Append(DbUpdateConcurrencyExceptionFullName).AppendLine("\";");
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
@@ -236,8 +251,14 @@ internal static class HandlerEmitter
         sb.AppendLine("                await _store.RemoveAsync(key, ct).ConfigureAwait(false);");
         sb.AppendLine("                return;");
         sb.AppendLine("            }");
-        sb.Append("            catch (Exception ex) when (ex.GetType().FullName == \"")
-          .Append(DbUpdateConcurrencyExceptionFullName).AppendLine("\" && attempts < _retry.MaxRetryAttempts)");
+        // Note: if RemoveAsync throws DbUpdateConcurrencyException (third-party
+        // deleted/updated row mid-compensation), the retry loop re-enters the
+        // try block. On retry, TryLoadAsync may return null (just-deleted), and
+        // the handler returns silently. However, the compensation commands have
+        // already been dispatched once; if the entity is still there on retry,
+        // they may be dispatched a second time. The retry-loop's "idempotency
+        // is the user's responsibility" contract (ZASAGA015) covers this.
+        sb.AppendLine("            catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsEfCoreConflict(ex))");
         sb.AppendLine("            {");
         sb.AppendLine("                attempts++;");
         sb.Append("                _log.LogWarning(\"Saga {Saga}: OCC conflict on compensation for key {Key}, retry {Attempt}/{Max}\", \"")
@@ -247,12 +268,18 @@ internal static class HandlerEmitter
         sb.AppendLine("                    : _retry.RetryBaseDelay;");
         sb.AppendLine("                await Task.Delay(delay, ct).ConfigureAwait(false);");
         sb.AppendLine("            }");
-        sb.Append("            catch (Exception ex) when (ex.GetType().FullName == \"")
-          .Append(DbUpdateConcurrencyExceptionFullName).AppendLine("\")");
+        sb.AppendLine("            catch (Exception ex) when (IsEfCoreConflict(ex))");
         sb.AppendLine("            {");
         sb.Append("                throw new SagaConcurrencyException(\"").Append(model.ClassName).AppendLine("\", key.ToString() ?? string.Empty, attempts, ex);");
         sb.AppendLine("            }");
         sb.AppendLine("        }");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    private static bool IsEfCoreConflict(Exception ex)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var typeName = ex.GetType().FullName;");
+        sb.Append("        return typeName == \"").Append(DbUpdateExceptionFullName).AppendLine("\"");
+        sb.Append("            || typeName == \"").Append(DbUpdateConcurrencyExceptionFullName).AppendLine("\";");
         sb.AppendLine("    }");
         sb.AppendLine("}");
 

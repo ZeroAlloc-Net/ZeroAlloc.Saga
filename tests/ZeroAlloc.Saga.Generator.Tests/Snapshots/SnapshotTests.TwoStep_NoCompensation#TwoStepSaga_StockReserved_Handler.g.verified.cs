@@ -51,7 +51,7 @@ internal sealed class TwoStepSaga_StockReserved_Handler : INotificationHandler<g
                 await _store.RemoveAsync(key, ct).ConfigureAwait(false);
                 return;
             }
-            catch (Exception ex) when (ex.GetType().FullName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException" && attempts < _retry.MaxRetryAttempts)
+            catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsEfCoreConflict(ex))
             {
                 attempts++;
                 _log.LogWarning("Saga {Saga}: OCC conflict on key {Key}, retry {Attempt}/{Max}", "TwoStepSaga", key, attempts, _retry.MaxRetryAttempts);
@@ -60,10 +60,17 @@ internal sealed class TwoStepSaga_StockReserved_Handler : INotificationHandler<g
                     : _retry.RetryBaseDelay;
                 await Task.Delay(delay, ct).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex.GetType().FullName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException")
+            catch (Exception ex) when (IsEfCoreConflict(ex))
             {
                 throw new SagaConcurrencyException("TwoStepSaga", key.ToString() ?? string.Empty, attempts, ex);
             }
         }
+    }
+
+    private static bool IsEfCoreConflict(Exception ex)
+    {
+        var typeName = ex.GetType().FullName;
+        return typeName == "Microsoft.EntityFrameworkCore.DbUpdateException"
+            || typeName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException";
     }
 }

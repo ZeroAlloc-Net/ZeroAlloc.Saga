@@ -66,7 +66,7 @@ internal sealed class ThreeStepSaga_PaymentDeclined_Handler : INotificationHandl
                 await _store.RemoveAsync(key, ct).ConfigureAwait(false);
                 return;
             }
-            catch (Exception ex) when (ex.GetType().FullName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException" && attempts < _retry.MaxRetryAttempts)
+            catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsEfCoreConflict(ex))
             {
                 attempts++;
                 _log.LogWarning("Saga {Saga}: OCC conflict on compensation for key {Key}, retry {Attempt}/{Max}", "ThreeStepSaga", key, attempts, _retry.MaxRetryAttempts);
@@ -75,10 +75,17 @@ internal sealed class ThreeStepSaga_PaymentDeclined_Handler : INotificationHandl
                     : _retry.RetryBaseDelay;
                 await Task.Delay(delay, ct).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex.GetType().FullName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException")
+            catch (Exception ex) when (IsEfCoreConflict(ex))
             {
                 throw new SagaConcurrencyException("ThreeStepSaga", key.ToString() ?? string.Empty, attempts, ex);
             }
         }
+    }
+
+    private static bool IsEfCoreConflict(Exception ex)
+    {
+        var typeName = ex.GetType().FullName;
+        return typeName == "Microsoft.EntityFrameworkCore.DbUpdateException"
+            || typeName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException";
     }
 }
