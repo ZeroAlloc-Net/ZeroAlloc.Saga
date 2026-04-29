@@ -42,32 +42,35 @@ public sealed class ServiceProviderPublisher : INotificationPublisher
 internal sealed class DeferredPublishQueue
 {
     private readonly ConcurrentQueue<Func<INotificationPublisher, CancellationToken, Task>> _queue = new();
-    private readonly INotificationPublisher _publisher;
-
-    public DeferredPublishQueue(INotificationPublisher publisher) => _publisher = publisher;
 
     public void Enqueue<T>(T notification) where T : INotification
         => _queue.Enqueue((p, ct) => p.PublishAsync(notification, ct));
 
-    /// <summary>Drains pending publishes serially; new entries enqueued during a
-    /// publish are picked up in the same loop.</summary>
-    public async Task DrainAsync(CancellationToken ct)
+    /// <summary>Drains pending publishes serially using the supplied publisher;
+    /// new entries enqueued during a publish are picked up in the same loop.</summary>
+    public async Task DrainAsync(INotificationPublisher publisher, CancellationToken ct)
     {
         while (_queue.TryDequeue(out var publish))
-            await publish(_publisher, ct);
+            await publish(publisher, ct);
     }
 }
 
 /// <summary>
-/// Fake mediator that "dispatches" each command by:
-///   1. Logging it to the console so the demo flow is visible.
-///   2. Queueing the next-step notification on a deferred publish queue.
+/// Demo state shared across the per-command handlers. Each handler:
+///   1. Logs the command to the console so the demo flow is visible.
+///   2. Queues the next-step notification on a deferred publish queue.
 ///      The queue is drained AFTER the current saga handler returns and
 ///      releases its per-saga lock — publishing synchronously from inside
 ///      Send would deadlock against the per-saga SemaphoreSlim.
 /// </summary>
-public sealed class FakeMediator : IMediator
+public sealed class FakeMediator
 {
+    /// <summary>
+    /// Ambient slot read by the parameterless command handlers. Set once at app
+    /// startup after the <see cref="IServiceProvider"/> resolves the singleton.
+    /// </summary>
+    public static FakeMediator? Current { get; set; }
+
     private readonly DeferredPublishQueue _deferred;
     private readonly ChargeReactionPolicy _chargeReaction;
 
@@ -78,49 +81,72 @@ public sealed class FakeMediator : IMediator
     }
 
     /// <summary>
-    /// When true, ReserveStockCommand does NOT enqueue StockReserved.
+    /// When true, ReserveStock does NOT enqueue StockReserved.
     /// Lets a demo park the saga at Step 1 before invoking manual operations.
     /// </summary>
     public bool ParkAfterReserveStock { get; set; }
 
-    public ValueTask<Unit> Send(ReserveStockCommand req, CancellationToken ct = default)
+    internal void DispatchReserveStock(ReserveStockCommand req)
     {
         Console.WriteLine($"  [cmd] ReserveStock      {req.OrderId} total={req.Total:0.00}");
         if (!ParkAfterReserveStock)
             _deferred.Enqueue(new StockReserved(req.OrderId));
-        return new ValueTask<Unit>(Unit.Value);
     }
 
-    public ValueTask<Unit> Send(ChargeCustomerCommand req, CancellationToken ct = default)
+    internal void DispatchChargeCustomer(ChargeCustomerCommand req)
     {
         Console.WriteLine($"  [cmd] ChargeCustomer    {req.OrderId} total={req.Total:0.00}");
         var reaction = _chargeReaction.Decide(req);
-        // Enqueue without losing the typed event — match on the concrete type.
         switch (reaction)
         {
             case PaymentCharged pc: _deferred.Enqueue(pc); break;
             case PaymentDeclined pd: _deferred.Enqueue(pd); break;
             default: throw new InvalidOperationException($"Unhandled reaction type {reaction.GetType()}");
         }
-        return new ValueTask<Unit>(Unit.Value);
     }
+}
 
-    public ValueTask<Unit> Send(ShipOrderCommand req, CancellationToken ct = default)
+// Real IRequestHandlers — wired through the Mediator-generator-emitted dispatcher.
+// Each handler delegates to the FakeMediator demo state which prints + enqueues the
+// next notification. Handlers read the singleton FakeMediator from an ambient slot
+// rather than ctor injection because the Mediator dispatcher's no-factory fallback
+// path emits `new THandler()` and so requires a parameterless ctor on every handler.
+internal sealed class ReserveStockCommandHandler : IRequestHandler<ReserveStockCommand, Unit>
+{
+    public ValueTask<Unit> Handle(ReserveStockCommand req, CancellationToken ct)
+    { FakeMediator.Current!.DispatchReserveStock(req); return new(Unit.Value); }
+}
+
+internal sealed class ChargeCustomerCommandHandler : IRequestHandler<ChargeCustomerCommand, Unit>
+{
+    public ValueTask<Unit> Handle(ChargeCustomerCommand req, CancellationToken ct)
+    { FakeMediator.Current!.DispatchChargeCustomer(req); return new(Unit.Value); }
+}
+
+internal sealed class ShipOrderCommandHandler : IRequestHandler<ShipOrderCommand, Unit>
+{
+    public ValueTask<Unit> Handle(ShipOrderCommand req, CancellationToken ct)
     {
         Console.WriteLine($"  [cmd] ShipOrder         {req.OrderId}");
-        return new ValueTask<Unit>(Unit.Value);
+        return new(Unit.Value);
     }
+}
 
-    public ValueTask<Unit> Send(CancelReservationCommand req, CancellationToken ct = default)
+internal sealed class CancelReservationCommandHandler : IRequestHandler<CancelReservationCommand, Unit>
+{
+    public ValueTask<Unit> Handle(CancelReservationCommand req, CancellationToken ct)
     {
         Console.WriteLine($"  [cmp] CancelReservation {req.OrderId}");
-        return new ValueTask<Unit>(Unit.Value);
+        return new(Unit.Value);
     }
+}
 
-    public ValueTask<Unit> Send(RefundPaymentCommand req, CancellationToken ct = default)
+internal sealed class RefundPaymentCommandHandler : IRequestHandler<RefundPaymentCommand, Unit>
+{
+    public ValueTask<Unit> Handle(RefundPaymentCommand req, CancellationToken ct)
     {
         Console.WriteLine($"  [cmp] RefundPayment     {req.OrderId}");
-        return new ValueTask<Unit>(Unit.Value);
+        return new(Unit.Value);
     }
 }
 
@@ -166,21 +192,25 @@ public sealed class SagaDriver
         where T : INotification
     {
         await _publisher.PublishAsync(seed, ct);
-        await _queue.DrainAsync(ct);
+        await _queue.DrainAsync(_publisher, ct);
     }
 }
 
 /// <summary>
-/// Wires the deferred queue + driver into DI without exposing the queue type publicly.
+/// Wires the deferred queue + driver into DI alongside real IMediator (registered
+/// by AddMediator()) so the generator-emitted Send dispatcher routes commands to
+/// the per-command IRequestHandler implementations above.
 /// </summary>
 public static class FakeMediatorRegistration
 {
     public static IServiceCollection AddFakeMediator(this IServiceCollection services)
     {
+        services.AddMediator();
+
         services.AddSingleton<INotificationPublisher, ServiceProviderPublisher>();
         services.AddSingleton<ChargeReactionPolicy>();
         services.AddSingleton<DeferredPublishQueue>();
-        services.AddSingleton<IMediator, FakeMediator>(sp => new FakeMediator(
+        services.AddSingleton<FakeMediator>(sp => new FakeMediator(
             sp.GetRequiredService<DeferredPublishQueue>(),
             sp.GetRequiredService<ChargeReactionPolicy>()));
         services.AddSingleton<SagaDriver>(sp => new SagaDriver(

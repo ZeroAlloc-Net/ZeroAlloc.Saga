@@ -14,24 +14,36 @@ namespace ZeroAlloc.Saga.Tests;
 /// <summary>
 /// End-to-end runtime tests for the saga framework. Tests publish events by
 /// resolving the generated <see cref="INotificationHandler{TEvent}"/> from DI
-/// and invoking <c>Handle</c> directly. Command dispatch goes through a
-/// <see cref="RecordingMediator"/> that records each <c>Send</c> call.
+/// and invoking <c>Handle</c> directly (saga registers exactly one handler per
+/// event in its fluent registration). Command dispatch goes through the real
+/// <see cref="IMediator"/> emitted by ZeroAlloc.Mediator.Generator — recording
+/// <see cref="IRequestHandler{TRequest,TResponse}"/> implementations append every
+/// dispatched command to an ambient <see cref="CommandLedger"/> that tests
+/// inspect.
 /// </summary>
 public class RuntimeTests
 {
-    private static (IServiceProvider Sp, RecordingMediator Mediator) BuildHost(
+    private static (IServiceProvider Sp, CommandLedger Ledger) BuildHost(
         Action<IServiceCollection>? configure = null,
         Func<object, Task>? onSend = null)
     {
         var services = new ServiceCollection();
         services.AddLogging(b => b.AddProvider(NullLoggerProvider.Instance));
-        services.AddSingleton<IMediator>(_ => new RecordingMediator(onSend));
+
+        // Real IMediator wired by the Mediator source generator.
+        services.AddMediator();
+
         services.AddSaga()
             .AddOrderFulfillmentSaga();
         configure?.Invoke(services);
         var sp = services.BuildServiceProvider();
-        var mediator = (RecordingMediator)sp.GetRequiredService<IMediator>();
-        return (sp, mediator);
+
+        // Each test gets its own ledger published via AsyncLocal — recording handlers read
+        // from CommandLedger.Current on every invocation.
+        var ledger = new CommandLedger(onSend);
+        CommandLedger.Current = ledger;
+
+        return (sp, ledger);
     }
 
     private static Task PublishAsync<T>(IServiceProvider sp, T evt) where T : INotification
@@ -49,16 +61,16 @@ public class RuntimeTests
     [Fact]
     public async Task Forward_HappyPath()
     {
-        var (sp, mediator) = BuildHost();
+        var (sp, ledger) = BuildHost();
         var orderId = new OrderId(1);
 
         await PublishAsync(sp, new OrderPlaced(orderId, 100m));
         await PublishAsync(sp, new StockReserved(orderId));
         await PublishAsync(sp, new PaymentCharged(orderId));
 
-        Assert.Single(mediator.CommandsOfType<ReserveStockCommand>());
-        Assert.Single(mediator.CommandsOfType<ChargeCustomerCommand>());
-        Assert.Single(mediator.CommandsOfType<ShipOrderCommand>());
+        Assert.Single(ledger.CommandsOfType<ReserveStockCommand>());
+        Assert.Single(ledger.CommandsOfType<ChargeCustomerCommand>());
+        Assert.Single(ledger.CommandsOfType<ShipOrderCommand>());
 
         // Saga removed after final step.
         var manager = sp.GetRequiredService<ISagaManager<OrderFulfillmentSaga, OrderId>>();
@@ -85,13 +97,13 @@ public class RuntimeTests
     [Fact]
     public async Task Forward_LateEvent_SkipsSilently()
     {
-        var (sp, mediator) = BuildHost();
+        var (sp, ledger) = BuildHost();
         var orderId = new OrderId(3);
 
         // No prior OrderPlaced — fire StockReserved out of order.
         await PublishAsync(sp, new StockReserved(orderId));
 
-        Assert.Empty(mediator.AllCommands);
+        Assert.Empty(ledger.AllCommands);
         var manager = sp.GetRequiredService<ISagaManager<OrderFulfillmentSaga, OrderId>>();
         // Saga is auto-created (LoadOrCreate) but its FSM stayed in NotStarted, so the
         // event was rejected by TryFire and no command dispatched. The instance still exists.
@@ -103,19 +115,19 @@ public class RuntimeTests
     [Fact]
     public async Task Forward_DuplicateStep1Event_IsNoOp()
     {
-        var (sp, mediator) = BuildHost();
+        var (sp, ledger) = BuildHost();
         var orderId = new OrderId(4);
 
         await PublishAsync(sp, new OrderPlaced(orderId, 25m));
         await PublishAsync(sp, new OrderPlaced(orderId, 25m));
 
-        Assert.Single(mediator.CommandsOfType<ReserveStockCommand>());
+        Assert.Single(ledger.CommandsOfType<ReserveStockCommand>());
     }
 
     [Fact]
     public async Task Compensation_TriggeredOnFailureEvent()
     {
-        var (sp, mediator) = BuildHost();
+        var (sp, ledger) = BuildHost();
         var orderId = new OrderId(5);
 
         await PublishAsync(sp, new OrderPlaced(orderId, 75m));
@@ -123,14 +135,14 @@ public class RuntimeTests
         await PublishAsync(sp, new PaymentDeclined(orderId));
 
         // Reverse cascade: Refund first, then CancelReservation.
-        var refunds = mediator.CommandsOfType<RefundPaymentCommand>();
-        var cancels = mediator.CommandsOfType<CancelReservationCommand>();
+        var refunds = ledger.CommandsOfType<RefundPaymentCommand>();
+        var cancels = ledger.CommandsOfType<CancelReservationCommand>();
         Assert.Single(refunds);
         Assert.Single(cancels);
 
         // Order: refund recorded before cancel.
-        var idxRefund = ((List<object>)mediator.AllCommands.ToList()).IndexOf(refunds[0]);
-        var idxCancel = ((List<object>)mediator.AllCommands.ToList()).IndexOf(cancels[0]);
+        var idxRefund = ((List<object>)ledger.AllCommands.ToList()).IndexOf(refunds[0]);
+        var idxCancel = ((List<object>)ledger.AllCommands.ToList()).IndexOf(cancels[0]);
         Assert.True(idxRefund < idxCancel, "Refund should be dispatched before CancelReservation");
 
         var manager = sp.GetRequiredService<ISagaManager<OrderFulfillmentSaga, OrderId>>();
@@ -140,13 +152,13 @@ public class RuntimeTests
     [Fact]
     public async Task Compensation_OrphanFailureEvent_NoCommandsDispatched()
     {
-        var (sp, mediator) = BuildHost();
+        var (sp, ledger) = BuildHost();
         var orphanId = new OrderId(6);
 
         // No prior saga — orphan PaymentDeclined.
         await PublishAsync(sp, new PaymentDeclined(orphanId));
 
-        Assert.Empty(mediator.AllCommands);
+        Assert.Empty(ledger.AllCommands);
         var manager = sp.GetRequiredService<ISagaManager<OrderFulfillmentSaga, OrderId>>();
         Assert.Null(await manager.GetAsync(orphanId, default));
     }
@@ -154,7 +166,7 @@ public class RuntimeTests
     [Fact]
     public async Task Compensation_Manual_ViaSagaManager()
     {
-        var (sp, mediator) = BuildHost();
+        var (sp, ledger) = BuildHost();
         var orderId = new OrderId(7);
 
         await PublishAsync(sp, new OrderPlaced(orderId, 200m));
@@ -163,8 +175,8 @@ public class RuntimeTests
         var manager = sp.GetRequiredService<ISagaManager<OrderFulfillmentSaga, OrderId>>();
         await manager.CompensateAsync(orderId, default);
 
-        Assert.Single(mediator.CommandsOfType<RefundPaymentCommand>());
-        Assert.Single(mediator.CommandsOfType<CancelReservationCommand>());
+        Assert.Single(ledger.CommandsOfType<RefundPaymentCommand>());
+        Assert.Single(ledger.CommandsOfType<CancelReservationCommand>());
 
         Assert.Null(await manager.GetAsync(orderId, default));
     }
@@ -172,7 +184,7 @@ public class RuntimeTests
     [Fact]
     public async Task Concurrency_SerializesPerSaga()
     {
-        // Use a barrier in the mediator to detect overlap on the same saga.
+        // Use a barrier in the recording handler to detect overlap on the same saga.
         var inFlight = 0;
         var maxInFlight = 0;
         var gate = new System.Threading.Lock();
@@ -246,19 +258,23 @@ public class RuntimeTests
     {
         var services = new ServiceCollection();
         services.AddLogging(b => b.AddProvider(NullLoggerProvider.Instance));
-        services.AddSingleton<IMediator>(_ => new RecordingMediator());
+        services.AddMediator();
+
         services.AddSaga()
             .AddOrderFulfillmentSaga()
             .AddRefundSaga();
         var sp = services.BuildServiceProvider();
-        var mediator = (RecordingMediator)sp.GetRequiredService<IMediator>();
+
+        var ledger = new CommandLedger();
+        CommandLedger.Current = ledger;
+
         var orderId = new OrderId(11);
 
         // Both sagas correlate on OrderPlaced.
         await PublishAsync(sp, new OrderPlaced(orderId, 10m));
 
-        Assert.Single(mediator.CommandsOfType<ReserveStockCommand>());
-        Assert.Single(mediator.CommandsOfType<AuditOrderCommand>());
+        Assert.Single(ledger.CommandsOfType<ReserveStockCommand>());
+        Assert.Single(ledger.CommandsOfType<AuditOrderCommand>());
 
         var fulfillmentMgr = sp.GetRequiredService<ISagaManager<OrderFulfillmentSaga, OrderId>>();
         var refundMgr = sp.GetRequiredService<ISagaManager<RefundSaga, OrderId>>();
@@ -269,14 +285,14 @@ public class RuntimeTests
     [Fact]
     public async Task State_PersistsAcrossSteps()
     {
-        var (sp, mediator) = BuildHost();
+        var (sp, ledger) = BuildHost();
         var orderId = new OrderId(12);
         const decimal total = 999.99m;
 
         await PublishAsync(sp, new OrderPlaced(orderId, total));
         await PublishAsync(sp, new StockReserved(orderId));
 
-        var charge = mediator.CommandsOfType<ChargeCustomerCommand>();
+        var charge = ledger.CommandsOfType<ChargeCustomerCommand>();
         Assert.Single(charge);
         Assert.Equal(total, charge[0].Total);
     }
