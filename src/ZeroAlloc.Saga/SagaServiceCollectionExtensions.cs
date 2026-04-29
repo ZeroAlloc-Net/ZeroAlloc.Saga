@@ -23,7 +23,13 @@ public static class SagaServiceCollectionExtensions
     /// <c>services.AddMediator()</c> call before <c>AddSaga()</c>.
     /// </remarks>
     public static ISagaBuilder AddSaga(this IServiceCollection services)
-        => new SagaBuilder(services);
+    {
+        // Default retry options. Backends override via TryAddSingleton/replace
+        // semantics so user-supplied tweaks (WithEfCoreStore configurator) win.
+        Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions
+            .TryAddSingleton(services, new SagaRetryOptions());
+        return new SagaBuilder(services);
+    }
 
     private sealed class SagaBuilder : ISagaBuilder, ISagaBuilderMutable
     {

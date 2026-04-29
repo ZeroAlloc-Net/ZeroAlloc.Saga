@@ -35,7 +35,14 @@ public static class SagaModelBuilderExtensions
         entity.Property(e => e.CorrelationKey).HasMaxLength(256).IsRequired();
         entity.Property(e => e.State).IsRequired();
         entity.Property(e => e.CurrentFsmState).HasMaxLength(128).IsRequired();
-        entity.Property(e => e.RowVersion).IsRowVersion();
+        // RowVersion drives optimistic concurrency. Mapped as a concurrency
+        // token rather than IsRowVersion() so the column is supported uniformly
+        // across providers (SQL Server's native ROWVERSION, PostgreSQL's xmin,
+        // and SQLite — which has no native row-version — all work because the
+        // store updates the value explicitly on every save). EF treats the
+        // value as the WHERE-clause condition on UPDATE/DELETE, raising
+        // DbUpdateConcurrencyException when the row was changed underneath.
+        entity.Property(e => e.RowVersion).IsConcurrencyToken().IsRequired();
         entity.Property(e => e.CreatedAt).IsRequired();
         entity.Property(e => e.UpdatedAt).IsRequired();
         entity.HasIndex(e => new { e.SagaType, e.UpdatedAt });

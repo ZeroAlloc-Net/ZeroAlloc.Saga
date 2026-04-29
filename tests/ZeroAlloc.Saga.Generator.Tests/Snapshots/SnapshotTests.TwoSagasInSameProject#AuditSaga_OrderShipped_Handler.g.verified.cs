@@ -15,13 +15,15 @@ internal sealed class AuditSaga_OrderShipped_Handler : INotificationHandler<glob
     private readonly ISagaStore<AuditSaga, global::Sample.OrderId> _store;
     private readonly SagaLockManager<global::Sample.OrderId> _locks;
     private readonly IMediator _mediator;
+    private readonly SagaRetryOptions _retry;
     private readonly ILogger<AuditSaga_OrderShipped_Handler> _log;
 
-    public AuditSaga_OrderShipped_Handler(ISagaStore<AuditSaga, global::Sample.OrderId> store, SagaLockManager<global::Sample.OrderId> locks, IMediator mediator, ILogger<AuditSaga_OrderShipped_Handler> log)
+    public AuditSaga_OrderShipped_Handler(ISagaStore<AuditSaga, global::Sample.OrderId> store, SagaLockManager<global::Sample.OrderId> locks, IMediator mediator, SagaRetryOptions retry, ILogger<AuditSaga_OrderShipped_Handler> log)
     {
         _store = store;
         _locks = locks;
         _mediator = mediator;
+        _retry = retry;
         _log = log;
     }
 
@@ -30,17 +32,45 @@ internal sealed class AuditSaga_OrderShipped_Handler : INotificationHandler<glob
         var key = AuditSagaCorrelationDispatch.GetKey(@event);
         using var _ = await _locks.AcquireAsync(key, ct).ConfigureAwait(false);
 
-        var saga = await _store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);
-        if (!saga.Fsm.TryFire(AuditSagaFsm.Trigger.OrderShipped))
+        var attempts = 0;
+        while (true)
         {
-            _log.LogDebug("Saga {Saga}: late OrderShipped for key {Key}; ignored", "AuditSaga", key);
-            return;
+            try
+            {
+                var saga = await _store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);
+                if (!saga.Fsm.TryFire(AuditSagaFsm.Trigger.OrderShipped))
+                {
+                    _log.LogDebug("Saga {Saga}: late OrderShipped for key {Key}; ignored", "AuditSaga", key);
+                    return;
+                }
+
+                var cmd = saga.Audit(@event);
+                await _mediator.Send(cmd, ct).ConfigureAwait(false);
+
+                saga.Fsm.TryFire(AuditSagaFsm.Trigger.Complete);
+                await _store.RemoveAsync(key, ct).ConfigureAwait(false);
+                return;
+            }
+            catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsEfCoreConflict(ex))
+            {
+                attempts++;
+                _log.LogWarning("Saga {Saga}: OCC conflict on key {Key}, retry {Attempt}/{Max}", "AuditSaga", key, attempts, _retry.MaxRetryAttempts);
+                var delay = _retry.UseExponentialBackoff
+                    ? TimeSpan.FromTicks(_retry.RetryBaseDelay.Ticks * (1L << attempts))
+                    : _retry.RetryBaseDelay;
+                await Task.Delay(delay, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (IsEfCoreConflict(ex))
+            {
+                throw new SagaConcurrencyException("AuditSaga", key.ToString() ?? string.Empty, attempts, ex);
+            }
         }
+    }
 
-        var cmd = saga.Audit(@event);
-        await _mediator.Send(cmd, ct).ConfigureAwait(false);
-
-        saga.Fsm.TryFire(AuditSagaFsm.Trigger.Complete);
-        await _store.RemoveAsync(key, ct).ConfigureAwait(false);
+    private static bool IsEfCoreConflict(Exception ex)
+    {
+        var typeName = ex.GetType().FullName;
+        return typeName == "Microsoft.EntityFrameworkCore.DbUpdateException"
+            || typeName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException";
     }
 }

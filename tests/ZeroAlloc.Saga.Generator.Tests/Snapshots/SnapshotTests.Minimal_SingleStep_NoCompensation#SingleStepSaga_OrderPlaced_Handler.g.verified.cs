@@ -15,13 +15,15 @@ internal sealed class SingleStepSaga_OrderPlaced_Handler : INotificationHandler<
     private readonly ISagaStore<SingleStepSaga, global::Sample.OrderId> _store;
     private readonly SagaLockManager<global::Sample.OrderId> _locks;
     private readonly IMediator _mediator;
+    private readonly SagaRetryOptions _retry;
     private readonly ILogger<SingleStepSaga_OrderPlaced_Handler> _log;
 
-    public SingleStepSaga_OrderPlaced_Handler(ISagaStore<SingleStepSaga, global::Sample.OrderId> store, SagaLockManager<global::Sample.OrderId> locks, IMediator mediator, ILogger<SingleStepSaga_OrderPlaced_Handler> log)
+    public SingleStepSaga_OrderPlaced_Handler(ISagaStore<SingleStepSaga, global::Sample.OrderId> store, SagaLockManager<global::Sample.OrderId> locks, IMediator mediator, SagaRetryOptions retry, ILogger<SingleStepSaga_OrderPlaced_Handler> log)
     {
         _store = store;
         _locks = locks;
         _mediator = mediator;
+        _retry = retry;
         _log = log;
     }
 
@@ -30,17 +32,45 @@ internal sealed class SingleStepSaga_OrderPlaced_Handler : INotificationHandler<
         var key = SingleStepSagaCorrelationDispatch.GetKey(@event);
         using var _ = await _locks.AcquireAsync(key, ct).ConfigureAwait(false);
 
-        var saga = await _store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);
-        if (!saga.Fsm.TryFire(SingleStepSagaFsm.Trigger.OrderPlaced))
+        var attempts = 0;
+        while (true)
         {
-            _log.LogDebug("Saga {Saga}: late OrderPlaced for key {Key}; ignored", "SingleStepSaga", key);
-            return;
+            try
+            {
+                var saga = await _store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);
+                if (!saga.Fsm.TryFire(SingleStepSagaFsm.Trigger.OrderPlaced))
+                {
+                    _log.LogDebug("Saga {Saga}: late OrderPlaced for key {Key}; ignored", "SingleStepSaga", key);
+                    return;
+                }
+
+                var cmd = saga.Reserve(@event);
+                await _mediator.Send(cmd, ct).ConfigureAwait(false);
+
+                saga.Fsm.TryFire(SingleStepSagaFsm.Trigger.Complete);
+                await _store.RemoveAsync(key, ct).ConfigureAwait(false);
+                return;
+            }
+            catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsEfCoreConflict(ex))
+            {
+                attempts++;
+                _log.LogWarning("Saga {Saga}: OCC conflict on key {Key}, retry {Attempt}/{Max}", "SingleStepSaga", key, attempts, _retry.MaxRetryAttempts);
+                var delay = _retry.UseExponentialBackoff
+                    ? TimeSpan.FromTicks(_retry.RetryBaseDelay.Ticks * (1L << attempts))
+                    : _retry.RetryBaseDelay;
+                await Task.Delay(delay, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (IsEfCoreConflict(ex))
+            {
+                throw new SagaConcurrencyException("SingleStepSaga", key.ToString() ?? string.Empty, attempts, ex);
+            }
         }
+    }
 
-        var cmd = saga.Reserve(@event);
-        await _mediator.Send(cmd, ct).ConfigureAwait(false);
-
-        saga.Fsm.TryFire(SingleStepSagaFsm.Trigger.Complete);
-        await _store.RemoveAsync(key, ct).ConfigureAwait(false);
+    private static bool IsEfCoreConflict(Exception ex)
+    {
+        var typeName = ex.GetType().FullName;
+        return typeName == "Microsoft.EntityFrameworkCore.DbUpdateException"
+            || typeName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException";
     }
 }

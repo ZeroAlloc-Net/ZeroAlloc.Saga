@@ -15,13 +15,15 @@ internal sealed class MultiFailureSaga_StockOutOfStock_Handler : INotificationHa
     private readonly ISagaStore<MultiFailureSaga, global::Sample.OrderId> _store;
     private readonly SagaLockManager<global::Sample.OrderId> _locks;
     private readonly IMediator _mediator;
+    private readonly SagaRetryOptions _retry;
     private readonly ILogger<MultiFailureSaga_StockOutOfStock_Handler> _log;
 
-    public MultiFailureSaga_StockOutOfStock_Handler(ISagaStore<MultiFailureSaga, global::Sample.OrderId> store, SagaLockManager<global::Sample.OrderId> locks, IMediator mediator, ILogger<MultiFailureSaga_StockOutOfStock_Handler> log)
+    public MultiFailureSaga_StockOutOfStock_Handler(ISagaStore<MultiFailureSaga, global::Sample.OrderId> store, SagaLockManager<global::Sample.OrderId> locks, IMediator mediator, SagaRetryOptions retry, ILogger<MultiFailureSaga_StockOutOfStock_Handler> log)
     {
         _store = store;
         _locks = locks;
         _mediator = mediator;
+        _retry = retry;
         _log = log;
     }
 
@@ -31,30 +33,64 @@ internal sealed class MultiFailureSaga_StockOutOfStock_Handler : INotificationHa
         var key = MultiFailureSagaCorrelationDispatch.GetKey(@event);
         using var _ = await _locks.AcquireAsync(key, ct).ConfigureAwait(false);
 
-        var saga = await _store.TryLoadAsync(key, ct).ConfigureAwait(false);
-        if (saga is null)
+        var attempts = 0;
+        while (true)
         {
-            _log.LogWarning("Saga {Saga}: orphan StockOutOfStock for key {Key}; no instance to compensate", "MultiFailureSaga", key);
-            return;
-        }
+            try
+            {
+                var saga = await _store.TryLoadAsync(key, ct).ConfigureAwait(false);
+                if (saga is null)
+                {
+                    _log.LogWarning("Saga {Saga}: orphan StockOutOfStock for key {Key}; no instance to compensate", "MultiFailureSaga", key);
+                    return;
+                }
 
-        var stateAtFailure = saga.Fsm.Current;
-        if (!saga.Fsm.TryFire(MultiFailureSagaFsm.Trigger.StockOutOfStock))
-        {
-            _log.LogDebug("Saga {Saga}: StockOutOfStock not valid in state {State} for key {Key}; ignored", "MultiFailureSaga", stateAtFailure, key);
-            return;
-        }
+                var stateAtFailure = saga.Fsm.Current;
+                if (!saga.Fsm.TryFire(MultiFailureSagaFsm.Trigger.StockOutOfStock))
+                {
+                    _log.LogDebug("Saga {Saga}: StockOutOfStock not valid in state {State} for key {Key}; ignored", "MultiFailureSaga", stateAtFailure, key);
+                    return;
+                }
 
-        // Reverse-cascade compensation: walk back from stateAtFailure to Step1.
-        switch (stateAtFailure)
-        {
-            case MultiFailureSagaFsm.State.Step1:
-                await _mediator.Send(saga.CancelReserve(), ct).ConfigureAwait(false);
-                break;
-            default: break;
-        }
+                // Reverse-cascade compensation: walk back from stateAtFailure to Step1.
+                // Re-dispatch contract: if RemoveAsync below throws an EF Core conflict
+                // (third party deleted/updated row mid-compensation), the surrounding
+                // retry loop re-enters this try block. On retry, TryLoadAsync may return
+                // null (just-deleted) and the handler returns silently; otherwise the
+                // compensation commands below may be dispatched a second time. The
+                // "idempotency is the user's responsibility" contract (ZASAGA015) covers this.
+                switch (stateAtFailure)
+                {
+                    case MultiFailureSagaFsm.State.Step1:
+                        await _mediator.Send(saga.CancelReserve(), ct).ConfigureAwait(false);
+                        break;
+                    default: break;
+                }
 
-        saga.Fsm.TryFire(MultiFailureSagaFsm.Trigger.CompensateDone);
-        await _store.RemoveAsync(key, ct).ConfigureAwait(false);
+                saga.Fsm.TryFire(MultiFailureSagaFsm.Trigger.CompensateDone);
+                await _store.RemoveAsync(key, ct).ConfigureAwait(false);
+                return;
+            }
+            catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsEfCoreConflict(ex))
+            {
+                attempts++;
+                _log.LogWarning("Saga {Saga}: OCC conflict on compensation for key {Key}, retry {Attempt}/{Max}", "MultiFailureSaga", key, attempts, _retry.MaxRetryAttempts);
+                var delay = _retry.UseExponentialBackoff
+                    ? TimeSpan.FromTicks(_retry.RetryBaseDelay.Ticks * (1L << attempts))
+                    : _retry.RetryBaseDelay;
+                await Task.Delay(delay, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (IsEfCoreConflict(ex))
+            {
+                throw new SagaConcurrencyException("MultiFailureSaga", key.ToString() ?? string.Empty, attempts, ex);
+            }
+        }
+    }
+
+    private static bool IsEfCoreConflict(Exception ex)
+    {
+        var typeName = ex.GetType().FullName;
+        return typeName == "Microsoft.EntityFrameworkCore.DbUpdateException"
+            || typeName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException";
     }
 }

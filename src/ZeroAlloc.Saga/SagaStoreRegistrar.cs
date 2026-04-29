@@ -29,23 +29,49 @@ namespace ZeroAlloc.Saga;
 public static class SagaStoreRegistrar
 {
     private static System.Action<ISagaBuilder>? _registrar;
+    private static ISagaStoreRegistrar? _typedRegistrar;
 
     /// <summary>
-    /// Installs the registrar delegate. Called by backend packages from
-    /// inside their <c>WithEfCoreStore&lt;TContext&gt;</c> (etc.) extensions.
-    /// The delegate receives the builder and is responsible for adding
-    /// closed-generic <see cref="ISagaStore{TSaga,TKey}"/> registrations
-    /// for every saga the user has wired up.
+    /// Installs the legacy <see cref="System.Action{T}"/> registrar delegate.
+    /// Retained for compatibility with the Saga 1.1.0 contract; backend
+    /// packages should prefer <see cref="SetTypedRegistrar(ISagaStoreRegistrar)"/>
+    /// because it forwards <c>TSaga</c>/<c>TKey</c> to the registrar so
+    /// per-saga closed-generic registration works without ambient state.
     /// </summary>
-    /// <remarks>
-    /// In practice the delegate is a small closure that calls
-    /// <see cref="OverrideStore{TSaga,TKey,TStore}"/> per known saga; backend
-    /// packages typically expose a per-saga registration method that closes
-    /// over the saga and key types.
-    /// </remarks>
     public static void SetRegistrar(System.Action<ISagaBuilder> registrar)
     {
         _registrar = registrar ?? throw new System.ArgumentNullException(nameof(registrar));
+    }
+
+    /// <summary>
+    /// Installs a typed registrar that participates in per-saga
+    /// closed-generic registration. Backend packages call this from
+    /// inside their <c>WithEfCoreStore&lt;TContext&gt;</c> (etc.) extensions
+    /// so that generator-emitted <c>AddXxxSaga()</c> can dispatch to a
+    /// strongly-typed <see cref="ISagaStoreRegistrar.Register{TSaga,TKey}"/>
+    /// hook with full type information.
+    /// </summary>
+    /// <remarks>
+    /// Setting the typed registrar takes precedence over the legacy
+    /// <see cref="SetRegistrar(System.Action{ISagaBuilder})"/> delegate when both are
+    /// installed. AOT-safe: <see cref="ISagaStoreRegistrar.Register{TSaga,TKey}"/>
+    /// is a generic interface method dispatched by the runtime without
+    /// reflection or <c>MakeGenericType</c>.
+    /// </remarks>
+    public static void SetTypedRegistrar(ISagaStoreRegistrar registrar)
+    {
+        _typedRegistrar = registrar ?? throw new System.ArgumentNullException(nameof(registrar));
+    }
+
+    /// <summary>
+    /// Test-only reset of installed registrars. Backend integration tests
+    /// that construct multiple <see cref="System.IServiceProvider"/>s may invoke
+    /// this between cases to keep the process-wide state predictable.
+    /// </summary>
+    public static void Reset()
+    {
+        _registrar = null;
+        _typedRegistrar = null;
     }
 
     /// <summary>
@@ -58,14 +84,20 @@ public static class SagaStoreRegistrar
         where TSaga : class, new()
         where TKey : notnull, System.IEquatable<TKey>
     {
-        if (_registrar is null)
+        if (_typedRegistrar is not null)
         {
-            throw new System.InvalidOperationException(
-                "ISagaBuilder.IsEfCoreBackend was set, but no SagaStoreRegistrar has been installed. " +
-                "Ensure the corresponding backend package (e.g. ZeroAlloc.Saga.EfCore) is referenced and " +
-                "WithEfCoreStore<TContext>() is called before any AddXxxSaga() registrations.");
+            _typedRegistrar.Register<TSaga, TKey>(builder);
+            return;
         }
-        _registrar(builder);
+        if (_registrar is not null)
+        {
+            _registrar(builder);
+            return;
+        }
+        throw new System.InvalidOperationException(
+            "ISagaBuilder.IsEfCoreBackend was set, but no SagaStoreRegistrar has been installed. " +
+            "Ensure the corresponding backend package (e.g. ZeroAlloc.Saga.EfCore) is referenced and " +
+            "WithEfCoreStore<TContext>() is called before any AddXxxSaga() registrations.");
     }
 
     /// <summary>

@@ -9,7 +9,7 @@
     <IsPackable>true</IsPackable>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="ZeroAlloc.Saga" />
+    <ProjectReference Include="..\ZeroAlloc.Saga\ZeroAlloc.Saga.csproj" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="ZeroAlloc.ValueObjects.EfCore" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />

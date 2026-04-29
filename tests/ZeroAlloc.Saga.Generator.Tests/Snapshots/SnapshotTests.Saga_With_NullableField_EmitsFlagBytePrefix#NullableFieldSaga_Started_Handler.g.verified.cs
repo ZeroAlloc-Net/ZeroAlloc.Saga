@@ -15,13 +15,15 @@ internal sealed class NullableFieldSaga_Started_Handler : INotificationHandler<g
     private readonly ISagaStore<NullableFieldSaga, int> _store;
     private readonly SagaLockManager<int> _locks;
     private readonly IMediator _mediator;
+    private readonly SagaRetryOptions _retry;
     private readonly ILogger<NullableFieldSaga_Started_Handler> _log;
 
-    public NullableFieldSaga_Started_Handler(ISagaStore<NullableFieldSaga, int> store, SagaLockManager<int> locks, IMediator mediator, ILogger<NullableFieldSaga_Started_Handler> log)
+    public NullableFieldSaga_Started_Handler(ISagaStore<NullableFieldSaga, int> store, SagaLockManager<int> locks, IMediator mediator, SagaRetryOptions retry, ILogger<NullableFieldSaga_Started_Handler> log)
     {
         _store = store;
         _locks = locks;
         _mediator = mediator;
+        _retry = retry;
         _log = log;
     }
 
@@ -30,17 +32,45 @@ internal sealed class NullableFieldSaga_Started_Handler : INotificationHandler<g
         var key = NullableFieldSagaCorrelationDispatch.GetKey(@event);
         using var _ = await _locks.AcquireAsync(key, ct).ConfigureAwait(false);
 
-        var saga = await _store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);
-        if (!saga.Fsm.TryFire(NullableFieldSagaFsm.Trigger.Started))
+        var attempts = 0;
+        while (true)
         {
-            _log.LogDebug("Saga {Saga}: late Started for key {Key}; ignored", "NullableFieldSaga", key);
-            return;
+            try
+            {
+                var saga = await _store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);
+                if (!saga.Fsm.TryFire(NullableFieldSagaFsm.Trigger.Started))
+                {
+                    _log.LogDebug("Saga {Saga}: late Started for key {Key}; ignored", "NullableFieldSaga", key);
+                    return;
+                }
+
+                var cmd = saga.Step1(@event);
+                await _mediator.Send(cmd, ct).ConfigureAwait(false);
+
+                saga.Fsm.TryFire(NullableFieldSagaFsm.Trigger.Complete);
+                await _store.RemoveAsync(key, ct).ConfigureAwait(false);
+                return;
+            }
+            catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsEfCoreConflict(ex))
+            {
+                attempts++;
+                _log.LogWarning("Saga {Saga}: OCC conflict on key {Key}, retry {Attempt}/{Max}", "NullableFieldSaga", key, attempts, _retry.MaxRetryAttempts);
+                var delay = _retry.UseExponentialBackoff
+                    ? TimeSpan.FromTicks(_retry.RetryBaseDelay.Ticks * (1L << attempts))
+                    : _retry.RetryBaseDelay;
+                await Task.Delay(delay, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (IsEfCoreConflict(ex))
+            {
+                throw new SagaConcurrencyException("NullableFieldSaga", key.ToString() ?? string.Empty, attempts, ex);
+            }
         }
+    }
 
-        var cmd = saga.Step1(@event);
-        await _mediator.Send(cmd, ct).ConfigureAwait(false);
-
-        saga.Fsm.TryFire(NullableFieldSagaFsm.Trigger.Complete);
-        await _store.RemoveAsync(key, ct).ConfigureAwait(false);
+    private static bool IsEfCoreConflict(Exception ex)
+    {
+        var typeName = ex.GetType().FullName;
+        return typeName == "Microsoft.EntityFrameworkCore.DbUpdateException"
+            || typeName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException";
     }
 }

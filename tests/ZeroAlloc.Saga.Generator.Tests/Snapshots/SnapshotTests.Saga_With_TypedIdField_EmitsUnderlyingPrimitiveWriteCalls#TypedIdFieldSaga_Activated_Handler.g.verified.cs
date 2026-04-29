@@ -15,13 +15,15 @@ internal sealed class TypedIdFieldSaga_Activated_Handler : INotificationHandler<
     private readonly ISagaStore<TypedIdFieldSaga, global::Sample.CustomerId> _store;
     private readonly SagaLockManager<global::Sample.CustomerId> _locks;
     private readonly IMediator _mediator;
+    private readonly SagaRetryOptions _retry;
     private readonly ILogger<TypedIdFieldSaga_Activated_Handler> _log;
 
-    public TypedIdFieldSaga_Activated_Handler(ISagaStore<TypedIdFieldSaga, global::Sample.CustomerId> store, SagaLockManager<global::Sample.CustomerId> locks, IMediator mediator, ILogger<TypedIdFieldSaga_Activated_Handler> log)
+    public TypedIdFieldSaga_Activated_Handler(ISagaStore<TypedIdFieldSaga, global::Sample.CustomerId> store, SagaLockManager<global::Sample.CustomerId> locks, IMediator mediator, SagaRetryOptions retry, ILogger<TypedIdFieldSaga_Activated_Handler> log)
     {
         _store = store;
         _locks = locks;
         _mediator = mediator;
+        _retry = retry;
         _log = log;
     }
 
@@ -30,17 +32,45 @@ internal sealed class TypedIdFieldSaga_Activated_Handler : INotificationHandler<
         var key = TypedIdFieldSagaCorrelationDispatch.GetKey(@event);
         using var _ = await _locks.AcquireAsync(key, ct).ConfigureAwait(false);
 
-        var saga = await _store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);
-        if (!saga.Fsm.TryFire(TypedIdFieldSagaFsm.Trigger.Activated))
+        var attempts = 0;
+        while (true)
         {
-            _log.LogDebug("Saga {Saga}: late Activated for key {Key}; ignored", "TypedIdFieldSaga", key);
-            return;
+            try
+            {
+                var saga = await _store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);
+                if (!saga.Fsm.TryFire(TypedIdFieldSagaFsm.Trigger.Activated))
+                {
+                    _log.LogDebug("Saga {Saga}: late Activated for key {Key}; ignored", "TypedIdFieldSaga", key);
+                    return;
+                }
+
+                var cmd = saga.Greet(@event);
+                await _mediator.Send(cmd, ct).ConfigureAwait(false);
+
+                saga.Fsm.TryFire(TypedIdFieldSagaFsm.Trigger.Complete);
+                await _store.RemoveAsync(key, ct).ConfigureAwait(false);
+                return;
+            }
+            catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsEfCoreConflict(ex))
+            {
+                attempts++;
+                _log.LogWarning("Saga {Saga}: OCC conflict on key {Key}, retry {Attempt}/{Max}", "TypedIdFieldSaga", key, attempts, _retry.MaxRetryAttempts);
+                var delay = _retry.UseExponentialBackoff
+                    ? TimeSpan.FromTicks(_retry.RetryBaseDelay.Ticks * (1L << attempts))
+                    : _retry.RetryBaseDelay;
+                await Task.Delay(delay, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (IsEfCoreConflict(ex))
+            {
+                throw new SagaConcurrencyException("TypedIdFieldSaga", key.ToString() ?? string.Empty, attempts, ex);
+            }
         }
+    }
 
-        var cmd = saga.Greet(@event);
-        await _mediator.Send(cmd, ct).ConfigureAwait(false);
-
-        saga.Fsm.TryFire(TypedIdFieldSagaFsm.Trigger.Complete);
-        await _store.RemoveAsync(key, ct).ConfigureAwait(false);
+    private static bool IsEfCoreConflict(Exception ex)
+    {
+        var typeName = ex.GetType().FullName;
+        return typeName == "Microsoft.EntityFrameworkCore.DbUpdateException"
+            || typeName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException";
     }
 }
