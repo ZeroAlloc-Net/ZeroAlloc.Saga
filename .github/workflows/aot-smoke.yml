@@ -1,0 +1,29 @@
+name: aot-smoke
+on:
+  push: { branches: [main] }
+  pull_request: { branches: [main] }
+
+jobs:
+  aot-smoke:
+    name: publish + run AotSmoke (linux-x64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      # Restore the whole solution so the saga generator + its analyzer
+      # ProjectReference resolve before AotSmoke is published.
+      - name: Restore solution
+        run: dotnet restore ZeroAlloc.Saga.slnx
+      # Publish AotSmoke with native AOT enabled. Any trim warnings will fail
+      # the build because the runtime project enables EnableTrimAnalyzer +
+      # AOT analysers; we explicitly do not suppress.
+      - name: Publish AotSmoke (PublishAot=true)
+        run: dotnet publish samples/AotSmoke/AotSmoke.csproj -c Release /p:PublishAot=true -o aot-out
+      # Run the AOT-published binary and assert exit code 0 (saga reaches
+      # Completed and is removed from the store).
+      - name: Run AotSmoke
+        run: ./aot-out/AotSmoke
