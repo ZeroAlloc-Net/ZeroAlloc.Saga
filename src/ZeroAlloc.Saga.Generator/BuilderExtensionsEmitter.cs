@@ -38,8 +38,23 @@ internal static class BuilderExtensionsEmitter
         sb.AppendLine("{");
         sb.Append("    public static ISagaBuilder Add").Append(model.ClassName).AppendLine("(this ISagaBuilder builder)");
         sb.AppendLine("    {");
+        // Implicit AddMediator() — idempotent via TryAdd*. Users no longer need
+        // to call services.AddMediator() before AddSaga(). The Mediator generator
+        // emits AddMediator() into the user's compilation, so this call resolves
+        // at the user's build time.
+        sb.AppendLine("        builder.Services.AddMediator();");
+        // Conditional store registration. v1.1 always registers InMemorySagaStore
+        // as the fallback; if a durable backend has been wired (e.g. via
+        // WithEfCoreStore<TContext>), the backend installed a SagaStoreRegistrar
+        // delegate that overrides the registration. This keeps the generator
+        // output free of any direct reference to backend-specific types so
+        // users without the Saga.EfCore package compile cleanly.
         sb.Append("        builder.Services.TryAddSingleton<ISagaStore<").Append(model.ClassName).Append(", global::").Append(keyFqn)
           .Append(">, InMemorySagaStore<").Append(model.ClassName).Append(", global::").Append(keyFqn).AppendLine(">>();");
+        sb.AppendLine("        if (builder.IsEfCoreBackend)");
+        sb.AppendLine("        {");
+        sb.Append("            global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<").Append(model.ClassName).Append(", global::").Append(keyFqn).AppendLine(">(builder);");
+        sb.AppendLine("        }");
         sb.Append("        builder.Services.TryAddSingleton<SagaLockManager<global::").Append(keyFqn).AppendLine(">>();");
         sb.Append("        builder.Services.TryAddTransient<ISagaCompensationDispatcher<").Append(model.ClassName).Append(">, ").Append(model.ClassName).AppendLine("CompensationDispatcher>();");
         sb.Append("        builder.Services.TryAddTransient<ISagaManager<").Append(model.ClassName).Append(", global::").Append(keyFqn)
