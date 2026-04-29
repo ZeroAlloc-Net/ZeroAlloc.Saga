@@ -27,4 +27,6 @@ public partial class TwoStepSagaFsm
         _state = next.Value;
         return true;
     }
+
+    public void SetCurrentState(State state) => _state = state;
 }

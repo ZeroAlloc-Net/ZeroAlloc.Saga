@@ -29,4 +29,6 @@ public partial class ThreeStepSagaFsm
         _state = next.Value;
         return true;
     }
+
+    public void SetCurrentState(State state) => _state = state;
 }

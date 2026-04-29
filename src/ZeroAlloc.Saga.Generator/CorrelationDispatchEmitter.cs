@@ -22,6 +22,8 @@ internal static class CorrelationDispatchEmitter
             sb.AppendLine();
         }
 
+        var keyType = TypeNameHelper.GlobalQualified(model.CorrelationKeyTypeFqn);
+
         sb.Append("internal static class ").Append(model.ClassName).AppendLine("CorrelationDispatch");
         sb.AppendLine("{");
         sb.Append("    private static readonly ").Append(model.ClassName).Append(" _probe = new ").Append(model.ClassName).AppendLine("();");
@@ -29,8 +31,9 @@ internal static class CorrelationDispatchEmitter
 
         foreach (var corr in model.Correlations)
         {
-            sb.Append("    public static global::").Append(model.CorrelationKeyTypeFqn)
-              .Append(" GetKey(global::").Append(corr.EventTypeFqn).Append(" e) => _probe.")
+            var eventType = TypeNameHelper.GlobalQualified(corr.EventTypeFqn);
+            sb.Append("    public static ").Append(keyType)
+              .Append(" GetKey(").Append(eventType).Append(" e) => _probe.")
               .Append(corr.MethodName).AppendLine("(e);");
         }
 

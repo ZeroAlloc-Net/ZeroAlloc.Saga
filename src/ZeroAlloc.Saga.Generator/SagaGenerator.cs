@@ -45,6 +45,7 @@ public sealed class SagaGenerator : IIncrementalGenerator
                 HandlerEmitter.Emit(spc, result.Model);
                 CorrelationDispatchEmitter.Emit(spc, result.Model);
                 BuilderExtensionsEmitter.Emit(spc, result.Model);
+                SnapshotRestoreEmitter.Emit(spc, result.Model);
             }
         });
 
@@ -54,6 +55,46 @@ public sealed class SagaGenerator : IIncrementalGenerator
         {
             ReportCrossSagaDiagnostics(spc, results);
         });
+
+        // ZASAGA015: best-effort idempotency hint when a durable backend is wired
+        // anywhere in the same compilation. We don't bind the call — we look for
+        // any invocation whose name starts with WithEfCoreStore / WithRedisStore,
+        // and emit one diagnostic per [Saga] in the compilation. Suppressible
+        // via #pragma warning disable ZASAGA015.
+        var hasDurableBackend = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                predicate: static (node, _) => IsDurableBackendInvocation(node),
+                transform: static (ctx, _) => true)
+            .Collect()
+            .Select(static (arr, _) => arr.Length > 0);
+
+        var sagasAndBackend = allModels.Combine(hasDurableBackend);
+        context.RegisterSourceOutput(sagasAndBackend, static (spc, tuple) =>
+        {
+            var (results, hasBackend) = tuple;
+            if (!hasBackend) return;
+            foreach (var result in results)
+            {
+                if (result.Model is null) continue;
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    SagaDiagnostics.IdempotencyHint,
+                    location: null,
+                    result.Model.ClassName));
+            }
+        });
+    }
+
+    private static bool IsDurableBackendInvocation(SyntaxNode node)
+    {
+        if (node is not Microsoft.CodeAnalysis.CSharp.Syntax.InvocationExpressionSyntax inv) return false;
+        var name = inv.Expression switch
+        {
+            Microsoft.CodeAnalysis.CSharp.Syntax.MemberAccessExpressionSyntax ma => ma.Name.Identifier.ValueText,
+            Microsoft.CodeAnalysis.CSharp.Syntax.GenericNameSyntax gn => gn.Identifier.ValueText,
+            Microsoft.CodeAnalysis.CSharp.Syntax.IdentifierNameSyntax idn => idn.Identifier.ValueText,
+            _ => null,
+        };
+        return name is "WithEfCoreStore" or "WithRedisStore";
     }
 
     private static void ReportCrossSagaDiagnostics(SourceProductionContext spc, ImmutableArray<SagaExtractResult> results)

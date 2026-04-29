@@ -95,6 +95,12 @@ internal static class FsmEmitter
         sb.AppendLine("        return true;");
         sb.AppendLine("    }");
 
+        // Used by ISagaPersistableState.SetFsmStateFromName to rehydrate after
+        // load. Kept internal-grade public so generator-emitted partial can
+        // call it from another file.
+        sb.AppendLine();
+        sb.AppendLine("    public void SetCurrentState(State state) => _state = state;");
+
         sb.AppendLine("}");
 
         spc.AddSource($"{model.ClassName}Fsm.g.cs", sb.ToString());

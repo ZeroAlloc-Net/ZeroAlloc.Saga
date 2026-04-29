@@ -15,7 +15,12 @@ public static class ThreeStepSagaBuilderExtensions
 {
     public static ISagaBuilder AddThreeStepSaga(this ISagaBuilder builder)
     {
+        builder.Services.AddMediator();
         builder.Services.TryAddSingleton<ISagaStore<ThreeStepSaga, global::Sample.OrderId>, InMemorySagaStore<ThreeStepSaga, global::Sample.OrderId>>();
+        if (builder.IsEfCoreBackend)
+        {
+            global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<ThreeStepSaga, global::Sample.OrderId>(builder);
+        }
         builder.Services.TryAddSingleton<SagaLockManager<global::Sample.OrderId>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<ThreeStepSaga>, ThreeStepSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<ThreeStepSaga, global::Sample.OrderId>, SagaManager<ThreeStepSaga, global::Sample.OrderId>>();

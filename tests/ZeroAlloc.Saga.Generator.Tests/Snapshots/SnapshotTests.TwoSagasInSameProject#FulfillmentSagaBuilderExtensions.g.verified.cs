@@ -15,7 +15,12 @@ public static class FulfillmentSagaBuilderExtensions
 {
     public static ISagaBuilder AddFulfillmentSaga(this ISagaBuilder builder)
     {
+        builder.Services.AddMediator();
         builder.Services.TryAddSingleton<ISagaStore<FulfillmentSaga, global::Sample.OrderId>, InMemorySagaStore<FulfillmentSaga, global::Sample.OrderId>>();
+        if (builder.IsEfCoreBackend)
+        {
+            global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<FulfillmentSaga, global::Sample.OrderId>(builder);
+        }
         builder.Services.TryAddSingleton<SagaLockManager<global::Sample.OrderId>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<FulfillmentSaga>, FulfillmentSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<FulfillmentSaga, global::Sample.OrderId>, SagaManager<FulfillmentSaga, global::Sample.OrderId>>();
