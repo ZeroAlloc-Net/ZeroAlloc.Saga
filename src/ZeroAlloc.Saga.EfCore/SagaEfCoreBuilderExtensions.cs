@@ -65,8 +65,12 @@ public static class SagaEfCoreBuilderExtensions
         builder.Services.TryAddSingleton(options);
 
         // Replace the default SagaRetryOptions registered by AddSaga() with
-        // the EfCore-specific instance so generator-emitted handlers (which
-        // inject SagaRetryOptions) see the user-supplied retry tunables.
+        // a factory pointing at the concrete EfCoreSagaStoreOptions so both
+        // registrations always resolve to the same instance. Going through
+        // a factory (rather than registering the same object under two
+        // service types) means any future lifecycle change on
+        // EfCoreSagaStoreOptions carries through to the SagaRetryOptions
+        // alias automatically.
         for (int i = builder.Services.Count - 1; i >= 0; i--)
         {
             if (builder.Services[i].ServiceType == typeof(SagaRetryOptions))
@@ -74,7 +78,8 @@ public static class SagaEfCoreBuilderExtensions
                 builder.Services.RemoveAt(i);
             }
         }
-        builder.Services.AddSingleton<SagaRetryOptions>(options);
+        builder.Services.AddSingleton<SagaRetryOptions>(sp =>
+            sp.GetRequiredService<EfCoreSagaStoreOptions>());
 
         // Map DbContext -> TContext so EfCoreSagaStore<TSaga, TKey> can take a
         // DbContext base-class dependency without binding to TContext at the
