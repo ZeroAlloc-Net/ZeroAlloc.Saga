@@ -13,5 +13,6 @@
   <Folder Name="/samples/">
     <Project Path="samples/OrderFulfillment/OrderFulfillment.csproj" />
     <Project Path="samples/AotSmoke/AotSmoke.csproj" />
+    <Project Path="samples/AotSmokeEfCore/AotSmokeEfCore.csproj" />
   </Folder>
 </Solution>

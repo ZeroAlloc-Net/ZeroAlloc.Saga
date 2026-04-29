@@ -1,3 +1,5 @@
+using System.IO;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -5,14 +7,23 @@ using OrderFulfillment.Handlers;
 using OrderFulfillment.Saga;
 using ZeroAlloc.Mediator;
 using ZeroAlloc.Saga;
+using ZeroAlloc.Saga.EfCore;
 
 namespace OrderFulfillment;
 
 internal static class Program
 {
-    private static async Task<int> Main()
+    private static async Task<int> Main(string[] args)
     {
+        // Parse a tiny flag set so the demo can be re-launched against the
+        // EfCore backend without rebuilding. Default is the InMemory store
+        // (matches the v1.0 demo behaviour).
+        // Plain System.Array.IndexOf — Linq's Contains extension trips
+        // the EPS06 "hidden ReadOnlySpan copy" analyzer in this project.
+        var useEfCore = System.Array.IndexOf(args, "--efcore") >= 0;
+
         Console.WriteLine("=== ZeroAlloc.Saga: OrderFulfillment demo ===");
+        Console.WriteLine($"Backend: {(useEfCore ? "EfCore + SQLite (file)" : "InMemory")}");
         Console.WriteLine();
 
         var services = new ServiceCollection();
@@ -21,11 +32,28 @@ internal static class Program
         // Real Mediator + deferred-publish queue + driver + per-command handlers.
         services.AddFakeMediator();
 
-        // The saga framework + the generator-emitted per-saga registration extension.
-        services.AddSaga()
-            .AddOrderFulfillmentSaga();
+        // SQLite filename is process-local. Recreated on every run so the
+        // demo always starts from a fresh schema (no migration to manage).
+        const string DemoDbPath = "saga-demo.db";
+        if (useEfCore && File.Exists(DemoDbPath)) File.Delete(DemoDbPath);
+
+        var sagaBuilder = services.AddSaga();
+        if (useEfCore)
+        {
+            services.AddDbContext<DemoContext>(opts => opts.UseSqlite($"Data Source={DemoDbPath}"));
+            sagaBuilder.WithEfCoreStore<DemoContext>();
+        }
+        sagaBuilder.AddOrderFulfillmentSaga();
 
         var sp = services.BuildServiceProvider();
+
+        // For EfCore: synthesise the SagaInstance schema before publishing.
+        if (useEfCore)
+        {
+            using var scope = sp.CreateScope();
+            var ctx = scope.ServiceProvider.GetRequiredService<DemoContext>();
+            await ctx.Database.EnsureCreatedAsync();
+        }
 
         var driver = sp.GetRequiredService<SagaDriver>();
         var manager = sp.GetRequiredService<ISagaManager<OrderFulfillmentSaga, OrderId>>();

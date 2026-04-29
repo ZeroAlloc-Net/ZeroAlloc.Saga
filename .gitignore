@@ -266,6 +266,12 @@ ClientBin/
 *.dbmdl
 *.dbproj.schemaview
 *.jfm
+
+# Sample sqlite outputs (samples/OrderFulfillment/ --efcore drops a saga-demo.db
+# beside the binary; harmless but noisy in PR diffs).
+saga-demo.db
+saga-demo.db-shm
+saga-demo.db-wal
 *.pfx
 *.publishsettings
 orleans.codegen.cs

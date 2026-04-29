@@ -31,3 +31,36 @@ jobs:
       # Completed and is removed from the store).
       - name: Run AotSmoke
         run: ./aot-out/AotSmoke
+
+  aot-smoke-efcore:
+    name: build + run AotSmokeEfCore (linux-x64, EfCore backend)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: Restore solution
+        run: dotnet restore ZeroAlloc.Saga.slnx
+      # AotSmokeEfCore.csproj enables IsAotCompatible=true +
+      # EnableTrimAnalyzer + EnableSingleFileAnalyzer so AOT-hostile
+      # patterns surface as build errors here. PublishAot=true is NOT set
+      # because EF Core 9.0's NativeAOT story still requires precompiled
+      # queries that don't yet cover the dynamic LINQ expressions inside
+      # ZeroAlloc.Saga.EfCore's store. A truly-AOT-published binary today
+      # would throw "Query wasn't precompiled and dynamic code isn't
+      # supported (NativeAOT)" at runtime; once EF Core's AOT support
+      # matures (post-10.0) the publish + run pattern from the InMemory
+      # job above is the target shape here too.
+      #
+      # In the meantime this job still adds value: the build runs all
+      # AOT/trim analyzers, and the runtime smoke proves the EfCore
+      # backend wires correctly with the saga generator's emitted
+      # handlers (forward path + RowVersion rotation + row removal on
+      # Completed).
+      - name: Build AotSmokeEfCore
+        run: dotnet build samples/AotSmokeEfCore/AotSmokeEfCore.csproj -c Release
+      - name: Run AotSmokeEfCore
+        run: dotnet run --project samples/AotSmokeEfCore/AotSmokeEfCore.csproj -c Release --no-build

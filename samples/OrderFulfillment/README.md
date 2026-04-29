@@ -15,10 +15,17 @@ flows of a 3-step order saga.
 ## Run
 
 ```bash
+# Default: in-memory store (matches v1.0 behaviour)
 dotnet run --project samples/OrderFulfillment/
+
+# Or wire the EfCore + SQLite backend (creates ./saga-demo.db)
+dotnet run --project samples/OrderFulfillment/ -- --efcore
 ```
 
 Each scenario prints its commands inline so the saga's behaviour is visible.
+Both backends should produce identical demo output — the EfCore variant
+additionally persists each saga to a SQLite file (deleted on each launch
+so the demo always starts fresh).
 
 ## How the wiring works
 
