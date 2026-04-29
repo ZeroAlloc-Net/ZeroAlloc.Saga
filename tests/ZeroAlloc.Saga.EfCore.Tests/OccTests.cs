@@ -191,13 +191,14 @@ public sealed class OccTests
         var orderId = new OrderId(202);
         await PublishAsync(sp, new OrderPlaced(orderId, 1m));
 
-        // The retry loop masked the first conflict and dispatched ReserveStock
-        // on the second attempt — so we expect TWO records (one per attempt).
-        // Exact retry semantics are at-most-once-from-OCC's-view but
+        // OneShotConflictStore throws on the first save AFTER the dispatch,
+        // forcing the retry loop to re-run the entire load/fire/dispatch/save
+        // flow. ReserveStock is therefore dispatched at least twice
+        // (initial attempt + retry). At-most-once-from-OCC's-view but
         // at-least-once-from-mediator's-view; idempotency is the user's
         // responsibility under OCC retry (ZASAGA015 documents this).
-        Assert.True(ledger.CommandsOfType<ReserveStockCommand>().Count >= 1,
-            "Expected at least one ReserveStock command after retry");
+        Assert.True(ledger.CommandsOfType<ReserveStockCommand>().Count >= 2,
+            "Expected ReserveStock to be dispatched at least twice (initial attempt + retry after conflict)");
     }
 
     private sealed class OneShotConflictStore : ISagaStore<OrderFulfillmentSaga, OrderId>
