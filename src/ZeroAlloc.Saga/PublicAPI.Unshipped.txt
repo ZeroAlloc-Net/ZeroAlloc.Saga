@@ -1,1 +1,123 @@
 #nullable enable
+ZeroAlloc.Saga.CorrelationKeyAttribute
+ZeroAlloc.Saga.CorrelationKeyAttribute.CorrelationKeyAttribute() -> void
+ZeroAlloc.Saga.ISagaBuilder
+ZeroAlloc.Saga.ISagaBuilder.IsEfCoreBackend.get -> bool
+ZeroAlloc.Saga.ISagaBuilder.Services.get -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+ZeroAlloc.Saga.ISagaBuilderMutable
+ZeroAlloc.Saga.ISagaBuilderMutable.IsEfCoreBackend.get -> bool
+ZeroAlloc.Saga.ISagaBuilderMutable.IsEfCoreBackend.set -> void
+ZeroAlloc.Saga.ISagaCompensationDispatcher<TSaga>
+ZeroAlloc.Saga.ISagaCompensationDispatcher<TSaga>.CompensateAsync(TSaga! saga, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.ISagaManager<TSaga, TKey>
+ZeroAlloc.Saga.ISagaManager<TSaga, TKey>.CompensateAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.ISagaManager<TSaga, TKey>.GetAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<TSaga?>
+ZeroAlloc.Saga.ISagaPersistableState
+ZeroAlloc.Saga.ISagaPersistableState.CurrentFsmStateName.get -> string!
+ZeroAlloc.Saga.ISagaPersistableState.Restore(System.ReadOnlySpan<byte> data) -> void
+ZeroAlloc.Saga.ISagaPersistableState.SetFsmStateFromName(string! stateName) -> void
+ZeroAlloc.Saga.ISagaPersistableState.Snapshot() -> byte[]!
+ZeroAlloc.Saga.ISagaStore<TSaga, TKey>
+ZeroAlloc.Saga.ISagaStore<TSaga, TKey>.LoadOrCreateAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<TSaga!>
+ZeroAlloc.Saga.ISagaStore<TSaga, TKey>.RemoveAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.ISagaStore<TSaga, TKey>.SaveAsync(TKey key, TSaga! saga, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.ISagaStore<TSaga, TKey>.TryLoadAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<TSaga?>
+ZeroAlloc.Saga.ISagaStoreRegistrar
+ZeroAlloc.Saga.ISagaStoreRegistrar.Register<TSaga, TKey>(ZeroAlloc.Saga.ISagaBuilder! builder) -> void
+ZeroAlloc.Saga.InMemorySagaStore<TSaga, TKey>
+ZeroAlloc.Saga.InMemorySagaStore<TSaga, TKey>.InMemorySagaStore() -> void
+ZeroAlloc.Saga.InMemorySagaStore<TSaga, TKey>.LoadOrCreateAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<TSaga!>
+ZeroAlloc.Saga.InMemorySagaStore<TSaga, TKey>.RemoveAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.InMemorySagaStore<TSaga, TKey>.SaveAsync(TKey key, TSaga! saga, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.InMemorySagaStore<TSaga, TKey>.TryLoadAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<TSaga?>
+ZeroAlloc.Saga.NotSagaStateAttribute
+ZeroAlloc.Saga.NotSagaStateAttribute.NotSagaStateAttribute() -> void
+ZeroAlloc.Saga.SagaAttribute
+ZeroAlloc.Saga.SagaAttribute.SagaAttribute() -> void
+ZeroAlloc.Saga.SagaBuilderMutationExtensions
+ZeroAlloc.Saga.SagaConcurrencyException
+ZeroAlloc.Saga.SagaConcurrencyException.Attempts.get -> int
+ZeroAlloc.Saga.SagaConcurrencyException.CorrelationKey.get -> string!
+ZeroAlloc.Saga.SagaConcurrencyException.SagaConcurrencyException(string! sagaType, string! correlationKey, int attempts, System.Exception? inner) -> void
+ZeroAlloc.Saga.SagaConcurrencyException.SagaType.get -> string!
+ZeroAlloc.Saga.SagaLockManager<TKey>
+ZeroAlloc.Saga.SagaLockManager<TKey>.AcquireAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<System.IDisposable!>
+ZeroAlloc.Saga.SagaLockManager<TKey>.SagaLockManager() -> void
+ZeroAlloc.Saga.SagaManager<TSaga, TKey>
+ZeroAlloc.Saga.SagaManager<TSaga, TKey>.CompensateAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.SagaManager<TSaga, TKey>.GetAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<TSaga?>
+ZeroAlloc.Saga.SagaManager<TSaga, TKey>.SagaManager(ZeroAlloc.Saga.ISagaStore<TSaga!, TKey>! store, ZeroAlloc.Saga.SagaLockManager<TKey>! locks, ZeroAlloc.Saga.ISagaCompensationDispatcher<TSaga!>! compensation) -> void
+ZeroAlloc.Saga.SagaRetryOptions
+ZeroAlloc.Saga.SagaRetryOptions.MaxRetryAttempts.get -> int
+ZeroAlloc.Saga.SagaRetryOptions.MaxRetryAttempts.set -> void
+ZeroAlloc.Saga.SagaRetryOptions.RetryBaseDelay.get -> System.TimeSpan
+ZeroAlloc.Saga.SagaRetryOptions.RetryBaseDelay.set -> void
+ZeroAlloc.Saga.SagaRetryOptions.SagaRetryOptions() -> void
+ZeroAlloc.Saga.SagaRetryOptions.UseExponentialBackoff.get -> bool
+ZeroAlloc.Saga.SagaRetryOptions.UseExponentialBackoff.set -> void
+ZeroAlloc.Saga.SagaServiceCollectionExtensions
+ZeroAlloc.Saga.SagaStateReader
+ZeroAlloc.Saga.SagaStateReader.ReadBoolean() -> bool
+ZeroAlloc.Saga.SagaStateReader.ReadByte() -> byte
+ZeroAlloc.Saga.SagaStateReader.ReadBytes() -> byte[]?
+ZeroAlloc.Saga.SagaStateReader.ReadBytesNullable() -> byte[]?
+ZeroAlloc.Saga.SagaStateReader.ReadDateTime() -> System.DateTime
+ZeroAlloc.Saga.SagaStateReader.ReadDateTimeOffset() -> System.DateTimeOffset
+ZeroAlloc.Saga.SagaStateReader.ReadDecimal() -> decimal
+ZeroAlloc.Saga.SagaStateReader.ReadDouble() -> double
+ZeroAlloc.Saga.SagaStateReader.ReadGuid() -> System.Guid
+ZeroAlloc.Saga.SagaStateReader.ReadInt16() -> short
+ZeroAlloc.Saga.SagaStateReader.ReadInt32() -> int
+ZeroAlloc.Saga.SagaStateReader.ReadInt64() -> long
+ZeroAlloc.Saga.SagaStateReader.ReadSByte() -> sbyte
+ZeroAlloc.Saga.SagaStateReader.ReadSingle() -> float
+ZeroAlloc.Saga.SagaStateReader.ReadString() -> string?
+ZeroAlloc.Saga.SagaStateReader.ReadTimeSpan() -> System.TimeSpan
+ZeroAlloc.Saga.SagaStateReader.ReadUInt16() -> ushort
+ZeroAlloc.Saga.SagaStateReader.ReadUInt32() -> uint
+ZeroAlloc.Saga.SagaStateReader.ReadUInt64() -> ulong
+ZeroAlloc.Saga.SagaStateReader.SagaStateReader() -> void
+ZeroAlloc.Saga.SagaStateReader.SagaStateReader(System.ReadOnlySpan<byte> data) -> void
+ZeroAlloc.Saga.SagaStateVersionMismatchException
+ZeroAlloc.Saga.SagaStateVersionMismatchException.Actual.get -> byte
+ZeroAlloc.Saga.SagaStateVersionMismatchException.Expected.get -> byte
+ZeroAlloc.Saga.SagaStateVersionMismatchException.SagaStateVersionMismatchException(string! sagaType, byte expected, byte actual) -> void
+ZeroAlloc.Saga.SagaStateVersionMismatchException.SagaType.get -> string!
+ZeroAlloc.Saga.SagaStateWriter
+ZeroAlloc.Saga.SagaStateWriter.SagaStateWriter() -> void
+ZeroAlloc.Saga.SagaStateWriter.SagaStateWriter(System.Buffers.IBufferWriter<byte>! buffer) -> void
+ZeroAlloc.Saga.SagaStateWriter.WriteBoolean(bool value) -> void
+ZeroAlloc.Saga.SagaStateWriter.WriteByte(byte value) -> void
+ZeroAlloc.Saga.SagaStateWriter.WriteBytes(System.ReadOnlySpan<byte> value) -> void
+ZeroAlloc.Saga.SagaStateWriter.WriteBytes(byte[]? value) -> void
+ZeroAlloc.Saga.SagaStateWriter.WriteDateTime(System.DateTime value) -> void
+ZeroAlloc.Saga.SagaStateWriter.WriteDateTimeOffset(System.DateTimeOffset value) -> void
+ZeroAlloc.Saga.SagaStateWriter.WriteDecimal(decimal value) -> void
+ZeroAlloc.Saga.SagaStateWriter.WriteDouble(double value) -> void
+ZeroAlloc.Saga.SagaStateWriter.WriteGuid(System.Guid value) -> void
+ZeroAlloc.Saga.SagaStateWriter.WriteInt16(short value) -> void
+ZeroAlloc.Saga.SagaStateWriter.WriteInt32(int value) -> void
+ZeroAlloc.Saga.SagaStateWriter.WriteInt64(long value) -> void
+ZeroAlloc.Saga.SagaStateWriter.WriteSByte(sbyte value) -> void
+ZeroAlloc.Saga.SagaStateWriter.WriteSingle(float value) -> void
+ZeroAlloc.Saga.SagaStateWriter.WriteString(string? value) -> void
+ZeroAlloc.Saga.SagaStateWriter.WriteTimeSpan(System.TimeSpan value) -> void
+ZeroAlloc.Saga.SagaStateWriter.WriteUInt16(ushort value) -> void
+ZeroAlloc.Saga.SagaStateWriter.WriteUInt32(uint value) -> void
+ZeroAlloc.Saga.SagaStateWriter.WriteUInt64(ulong value) -> void
+ZeroAlloc.Saga.SagaStoreRegistrar
+ZeroAlloc.Saga.StepAttribute
+ZeroAlloc.Saga.StepAttribute.Compensate.get -> string?
+ZeroAlloc.Saga.StepAttribute.Compensate.init -> void
+ZeroAlloc.Saga.StepAttribute.CompensateOn.get -> System.Type?
+ZeroAlloc.Saga.StepAttribute.CompensateOn.init -> void
+ZeroAlloc.Saga.StepAttribute.Order.get -> int
+ZeroAlloc.Saga.StepAttribute.Order.init -> void
+ZeroAlloc.Saga.StepAttribute.StepAttribute() -> void
+static ZeroAlloc.Saga.SagaBuilderMutationExtensions.SetEfCoreBackend(this ZeroAlloc.Saga.ISagaBuilder! builder) -> void
+static ZeroAlloc.Saga.SagaServiceCollectionExtensions.AddSaga(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> ZeroAlloc.Saga.ISagaBuilder!
+static ZeroAlloc.Saga.SagaStoreRegistrar.Apply<TSaga, TKey>(ZeroAlloc.Saga.ISagaBuilder! builder) -> void
+static ZeroAlloc.Saga.SagaStoreRegistrar.OverrideStore<TSaga, TKey, TStore>(ZeroAlloc.Saga.ISagaBuilder! builder) -> void
+static ZeroAlloc.Saga.SagaStoreRegistrar.Reset() -> void
+static ZeroAlloc.Saga.SagaStoreRegistrar.SetRegistrar(System.Action<ZeroAlloc.Saga.ISagaBuilder!>! registrar) -> void
+static ZeroAlloc.Saga.SagaStoreRegistrar.SetTypedRegistrar(ZeroAlloc.Saga.ISagaStoreRegistrar! registrar) -> void
