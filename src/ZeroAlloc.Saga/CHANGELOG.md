@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v1.2.0...ZeroAlloc.Saga-v1.3.0) (2026-05-01)
+
+
+### Features
+
+* lock public API surface (PublicApiAnalyzers + api-compat gate) ([#17](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/17)) ([4f870c4](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/4f870c48e01226fbe4d4788da8b206e34db95b96))
+
 ## [1.2.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v1.1.0...ZeroAlloc.Saga-v1.2.0) (2026-04-29)
 
 
