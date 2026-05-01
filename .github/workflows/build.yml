@@ -15,3 +15,9 @@ jobs:
       - run: dotnet restore ZeroAlloc.Saga.slnx
       - run: dotnet build ZeroAlloc.Saga.slnx --configuration Release --no-restore
       - run: dotnet test ZeroAlloc.Saga.slnx --configuration Release --no-build --verbosity normal
+
+  api-compat:
+    uses: ZeroAlloc-Net/.github/.github/workflows/api-compat.yml@main
+    with:
+      package-id: ZeroAlloc.Saga
+      csproj-path: src/ZeroAlloc.Saga/ZeroAlloc.Saga.csproj
