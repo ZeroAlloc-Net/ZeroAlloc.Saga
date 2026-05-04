@@ -4,28 +4,35 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using ZeroAlloc.Mediator;
-using ZeroAlloc.Outbox;
 using ZeroAlloc.Serialisation;
 
 namespace ZeroAlloc.Saga.Outbox;
 
 /// <summary>
 /// <see cref="ISagaCommandDispatcher"/> that serializes the saga step command via
-/// <see cref="ISerializer{T}"/> resolved from DI and writes it to <see cref="IOutboxStore"/>
-/// using the deferred-write API. The outbox row sits in the underlying store's pending
-/// changes (e.g. EfCore's <c>ChangeTracker</c>) until the next sibling write — typically
-/// the saga store's <c>SaveAsync</c> calling <c>SaveChangesAsync</c> on the same scoped
-/// <c>DbContext</c> — which commits both atomically. An OCC retry rolls both back together,
-/// fixing the duplicate-dispatch caveat documented in Saga 1.1.
+/// <see cref="ISerializer{T}"/> resolved from DI and enlists the bytes with the
+/// scope's <see cref="ISagaUnitOfWork"/>. The unit of work is responsible for
+/// committing the enlisted writes atomically with the next saga state save.
 /// </summary>
+/// <remarks>
+/// <para>The dispatcher is backend-agnostic: with <c>WithEfCoreStore()</c>, the
+/// default <see cref="OutboxStoreSagaUnitOfWork"/> delegates to
+/// <c>EfCoreOutboxStore.EnqueueDeferredAsync</c> (which Adds a tracked entity to
+/// the shared scoped <c>DbContext</c>); with <c>WithRedisStore()</c> (Stage 2),
+/// the Redis-specific unit of work buffers the writes for the saga store's
+/// MULTI/EXEC.</para>
+///
+/// <para>Atomicity contract: an OCC retry that fails the saga state save also
+/// discards the enlisted outbox writes. See <c>docs/outbox.md</c>.</para>
+/// </remarks>
 public sealed class OutboxSagaCommandDispatcher : ISagaCommandDispatcher
 {
-    private readonly IOutboxStore _store;
+    private readonly ISagaUnitOfWork _uow;
     private readonly IServiceProvider _services;
 
-    public OutboxSagaCommandDispatcher(IOutboxStore store, IServiceProvider services)
+    public OutboxSagaCommandDispatcher(ISagaUnitOfWork uow, IServiceProvider services)
     {
-        _store = store;
+        _uow = uow;
         _services = services;
     }
 
@@ -36,7 +43,7 @@ public sealed class OutboxSagaCommandDispatcher : ISagaCommandDispatcher
         var serializer = _services.GetRequiredService<ISerializer<TCommand>>();
         var buffer = new ArrayBufferWriter<byte>();
         serializer.Serialize(buffer, cmd);
-        await _store.EnqueueDeferredAsync(
+        await _uow.EnlistOutboxRowAsync(
             typeName: typeof(TCommand).FullName!,
             payload: buffer.WrittenMemory,
             ct: ct).ConfigureAwait(false);
