@@ -65,6 +65,25 @@ public sealed class SagaGenerator : IIncrementalGenerator
             MediatorSagaCommandDispatcherEmitter.Emit(spc, results);
         });
 
+        // Per-compilation SagaCommandRegistry — single emit covering every
+        // forward and compensation command type across all sagas in the consumer
+        // assembly. Conditional on ZeroAlloc.Serialisation being referenced — the
+        // registry uses ISerializer<T> to deserialize outbox payloads, so without
+        // the package the emitted code wouldn't compile. Saga consumers that
+        // don't use the outbox bridge see no change in generator output.
+        var serialisationReferenced = context.CompilationProvider
+            .Select(static (compilation, _) =>
+                compilation.GetTypeByMetadataName("ZeroAlloc.Serialisation.ZeroAllocSerializableAttribute") is not null);
+
+        context.RegisterSourceOutput(
+            allModels.Combine(serialisationReferenced),
+            static (spc, tuple) =>
+            {
+                var (results, hasSerialisation) = tuple;
+                if (!hasSerialisation) return;
+                SagaCommandRegistryEmitter.Emit(spc, results);
+            });
+
         // ZASAGA015: best-effort idempotency hint when a durable backend is wired
         // anywhere in the same compilation. We don't bind the call — we look for
         // any invocation whose name starts with WithEfCoreStore / WithRedisStore,
