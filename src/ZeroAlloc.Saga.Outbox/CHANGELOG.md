@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga.Outbox-v1.2.0...ZeroAlloc.Saga.Outbox-v1.3.0) (2026-05-04)
+
+
+### Features
+
+* **samples:** add AotSmokeOutbox sample to verify the AOT-rooting contract ([#23](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/23)) ([25ed3fd](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/25ed3fd1ffc3b5de48c686b5aaeadf08cb17352c))
+* scope-per-attempt retry loop — exactly-once dispatch under OCC retry ([#25](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/25)) ([37b043a](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/37b043aacbd507879a204b409d400f01a0205e1f))
+
+
+### Bug Fixes
+
+* **outbox:** switch to UnconditionalSuppressMessage on reflective lookups ([37b043a](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/37b043aacbd507879a204b409d400f01a0205e1f))
+* **outbox:** switch to UnconditionalSuppressMessage on reflective lookups ([25ed3fd](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/25ed3fd1ffc3b5de48c686b5aaeadf08cb17352c))
+
 ## 1.2.0 (2026-05-04)
 
 
