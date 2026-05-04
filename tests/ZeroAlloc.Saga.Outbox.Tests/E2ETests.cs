@@ -128,4 +128,130 @@ public sealed class E2ETests
             Assert.Equal(OutboxMessageStatus.Succeeded, outboxes[0].Status);
         }
     }
+
+    [Fact]
+    public async Task OccConflict_RollsBackOutboxRow_NoDuplicateDispatch()
+    {
+        // Task 15: THE regression artifact. Pre-bridge (Saga 1.1) an OCC retry
+        // dispatched the step command twice — once on the failing attempt
+        // (already at the mediator) and again on the retry. With the outbox
+        // bridge, the failing attempt's outbox row Add is discarded together
+        // with its DbContext (or, here, by the OneShotConflictStore wrapper
+        // clearing the ChangeTracker after the simulated row-version mismatch),
+        // so only the successful retry's outbox row reaches the database. The
+        // poller therefore drains exactly ONE row and the ledger sees exactly
+        // ONE ReserveStockCommand.
+        await using var fx = new SqliteFixture();
+        await fx.EnsureCreatedAsync();
+
+        var sp = BuildHost(fx, services =>
+        {
+            // Decorate the EfCoreSagaStore with a one-shot conflict wrapper that
+            // simulates an OCC clash on the FIRST save by throwing
+            // DbUpdateConcurrencyException AND clearing the ChangeTracker — the
+            // latter models what happens to a parallel writer's DbContext when
+            // its row-version-mismatched UPDATE rolls back: the implicit
+            // transaction discards both the saga UPDATE and the deferred outbox
+            // INSERT. In production this rollback is provided by the failing
+            // DbContext going out of scope; here we emulate it by clearing
+            // tracked changes so the test stays single-process.
+            for (int i = services.Count - 1; i >= 0; i--)
+            {
+                if (services[i].ServiceType == typeof(ISagaStore<OrderFulfillmentSaga, OrderId>))
+                {
+                    services.RemoveAt(i);
+                }
+            }
+            services.AddScoped<ISagaStore<OrderFulfillmentSaga, OrderId>>(s =>
+            {
+                var ctx = s.GetRequiredService<OutboxE2EDbContext>();
+                var inner = new EfCoreSagaStore<OrderFulfillmentSaga, OrderId>(
+                    ctx,
+                    NullLogger<EfCoreSagaStore<OrderFulfillmentSaga, OrderId>>.Instance);
+                return new OneShotConflictAndRollbackStore(inner, ctx);
+            });
+        });
+        var ledger = new CommandLedger();
+        CommandLedger.Current = ledger;
+
+        var orderId = new OrderId(7002);
+        // Should NOT throw — the retry loop catches the simulated conflict and
+        // succeeds on the second attempt.
+        await PublishAsync(sp, new OrderPlaced(orderId, 42m));
+
+        // CRITICAL ASSERTION: exactly ONE outbox row in the database. Pre-bridge,
+        // the failing first attempt would have already dispatched ReserveStock
+        // through the mediator — and the retry would dispatch it again. With the
+        // bridge, the first attempt's deferred outbox row is discarded and only
+        // the retry's row is committed.
+        using (var scope = sp.CreateScope())
+        {
+            var ctx = scope.ServiceProvider.GetRequiredService<OutboxE2EDbContext>();
+            var outboxes = await ctx.Set<OutboxMessageEntity>().AsNoTracking().ToListAsync();
+#pragma warning disable HLQ005
+            Assert.Single(outboxes);
+            Assert.Single(await ctx.Set<SagaInstanceEntity>().AsNoTracking().ToListAsync());
+#pragma warning restore HLQ005
+            Assert.Equal(typeof(ReserveStockCommand).FullName, outboxes[0].TypeName);
+        }
+
+        // Drive the poller once. With exactly one outbox row, ReserveStockCommand
+        // is dispatched exactly once. WITHOUT the outbox bridge, this count would
+        // be 2 (initial mediator dispatch + retry mediator dispatch).
+        var poller = sp.GetServices<Microsoft.Extensions.Hosting.IHostedService>()
+            .OfType<OutboxSagaCommandPoller>()
+            .Single();
+        await poller.PollOnceAsync(default);
+
+        var dispatched = ledger.CommandsOfType<ReserveStockCommand>();
+#pragma warning disable HLQ005
+        Assert.Single(dispatched);
+#pragma warning restore HLQ005
+        Assert.Equal(orderId, dispatched[0].OrderId);
+    }
+
+    /// <summary>
+    /// Wrapper around <see cref="ISagaStore{TSaga,TKey}"/> that throws
+    /// <see cref="DbUpdateConcurrencyException"/> on the first <c>SaveAsync</c>
+    /// call AND clears the <see cref="DbContext"/>'s <c>ChangeTracker</c>. Models
+    /// what happens to a parallel writer's DbContext when its OCC-mismatched
+    /// UPDATE rolls back: the implicit transaction discards both the saga
+    /// UPDATE and the deferred outbox INSERT. Subsequent calls forward to the
+    /// inner store, where the saga commits cleanly.
+    /// </summary>
+    private sealed class OneShotConflictAndRollbackStore : ISagaStore<OrderFulfillmentSaga, OrderId>
+    {
+        private readonly ISagaStore<OrderFulfillmentSaga, OrderId> _inner;
+        private readonly DbContext _ctx;
+        private int _attemptedSaves;
+
+        public OneShotConflictAndRollbackStore(
+            ISagaStore<OrderFulfillmentSaga, OrderId> inner,
+            DbContext ctx)
+        {
+            _inner = inner;
+            _ctx = ctx;
+        }
+
+        public ValueTask<OrderFulfillmentSaga?> TryLoadAsync(OrderId key, CancellationToken ct)
+            => _inner.TryLoadAsync(key, ct);
+
+        public ValueTask<OrderFulfillmentSaga> LoadOrCreateAsync(OrderId key, CancellationToken ct)
+            => _inner.LoadOrCreateAsync(key, ct);
+
+        public ValueTask SaveAsync(OrderId key, OrderFulfillmentSaga saga, CancellationToken ct)
+        {
+            if (Interlocked.Increment(ref _attemptedSaves) == 1)
+            {
+                // Simulate the rollback that a parallel-writer DbContext would
+                // experience: its tracked entities (the saga UPDATE AND the
+                // dispatcher's deferred outbox INSERT) are discarded together.
+                _ctx.ChangeTracker.Clear();
+                throw new DbUpdateConcurrencyException("Transient conflict (test).");
+            }
+            return _inner.SaveAsync(key, saga, ct);
+        }
+
+        public ValueTask RemoveAsync(OrderId key, CancellationToken ct) => _inner.RemoveAsync(key, ct);
+    }
 }
