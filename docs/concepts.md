@@ -81,7 +81,7 @@ For every `[Saga]` class the generator emits five files:
 4. **`<SagaName>CorrelationDispatch.g.cs`** — a static helper that calls
    the user's `[CorrelationKey]` methods through a single shared probe
    instance.
-5. **`<SagaName>BuilderExtensions.g.cs`** — the `AddXxxSaga()` extension
+5. **`<SagaName>BuilderExtensions.g.cs`** — the `WithXxxSaga()` extension
    method that registers every concrete-closed-type the saga needs. AOT-safe;
    nothing is resolved with open generics at runtime.
 

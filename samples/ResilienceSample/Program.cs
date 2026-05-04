@@ -35,10 +35,10 @@ internal static class Program
         var services = new ServiceCollection();
         services.AddLogging(b => b.SetMinimumLevel(LogLevel.Warning));
 
-        // Order: AddXxxSaga() registers the default ISagaCommandDispatcher; WithResilience()
-        // decorates whatever is currently registered, so call it AFTER AddXxxSaga().
+        // Order: WithXxxSaga() registers the default ISagaCommandDispatcher; WithResilience()
+        // decorates whatever is currently registered, so call it AFTER WithXxxSaga().
         services.AddSaga()
-            .AddOrderFulfillmentSaga()
+            .WithOrderFulfillmentSaga()
             .WithResilience(r =>
             {
                 r.Retry = new RetryPolicy(

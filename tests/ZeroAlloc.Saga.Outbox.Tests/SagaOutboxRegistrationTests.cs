@@ -13,7 +13,7 @@ public class SagaOutboxRegistrationTests
         var services = new ServiceCollection();
         var builder = services.AddSaga();
         // Pre-seed the default ISagaCommandDispatcher registration so Replace() has a target.
-        // (The generator-emitted AddXxxSaga() normally registers MediatorSagaCommandDispatcher;
+        // (The generator-emitted WithXxxSaga() normally registers MediatorSagaCommandDispatcher;
         // here we seed a sentinel to confirm WithOutbox swaps it.)
         services.AddScoped<ISagaCommandDispatcher, SentinelDispatcher>();
 

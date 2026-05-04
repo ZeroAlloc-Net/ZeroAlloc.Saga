@@ -6,7 +6,7 @@ namespace ZeroAlloc.Saga;
 /// <see cref="SagaStoreRegistrar.SetTypedRegistrar(ISagaStoreRegistrar)"/>
 /// from inside a backend's <c>WithEfCoreStore&lt;TContext&gt;()</c> (or
 /// equivalent) builder extension; invoked by generator-emitted
-/// <c>AddXxxSaga()</c> once per saga so each registration is a
+/// <c>WithXxxSaga()</c> once per saga so each registration is a
 /// closed-generic dispatch — AOT-safe, no <c>MakeGenericType</c>.
 /// </summary>
 public interface ISagaStoreRegistrar

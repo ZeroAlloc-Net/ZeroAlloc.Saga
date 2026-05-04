@@ -45,7 +45,7 @@ public static class SagaOutboxBuilderExtensions
     [UnconditionalSuppressMessage(
         "Trimming",
         "IL2026:RequiresUnreferencedCode",
-        Justification = "SagaCommandRegistry is rooted by [DynamicDependency(PublicMethods, typeof(SagaCommandRegistry))] emitted on the saga generator's MediatorSagaCommandDispatcher. That dispatcher is rooted by the generator-emitted Add{Saga}Saga DI registration, transitively keeping the registry's DispatchAsync alive under PublishAot=true.")]
+        Justification = "SagaCommandRegistry is rooted by [DynamicDependency(PublicMethods, typeof(SagaCommandRegistry))] emitted on the saga generator's MediatorSagaCommandDispatcher. That dispatcher is rooted by the generator-emitted With{Saga}Saga DI registration, transitively keeping the registry's DispatchAsync alive under PublishAot=true.")]
     [UnconditionalSuppressMessage(
         "Trimming",
         "IL2075:RequiresUnreferencedCode",

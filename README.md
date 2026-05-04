@@ -239,7 +239,7 @@ install.
 Hard dependencies pulled in transitively:
 
 - `ZeroAlloc.Mediator` — for `INotification`, `IRequest`, `IMediator.Send`
-- `Microsoft.Extensions.DependencyInjection` — for `AddSaga()`, `AddXxxSaga()`
+- `Microsoft.Extensions.DependencyInjection` — for `AddSaga()`, `WithXxxSaga()`
 - `Microsoft.Extensions.Logging.Abstractions` — for the saga-handler loggers
 
 ## Diagnostics

@@ -28,6 +28,7 @@ backend bridges (EfCore, Redis, etc.) get `ZASAGA1xx`, `ZASAGA2xx`, …
 | [ZASAGA011](#zasaga011) | warning | — |
 | [ZASAGA012](#zasaga012) | warning | — |
 | [ZASAGA013](#zasaga013) | warning | — |
+| [ZASAGA018](#zasaga018) | warning (suppressible) | — |
 
 ---
 

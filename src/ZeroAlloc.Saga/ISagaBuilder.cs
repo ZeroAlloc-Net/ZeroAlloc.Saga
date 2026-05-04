@@ -4,7 +4,7 @@ namespace ZeroAlloc.Saga;
 
 /// <summary>
 /// Returned by <see cref="SagaServiceCollectionExtensions.AddSaga"/> and
-/// extended by generator-emitted <c>AddXxxSaga(this ISagaBuilder)</c>
+/// extended by generator-emitted <c>WithXxxSaga(this ISagaBuilder)</c>
 /// methods. Provides typed access to the underlying
 /// <see cref="IServiceCollection"/>.
 /// </summary>
@@ -16,7 +16,7 @@ public interface ISagaBuilder
     /// <summary>
     /// True when a durable backend (e.g. <c>WithEfCoreStore</c>) has been
     /// configured on this builder. Read by generator-emitted
-    /// <c>AddXxxSaga()</c> at composition time to choose between
+    /// <c>WithXxxSaga()</c> at composition time to choose between
     /// <c>InMemorySagaStore&lt;,&gt;</c> (default) and the durable backend's
     /// concrete store type.
     /// </summary>

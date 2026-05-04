@@ -74,7 +74,7 @@ services.AddSaga()
 ```
 
 > **Order matters.** `WithEfCoreStore<TContext>()` MUST be called
-> BEFORE per-saga `AddXxxSaga()` registrations. Calling it after a
+> BEFORE per-saga `WithXxxSaga()` registrations. Calling it after a
 > saga is added throws `InvalidOperationException` with a reorder
 > hint — the per-saga registration captures `SagaRetryOptions` at
 > registration time, so rebinding it later would silently change

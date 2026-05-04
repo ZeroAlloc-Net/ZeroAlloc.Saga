@@ -74,7 +74,7 @@ internal static class Program
         services.AddDbContext<TestDbContext>(opts => opts.UseSqlite(connection),
             ServiceLifetime.Scoped);
 
-        // WithEfCoreStore<TContext>() MUST come BEFORE AddXxxSaga() — order
+        // WithEfCoreStore<TContext>() MUST come BEFORE WithXxxSaga() — order
         // is enforced by an InvalidOperationException guard in the builder.
         services.AddSaga()
             .WithEfCoreStore<TestDbContext>(opts =>

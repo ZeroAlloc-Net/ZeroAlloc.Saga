@@ -70,7 +70,7 @@ internal static class MediatorSagaCommandDispatcherEmitter
             // is only reachable reflectively from ZeroAlloc.Saga.Outbox's
             // WithOutbox() bootstrapper; without this attribute the trimmer can
             // remove it. MediatorSagaCommandDispatcher is rooted via the
-            // generator-emitted Add{Saga}Saga DI registration, so attaching the
+            // generator-emitted With{Saga}Saga DI registration, so attaching the
             // dependency on its constructor keeps the registry alive whenever
             // a saga consumer also references ZeroAlloc.Serialisation.
             sb.AppendLine("    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods, typeof(SagaCommandRegistry))]");
