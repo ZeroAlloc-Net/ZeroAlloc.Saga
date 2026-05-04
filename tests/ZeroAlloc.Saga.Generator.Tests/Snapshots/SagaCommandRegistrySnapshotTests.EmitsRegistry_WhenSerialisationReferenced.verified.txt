@@ -1,0 +1,48 @@
+﻿{
+  Diagnostics: [
+    {
+      Location: /*
+
+public readonly record struct ReserveCmd(OrderId OrderId) : IRequest<Unit>;
+                              ^^^^^^^^^^
+public readonly record struct ChargeCmd(OrderId OrderId) : IRequest<Unit>;
+*/
+ : (18,30)-(18,40),
+      Message: Step command type 'Sample.ReserveCmd' must be 'partial' so the Saga generator can apply [ZeroAllocSerializable] via partial-class extension. Add the 'partial' modifier.,
+      Severity: Warning,
+      WarningLevel: 1,
+      Descriptor: {
+        Id: ZASAGA016,
+        Title: Step command type must be partial when ZeroAlloc.Serialisation is referenced,
+        Description: When ZeroAlloc.Serialisation is referenced the Saga generator extends each step's command type with a partial declaration carrying [ZeroAllocSerializable]. The command type must therefore be declared 'partial' so the generated partial can attach.,
+        HelpLink: https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/diagnostics.md#zasaga016,
+        MessageFormat: Step command type '{0}' must be 'partial' so the Saga generator can apply [ZeroAllocSerializable] via partial-class extension. Add the 'partial' modifier.,
+        Category: ZeroAlloc.Saga.Authoring,
+        DefaultSeverity: Warning,
+        IsEnabledByDefault: true
+      }
+    },
+    {
+      Location: /*
+public readonly record struct ReserveCmd(OrderId OrderId) : IRequest<Unit>;
+public readonly record struct ChargeCmd(OrderId OrderId) : IRequest<Unit>;
+                              ^^^^^^^^^
+
+*/
+ : (19,30)-(19,39),
+      Message: Step command type 'Sample.ChargeCmd' must be 'partial' so the Saga generator can apply [ZeroAllocSerializable] via partial-class extension. Add the 'partial' modifier.,
+      Severity: Warning,
+      WarningLevel: 1,
+      Descriptor: {
+        Id: ZASAGA016,
+        Title: Step command type must be partial when ZeroAlloc.Serialisation is referenced,
+        Description: When ZeroAlloc.Serialisation is referenced the Saga generator extends each step's command type with a partial declaration carrying [ZeroAllocSerializable]. The command type must therefore be declared 'partial' so the generated partial can attach.,
+        HelpLink: https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/diagnostics.md#zasaga016,
+        MessageFormat: Step command type '{0}' must be 'partial' so the Saga generator can apply [ZeroAllocSerializable] via partial-class extension. Add the 'partial' modifier.,
+        Category: ZeroAlloc.Saga.Authoring,
+        DefaultSeverity: Warning,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}

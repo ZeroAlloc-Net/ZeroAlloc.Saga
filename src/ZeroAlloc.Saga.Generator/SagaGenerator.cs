@@ -84,6 +84,40 @@ public sealed class SagaGenerator : IIncrementalGenerator
                 SagaCommandRegistryEmitter.Emit(spc, results);
             });
 
+        // ZASAGA016 — fired only when ZeroAlloc.Serialisation is referenced.
+        // Covers step command types declared in the current compilation that are
+        // not yet 'partial'; the Saga generator needs the partial modifier to
+        // attach [ZeroAllocSerializable] via partial-class extension.
+        context.RegisterSourceOutput(
+            allModels.Combine(serialisationReferenced),
+            static (spc, tuple) =>
+            {
+                var (results, hasSerialisation) = tuple;
+                if (!hasSerialisation) return;
+
+                // De-dupe by command type FQN so a single command used by multiple
+                // steps / sagas only fires once.
+                var reportedNotPartial = new HashSet<string>(System.StringComparer.Ordinal);
+
+                foreach (var result in results)
+                {
+                    var model = result.Model;
+                    if (model is null) continue;
+                    foreach (var step in model.Steps)
+                    {
+                        if (step.CommandTypeIsInOwnAssembly == true
+                            && !step.CommandTypeIsPartial
+                            && reportedNotPartial.Add(step.CommandTypeFqn))
+                        {
+                            spc.ReportDiagnostic(Diagnostic.Create(
+                                SagaDiagnostics.StepCommandTypeNotPartial,
+                                location: step.CommandTypeLocation,
+                                step.CommandTypeFqn));
+                        }
+                    }
+                }
+            });
+
         // ZASAGA015: best-effort idempotency hint when a durable backend is wired
         // anywhere in the same compilation. We don't bind the call — we look for
         // any invocation whose name starts with WithEfCoreStore / WithRedisStore,
