@@ -21,10 +21,7 @@ public static class MultiFailureSagaBuilderExtensions
     {
         builder.Services.AddMediator();
         builder.Services.TryAddSingleton<ISagaStore<MultiFailureSaga, global::Sample.OrderId>, InMemorySagaStore<MultiFailureSaga, global::Sample.OrderId>>();
-        if (builder.IsEfCoreBackend)
-        {
-            global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<MultiFailureSaga, global::Sample.OrderId>(builder);
-        }
+        global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<MultiFailureSaga, global::Sample.OrderId>(builder);
         builder.Services.TryAddSingleton<SagaLockManager<global::Sample.OrderId>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<MultiFailureSaga>, MultiFailureSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<MultiFailureSaga, global::Sample.OrderId>, SagaManager<MultiFailureSaga, global::Sample.OrderId>>();

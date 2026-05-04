@@ -21,10 +21,7 @@ public static class ExcludedFieldSagaBuilderExtensions
     {
         builder.Services.AddMediator();
         builder.Services.TryAddSingleton<ISagaStore<ExcludedFieldSaga, int>, InMemorySagaStore<ExcludedFieldSaga, int>>();
-        if (builder.IsEfCoreBackend)
-        {
-            global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<ExcludedFieldSaga, int>(builder);
-        }
+        global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<ExcludedFieldSaga, int>(builder);
         builder.Services.TryAddSingleton<SagaLockManager<int>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<ExcludedFieldSaga>, ExcludedFieldSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<ExcludedFieldSaga, int>, SagaManager<ExcludedFieldSaga, int>>();

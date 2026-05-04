@@ -21,10 +21,7 @@ public static class PrimitiveFieldsSagaBuilderExtensions
     {
         builder.Services.AddMediator();
         builder.Services.TryAddSingleton<ISagaStore<PrimitiveFieldsSaga, int>, InMemorySagaStore<PrimitiveFieldsSaga, int>>();
-        if (builder.IsEfCoreBackend)
-        {
-            global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<PrimitiveFieldsSaga, int>(builder);
-        }
+        global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<PrimitiveFieldsSaga, int>(builder);
         builder.Services.TryAddSingleton<SagaLockManager<int>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<PrimitiveFieldsSaga>, PrimitiveFieldsSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<PrimitiveFieldsSaga, int>, SagaManager<PrimitiveFieldsSaga, int>>();

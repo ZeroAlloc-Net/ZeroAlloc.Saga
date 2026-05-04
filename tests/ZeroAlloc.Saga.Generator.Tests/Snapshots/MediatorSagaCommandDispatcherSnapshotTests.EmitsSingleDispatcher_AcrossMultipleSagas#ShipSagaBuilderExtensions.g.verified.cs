@@ -21,10 +21,7 @@ public static class ShipSagaBuilderExtensions
     {
         builder.Services.AddMediator();
         builder.Services.TryAddSingleton<ISagaStore<ShipSaga, global::Sample.ShipId>, InMemorySagaStore<ShipSaga, global::Sample.ShipId>>();
-        if (builder.IsEfCoreBackend)
-        {
-            global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<ShipSaga, global::Sample.ShipId>(builder);
-        }
+        global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<ShipSaga, global::Sample.ShipId>(builder);
         builder.Services.TryAddSingleton<SagaLockManager<global::Sample.ShipId>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<ShipSaga>, ShipSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<ShipSaga, global::Sample.ShipId>, SagaManager<ShipSaga, global::Sample.ShipId>>();

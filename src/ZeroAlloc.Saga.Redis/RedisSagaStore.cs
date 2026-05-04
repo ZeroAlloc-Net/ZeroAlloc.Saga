@@ -31,6 +31,7 @@ public sealed class RedisSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
     private readonly IDatabase _db;
     private readonly RedisSagaStoreOptions _options;
     private readonly ILogger<RedisSagaStore<TSaga, TKey>> _log;
+    private readonly System.Collections.Generic.IEnumerable<IRedisSagaTransactionContributor> _contributors;
 
     /// <summary>
     /// Per-key version remembered between LoadOrCreateAsync and the next SaveAsync.
@@ -39,23 +40,44 @@ public sealed class RedisSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
     /// </summary>
     private readonly ConcurrentDictionary<string, string?> _observedVersions = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// Backwards-compatible 3-arg ctor — equivalent to passing an empty contributor list.
+    /// Existing direct-construction callers (e.g. tests) keep working without changes.
+    /// </summary>
     public RedisSagaStore(IDatabase db, RedisSagaStoreOptions options, ILogger<RedisSagaStore<TSaga, TKey>> log)
+        : this(db, options, log, System.Linq.Enumerable.Empty<IRedisSagaTransactionContributor>())
+    {
+    }
+
+    /// <summary>
+    /// Constructor used by DI (greedy resolution picks this overload). Contributors are resolved
+    /// from the same scope and have their commands batched into the saga store's MULTI/EXEC.
+    /// </summary>
+    public RedisSagaStore(
+        IDatabase db,
+        RedisSagaStoreOptions options,
+        ILogger<RedisSagaStore<TSaga, TKey>> log,
+        System.Collections.Generic.IEnumerable<IRedisSagaTransactionContributor> contributors)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(log);
+        ArgumentNullException.ThrowIfNull(contributors);
         _db = db;
         _options = options;
         _log = log;
+        _contributors = contributors;
     }
 
     /// <inheritdoc />
     public async ValueTask<TSaga?> TryLoadAsync(TKey key, CancellationToken ct)
     {
         var redisKey = BuildKey(key);
-        var values = await _db.HashGetAsync(redisKey, [(RedisValue)"state", (RedisValue)"version"]).ConfigureAwait(false);
+        var values = await _db.HashGetAsync(redisKey,
+            [(RedisValue)"state", (RedisValue)"version", (RedisValue)"fsmState"]).ConfigureAwait(false);
         var stateValue = values[0];
         var versionValue = values[1];
+        var fsmStateValue = values[2];
 
         if (stateValue.IsNull || versionValue.IsNull)
         {
@@ -64,7 +86,7 @@ public sealed class RedisSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
         }
 
         _observedVersions[redisKey] = (string?)versionValue;
-        return Deserialize((byte[])stateValue!);
+        return Deserialize((byte[])stateValue!, (string?)fsmStateValue);
     }
 
     /// <inheritdoc />
@@ -81,7 +103,7 @@ public sealed class RedisSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
         var redisKey = BuildKey(key);
         var observedVersion = _observedVersions.TryGetValue(redisKey, out var v) ? v : null;
         var newVersion = Guid.NewGuid().ToString("N");
-        var stateBytes = Serialize(saga);
+        var (stateBytes, fsmStateName) = Serialize(saga);
 
         await _db.ExecuteAsync("WATCH", (RedisKey)redisKey).ConfigureAwait(false);
         try
@@ -98,7 +120,17 @@ public sealed class RedisSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
             _ = tran.HashSetAsync(redisKey, [
                 new HashEntry("state", stateBytes),
                 new HashEntry("version", newVersion),
+                new HashEntry("fsmState", fsmStateName),
             ]);
+            // Drain transaction contributors (e.g. ZeroAlloc.Saga.Outbox.Redis's
+            // outbox-row writes) into the same MULTI batch so EXEC commits them
+            // atomically with the saga state save. Materialise to a list so we can
+            // re-iterate on retry if the underlying enumerable is regenerable
+            // (DI scoped services are stable per resolve, but defensive).
+            foreach (var c in _contributors)
+            {
+                c.Contribute(tran);
+            }
             var committed = await tran.ExecuteAsync().ConfigureAwait(false);
             if (!committed)
             {
@@ -153,7 +185,7 @@ public sealed class RedisSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
     private string BuildKey(TKey key)
         => $"{_options.KeyPrefix}:{typeof(TSaga).Name}:{key}";
 
-    private static byte[] Serialize(TSaga saga)
+    private static (byte[] StateBytes, string FsmStateName) Serialize(TSaga saga)
     {
         if (saga is not ISagaPersistableState p)
         {
@@ -161,10 +193,10 @@ public sealed class RedisSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
                 $"RedisSagaStore: {typeof(TSaga).FullName} does not implement ISagaPersistableState. " +
                 "The saga generator should have made this implementation a partial — make sure the [Saga] attribute is applied and the type is partial.");
         }
-        return p.Snapshot();
+        return (p.Snapshot(), p.CurrentFsmStateName);
     }
 
-    private static TSaga Deserialize(byte[] bytes)
+    private static TSaga Deserialize(byte[] bytes, string? fsmStateName)
     {
         var saga = new TSaga();
         if (saga is not ISagaPersistableState p)
@@ -173,6 +205,10 @@ public sealed class RedisSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
                 $"RedisSagaStore: {typeof(TSaga).FullName} does not implement ISagaPersistableState. See Snapshot() for details.");
         }
         p.Restore(bytes);
+        if (!string.IsNullOrEmpty(fsmStateName))
+        {
+            p.SetFsmStateFromName(fsmStateName);
+        }
         return saga;
     }
 }

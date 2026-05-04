@@ -77,6 +77,26 @@ automatically.
 
 ## What's new
 
+### `ZeroAlloc.Saga.Outbox.Redis` (new package — closes Phase 3a-2)
+
+Redis-native atomic dispatch. Saga state save and outbox-row write commit
+together in a single Redis `MULTI/EXEC`, so a failed save discards both —
+matching the `Saga.EfCore + Saga.Outbox.EfCore` story for Redis-backed
+sagas.
+
+```csharp
+services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect("..."));
+services.AddSaga()
+    .WithRedisStore()
+    .WithOutbox()
+    .WithRedisOutbox()        // <-- enlists outbox writes into the saga store's MULTI/EXEC
+    .WithOrderFulfillmentSaga();
+```
+
+See [`docs/outbox-redis.md`](docs/outbox-redis.md) for the full atomicity
+contract, the `IRedisSagaTransactionContributor` extension point, and the
+poller integration.
+
 ### `ZeroAlloc.Saga.Redis` (new package)
 
 Second durable backend, mirroring `Saga.EfCore`. One Redis Hash per saga

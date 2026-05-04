@@ -1,0 +1,21 @@
+#nullable enable
+ZeroAlloc.Saga.Outbox.Redis.RedisOutboxOptions
+ZeroAlloc.Saga.Outbox.Redis.RedisOutboxOptions.KeyPrefix.get -> string!
+ZeroAlloc.Saga.Outbox.Redis.RedisOutboxOptions.KeyPrefix.set -> void
+ZeroAlloc.Saga.Outbox.Redis.RedisOutboxOptions.RedisOutboxOptions() -> void
+ZeroAlloc.Saga.Outbox.Redis.RedisOutboxStore
+ZeroAlloc.Saga.Outbox.Redis.RedisOutboxStore.DeadLetterAsync(ZeroAlloc.Outbox.OutboxMessageId id, string! error, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.Outbox.Redis.RedisOutboxStore.EnqueueAsync(string! typeName, System.ReadOnlyMemory<byte> payload, System.Data.Common.DbTransaction? transaction, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.Outbox.Redis.RedisOutboxStore.EnqueueDeferredAsync(string! typeName, System.ReadOnlyMemory<byte> payload, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.Outbox.Redis.RedisOutboxStore.FetchPendingAsync(int batchSize, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<ZeroAlloc.Outbox.OutboxEntry!>!>
+ZeroAlloc.Saga.Outbox.Redis.RedisOutboxStore.MarkFailedAsync(ZeroAlloc.Outbox.OutboxMessageId id, int retryCount, System.DateTimeOffset nextRetryAt, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.Outbox.Redis.RedisOutboxStore.MarkSucceededAsync(ZeroAlloc.Outbox.OutboxMessageId id, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.Outbox.Redis.RedisOutboxStore.RedisOutboxStore(StackExchange.Redis.IDatabase! db, ZeroAlloc.Saga.Outbox.Redis.RedisOutboxOptions! options) -> void
+ZeroAlloc.Saga.Outbox.Redis.RedisOutboxTransactionContributor
+ZeroAlloc.Saga.Outbox.Redis.RedisOutboxTransactionContributor.Contribute(StackExchange.Redis.ITransaction! transaction) -> void
+ZeroAlloc.Saga.Outbox.Redis.RedisOutboxTransactionContributor.RedisOutboxTransactionContributor(ZeroAlloc.Saga.Outbox.Redis.RedisSagaUnitOfWork! uow, ZeroAlloc.Saga.Outbox.Redis.RedisOutboxOptions! options) -> void
+ZeroAlloc.Saga.Outbox.Redis.RedisSagaUnitOfWork
+ZeroAlloc.Saga.Outbox.Redis.RedisSagaUnitOfWork.EnlistOutboxRowAsync(string! typeName, System.ReadOnlyMemory<byte> payload, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.Outbox.Redis.RedisSagaUnitOfWork.RedisSagaUnitOfWork() -> void
+ZeroAlloc.Saga.Outbox.Redis.SagaOutboxRedisBuilderExtensions
+static ZeroAlloc.Saga.Outbox.Redis.SagaOutboxRedisBuilderExtensions.WithRedisOutbox(this ZeroAlloc.Saga.ISagaBuilder! builder, System.Action<ZeroAlloc.Saga.Outbox.Redis.RedisOutboxOptions!>? configure = null) -> ZeroAlloc.Saga.ISagaBuilder!

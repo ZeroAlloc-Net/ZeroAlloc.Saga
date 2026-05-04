@@ -75,11 +75,18 @@ public static class SagaStoreRegistrar
     }
 
     /// <summary>
-    /// Invoked by generator-emitted <c>WithXxxSaga()</c> when a durable backend
-    /// is wired. Forwards to the registrar so the backend can swap the
-    /// default <c>InMemorySagaStore</c> registration for its concrete
-    /// implementation.
+    /// Invoked by generator-emitted <c>WithXxxSaga()</c>. If a backend package
+    /// (Saga.EfCore, Saga.Redis, …) has installed a registrar via
+    /// <see cref="SetTypedRegistrar"/> or <see cref="SetRegistrar"/>, forwards to it
+    /// so the backend can swap the default <c>InMemorySagaStore</c> registration.
     /// </summary>
+    /// <remarks>
+    /// Returns silently when no registrar is installed — the InMemory default stays
+    /// in place. This makes the generator's <c>WithXxxSaga()</c> emit independent
+    /// of which backends exist (an unconditional <see cref="Apply{TSaga,TKey}"/>
+    /// call lets any future backend plug in via <see cref="SetTypedRegistrar"/>
+    /// without a generator update).
+    /// </remarks>
     public static void Apply<TSaga, TKey>(ISagaBuilder builder)
         where TSaga : class, new()
         where TKey : notnull, System.IEquatable<TKey>
@@ -94,10 +101,8 @@ public static class SagaStoreRegistrar
             _registrar(builder);
             return;
         }
-        throw new System.InvalidOperationException(
-            "ISagaBuilder.IsEfCoreBackend was set, but no SagaStoreRegistrar has been installed. " +
-            "Ensure the corresponding backend package (e.g. ZeroAlloc.Saga.EfCore) is referenced and " +
-            "WithEfCoreStore<TContext>() is called before any WithXxxSaga() registrations.");
+        // No backend installed → the InMemory default registration emitted by
+        // WithXxxSaga() upstream is the final binding. No-op.
     }
 
     /// <summary>

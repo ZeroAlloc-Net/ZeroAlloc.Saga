@@ -18,6 +18,11 @@
       "release-type": "simple",
       "changelog-path": "CHANGELOG.md"
     },
+    "src/ZeroAlloc.Saga.Outbox.Redis": {
+      "package-name": "ZeroAlloc.Saga.Outbox.Redis",
+      "release-type": "simple",
+      "changelog-path": "CHANGELOG.md"
+    },
     "src/ZeroAlloc.Saga.Redis": {
       "package-name": "ZeroAlloc.Saga.Redis",
       "release-type": "simple",

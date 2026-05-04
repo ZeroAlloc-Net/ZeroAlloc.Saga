@@ -21,10 +21,7 @@ public static class AuditSagaBuilderExtensions
     {
         builder.Services.AddMediator();
         builder.Services.TryAddSingleton<ISagaStore<AuditSaga, global::Sample.OrderId>, InMemorySagaStore<AuditSaga, global::Sample.OrderId>>();
-        if (builder.IsEfCoreBackend)
-        {
-            global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<AuditSaga, global::Sample.OrderId>(builder);
-        }
+        global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<AuditSaga, global::Sample.OrderId>(builder);
         builder.Services.TryAddSingleton<SagaLockManager<global::Sample.OrderId>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<AuditSaga>, AuditSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<AuditSaga, global::Sample.OrderId>, SagaManager<AuditSaga, global::Sample.OrderId>>();
