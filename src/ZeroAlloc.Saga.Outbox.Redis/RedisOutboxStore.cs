@@ -41,6 +41,19 @@ public sealed class RedisOutboxStore : IOutboxStore
     /// <inheritdoc />
     public async ValueTask EnqueueAsync(string typeName, ReadOnlyMemory<byte> payload, DbTransaction? transaction, CancellationToken ct)
     {
+        if (transaction is not null)
+        {
+            // The IOutboxStore contract carries a DbTransaction for relational backends;
+            // Redis is not relational and a passed-in DbTransaction is almost certainly a
+            // misconfiguration (e.g. the caller thinks they're using the EfCore backend).
+            // Throw rather than silently dropping the transaction — atomic semantics
+            // wouldn't be honoured anyway and silent drops mask real bugs.
+            throw new InvalidOperationException(
+                "RedisOutboxStore.EnqueueAsync received a non-null DbTransaction. Redis does not " +
+                "participate in ADO.NET transactions; if the caller expects transactional grouping, " +
+                "wire WithRedisOutbox() and use RedisSagaUnitOfWork (which joins the saga store's " +
+                "MULTI/EXEC). Otherwise pass null for the transaction parameter.");
+        }
         var id = OutboxMessageId.New();
         var entryKey = $"{_options.KeyPrefix}:entry:{id}";
         var pendingKey = $"{_options.KeyPrefix}:pending";
@@ -85,6 +98,11 @@ public sealed class RedisOutboxStore : IOutboxStore
         {
             var idStr = (string?)idValue;
             if (idStr is null) continue;
+            // If the sorted-set member can't be parsed back to an OutboxMessageId, the
+            // poller can't safely Mark*/DeadLetter it (the round-trip key wouldn't match).
+            // Skip and leave the entry in pending — operator intervention is preferable
+            // to fabricating a fresh id that diverges from what's in Redis.
+            if (!OutboxMessageId.TryParse(idStr, null, out var id)) continue;
             var entryKey = $"{_options.KeyPrefix}:entry:{idStr}";
             var fields = await _db.HashGetAsync(entryKey,
                 [(RedisValue)"typeName", (RedisValue)"payload", (RedisValue)"retryCount", (RedisValue)"createdAt"])
@@ -96,7 +114,7 @@ public sealed class RedisOutboxStore : IOutboxStore
 
             results.Add(new OutboxEntry
             {
-                Id = ParseId(idStr),
+                Id = id,
                 TypeName = typeName,
                 RawPayload = payload,
                 RetryCount = (int)(fields[2].IsNull ? 0 : (long)fields[2]),
@@ -160,11 +178,4 @@ public sealed class RedisOutboxStore : IOutboxStore
         await tran.ExecuteAsync().ConfigureAwait(false);
     }
 
-    private static OutboxMessageId ParseId(string s)
-    {
-        // OutboxMessageId is a [TypedId] partial record struct whose ToString format is
-        // ULID-style (Crockford base32), NOT a Guid. The TypedId generator emits a TryParse
-        // overload that round-trips the canonical ToString form — use that.
-        return OutboxMessageId.TryParse(s, null, out var id) ? id : OutboxMessageId.New();
-    }
 }

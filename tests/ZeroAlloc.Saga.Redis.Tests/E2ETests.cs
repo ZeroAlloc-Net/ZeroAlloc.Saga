@@ -56,8 +56,29 @@ public sealed class E2ETests : IAsyncLifetime
         var ledger = new CommandLedger();
         CommandLedger.Current = ledger;
 
+        // Regression assertion: confirm the wired-up store is genuinely Redis-backed,
+        // not the InMemorySagaStore default. Stage-2 tests previously passed for the
+        // wrong reason — the generator's WithXxxSaga() emit invoked the registrar only
+        // for the EfCore backend, leaving the InMemory fallback in place under
+        // WithRedisStore. Failing this assertion would mean the saga was running in-process
+        // and Assert.Empty(keys) below could pass without ever exercising Redis.
+        using (var verifyScope = sp.CreateScope())
+        {
+            var resolvedStore = verifyScope.ServiceProvider
+                .GetRequiredService<ISagaStore<OrderFulfillmentSaga, OrderId>>();
+            Assert.IsType<RedisSagaStore<OrderFulfillmentSaga, OrderId>>(resolvedStore);
+        }
+
+        var keyPrefix = sp.GetRequiredService<RedisSagaStoreOptions>().KeyPrefix;
+        var server = _fx.Multiplexer.GetServer(_fx.Multiplexer.GetEndPoints().Single());
+
         var orderId = new OrderId(1001);
         await PublishAsync(sp, new OrderPlaced(orderId, 250m));
+
+        // Mid-flight: the saga is in step 1 of 3, must exist as a Redis Hash.
+        var midKeys = server.Keys(pattern: $"{keyPrefix}:*").ToArray();
+        Assert.NotEmpty(midKeys);
+
         await PublishAsync(sp, new StockReserved(orderId));
         await PublishAsync(sp, new PaymentCharged(orderId));
 
@@ -68,10 +89,7 @@ public sealed class E2ETests : IAsyncLifetime
 #pragma warning restore HLQ005
 
         // Saga removed from Redis after final step.
-        var keyPrefix = sp.GetRequiredService<RedisSagaStoreOptions>().KeyPrefix;
-        var keys = ((IDatabase)_fx.Multiplexer.GetDatabase())
-            .Multiplexer.GetServer(_fx.Multiplexer.GetEndPoints().Single())
-            .Keys(pattern: $"{keyPrefix}:*").ToArray();
+        var keys = server.Keys(pattern: $"{keyPrefix}:*").ToArray();
         Assert.Empty(keys);
     }
 
@@ -118,5 +136,30 @@ public sealed class E2ETests : IAsyncLifetime
         // The saga's Total field was set in Step 1 and survived a Save → Load round-trip
         // through the byte-encoded ISagaPersistableState in Redis.
         Assert.Equal(999.99m, charges[0].Total);
+    }
+
+    [Fact]
+    public async Task FsmState_PersistsAcrossSteps_NotJustUserFields()
+    {
+        // Companion regression for the FSM-restore bug fixed alongside stage 3:
+        // RedisSagaStore.Deserialize previously only rehydrated ISagaPersistableState's
+        // Snapshot bytes, not CurrentFsmStateName. Without the fsmState field, the FSM
+        // resets to Initial after every load, and Step 2's TryFire(StockReserved) fails
+        // silently (returns false). This test exercises that the FSM transitions across
+        // a save/load boundary by checking that step-2 actually fires a command.
+        var sp = BuildHost();
+        var ledger = new CommandLedger();
+        CommandLedger.Current = ledger;
+
+        var orderId = new OrderId(4004);
+        await PublishAsync(sp, new OrderPlaced(orderId, 1m));
+        // After this point, the in-memory saga instance is gone (scoped store, scope
+        // disposed). The next publish forces a Load from Redis, which must restore the
+        // FSM state (step1 → step2) for ChargeCustomer to fire.
+        await PublishAsync(sp, new StockReserved(orderId));
+
+#pragma warning disable HLQ005
+        Assert.Single(ledger.CommandsOfType<ChargeCustomerCommand>());
+#pragma warning restore HLQ005
     }
 }

@@ -11,6 +11,7 @@ namespace ZeroAlloc.Saga.Outbox.Redis;
 /// next <see cref="ISagaStore{TSaga,TKey}.SaveAsync"/>.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Implements <see cref="ISagaUnitOfWork"/> so <c>OutboxSagaCommandDispatcher</c>
 /// enlists writes here. The buffered entries are drained by
 /// <see cref="RedisOutboxTransactionContributor"/> inside the saga store's
@@ -18,6 +19,19 @@ namespace ZeroAlloc.Saga.Outbox.Redis;
 /// failed save discards the writes by virtue of <c>EXEC</c> aborting (saga update +
 /// outbox row roll back together — exactly Phase 3a's atomicity contract, now
 /// extended to Redis).
+/// </para>
+/// <para>
+/// <b>Concurrency contract: one saga handler per DI scope at a time.</b> The
+/// internal buffer is locked, so <see cref="EnlistOutboxRowAsync"/> and
+/// <see cref="Drain"/> are individually thread-safe — but the saga-bridge model
+/// assumes the dispatcher's enlistments and the saga store's <c>SaveAsync</c>
+/// run sequentially within a scope. Two concurrent <c>SaveAsync</c> calls on
+/// the same scope (e.g. <c>Task.WhenAll(handlerA, handlerB)</c> against the
+/// same scope) would interleave drain/enlist non-deterministically — handler
+/// B's writes could be drained into handler A's MULTI, or vice-versa. Use one
+/// scope per saga handler invocation (the generator-emitted retry loop does
+/// this — fresh scope per attempt).
+/// </para>
 /// </remarks>
 public sealed class RedisSagaUnitOfWork : ISagaUnitOfWork
 {
@@ -32,6 +46,10 @@ public sealed class RedisSagaUnitOfWork : ISagaUnitOfWork
     public ValueTask EnlistOutboxRowAsync(string typeName, ReadOnlyMemory<byte> payload, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(typeName);
+        // TODO(perf): payload.ToArray() defeats ArrayPool-backed serializers. A future
+        // optimisation can rent from ArrayPool<byte> and return after Contribute queues
+        // the HSET. Stage-3 priority is correctness; allocation is documented and bounded
+        // by the number of dispatched commands per saga step (typically 1).
         var entry = new PendingWrite(OutboxMessageId.New(), typeName, payload.ToArray(), DateTimeOffset.UtcNow);
         lock (_gate) _pending.Add(entry);
         return ValueTask.CompletedTask;

@@ -39,6 +39,7 @@ public static class SagaOutboxRedisBuilderExtensions
 
         var options = new RedisOutboxOptions();
         configure?.Invoke(options);
+        ValidateOptions(options, builder.Services);
 
         var services = builder.Services;
         services.TryAddSingleton(options);
@@ -67,5 +68,46 @@ public static class SagaOutboxRedisBuilderExtensions
                 sp.GetRequiredService<RedisOutboxOptions>())));
 
         return builder;
+    }
+
+    private static void ValidateOptions(RedisOutboxOptions options, IServiceCollection services)
+    {
+        if (string.IsNullOrWhiteSpace(options.KeyPrefix))
+        {
+            throw new InvalidOperationException(
+                "RedisOutboxOptions.KeyPrefix must be a non-empty, non-whitespace string. " +
+                "An empty prefix would put outbox keys in the root key-space and risk colliding " +
+                "with other Redis-using subsystems.");
+        }
+
+        // Reject prefix collisions with the saga store. If both used the same prefix, an
+        // outbox entry id could collide with a saga key, and (more importantly) a wildcard
+        // KEYS/SCAN cleanup would treat the two namespaces as one and surprise operators.
+        var sagaOptions = TryResolveSagaOptions(services);
+        if (sagaOptions is not null && string.Equals(sagaOptions.KeyPrefix, options.KeyPrefix, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"RedisOutboxOptions.KeyPrefix ('{options.KeyPrefix}') must differ from RedisSagaStoreOptions.KeyPrefix. " +
+                $"Use distinct prefixes (e.g. '{sagaOptions.KeyPrefix}-outbox') so saga state and outbox entries " +
+                "occupy disjoint key-spaces and operational tooling can scope cleanups correctly.");
+        }
+    }
+
+    /// <summary>
+    /// Looks up a previously-registered <see cref="RedisSagaStoreOptions"/> singleton in the
+    /// service collection without building the provider. Used to detect <c>KeyPrefix</c>
+    /// collisions at registration time (before any scope is created).
+    /// </summary>
+    private static RedisSagaStoreOptions? TryResolveSagaOptions(IServiceCollection services)
+    {
+        for (int i = 0; i < services.Count; i++)
+        {
+            var d = services[i];
+            if (d.ServiceType == typeof(RedisSagaStoreOptions) && d.ImplementationInstance is RedisSagaStoreOptions opts)
+            {
+                return opts;
+            }
+        }
+        return null;
     }
 }

@@ -26,12 +26,9 @@ public sealed class E2ETests : IAsyncLifetime
     public ValueTask DisposeAsync() => _fx.DisposeAsync();
     Task IAsyncLifetime.DisposeAsync() => _fx.DisposeAsync().AsTask();
 
-    private (IServiceProvider sp, string outboxPrefix) BuildHost(Action<IServiceCollection>? extra = null)
+    private IServiceProvider BuildHost(string sagaPrefix, string outboxPrefix, Action<IServiceCollection>? extra = null)
     {
         SagaStoreRegistrar.Reset();
-        var outboxPrefix = $"saga-outbox-{Guid.NewGuid():N}";
-        var sagaPrefix = $"saga-{Guid.NewGuid():N}";
-
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddMediator();
@@ -49,7 +46,7 @@ public sealed class E2ETests : IAsyncLifetime
             .WithRedisOutbox(opts => opts.KeyPrefix = outboxPrefix)
             .WithOrderFulfillmentSaga();
         extra?.Invoke(services);
-        return (services.BuildServiceProvider(), outboxPrefix);
+        return services.BuildServiceProvider();
     }
 
     private static async Task PublishAsync<T>(IServiceProvider sp, T evt) where T : INotification
@@ -62,7 +59,9 @@ public sealed class E2ETests : IAsyncLifetime
     [Fact]
     public async Task AtomicCommit_SagaState_AndOutboxRow_BothPersistedTogether()
     {
-        var (sp, prefix) = BuildHost();
+        var sagaPrefix = $"saga-{Guid.NewGuid():N}";
+        var outboxPrefix = $"saga-outbox-{Guid.NewGuid():N}";
+        var sp = BuildHost(sagaPrefix, outboxPrefix);
         var ledger = new CommandLedger();
         CommandLedger.Current = ledger;
 
@@ -71,10 +70,10 @@ public sealed class E2ETests : IAsyncLifetime
 
         // After the handler completes: exactly one outbox row in Redis Pending sorted set.
         var db = _fx.Multiplexer.GetDatabase();
-        var pending = await db.SortedSetRangeByRankWithScoresAsync($"{prefix}:pending");
+        var pending = await db.SortedSetRangeByRankWithScoresAsync($"{outboxPrefix}:pending");
         Assert.Single(pending);
 
-        var entryKey = $"{prefix}:entry:{(string)pending[0].Element!}";
+        var entryKey = $"{outboxPrefix}:entry:{(string)pending[0].Element!}";
         var typeName = (string?)await db.HashGetAsync(entryKey, "typeName");
         Assert.Equal(typeof(ReserveStockCommand).FullName, typeName);
 
@@ -90,49 +89,61 @@ public sealed class E2ETests : IAsyncLifetime
 #pragma warning restore HLQ005
 
         // Pending now empty; succeeded set has the entry.
-        Assert.Empty(await db.SortedSetRangeByRankAsync($"{prefix}:pending"));
-        var succeeded = await db.SetMembersAsync($"{prefix}:succeeded");
+        Assert.Empty(await db.SortedSetRangeByRankAsync($"{outboxPrefix}:pending"));
+        var succeeded = await db.SetMembersAsync($"{outboxPrefix}:succeeded");
         Assert.Single(succeeded);
     }
 
     [Fact]
-    public async Task AtomicRollback_OccConflict_DiscardsOutboxRow()
+    public async Task AtomicRollback_WatchConflict_Mid_MULTI_DiscardsBothSagaState_AndOutboxRow()
     {
-        // THE load-bearing test for stage 3. With WithRedisOutbox(), the outbox-row
-        // write joins the saga store's MULTI/EXEC. A failed save MUST take the outbox
-        // write down with it — no orphan dispatch row.
+        // THE load-bearing test for stage 3. We force a real WATCH conflict mid-MULTI:
+        // a custom IRedisSagaTransactionContributor (registered alongside the outbox
+        // contributor) writes to the saga's watched key via a SIBLING connection
+        // BEFORE EXEC fires. Redis records the modification → EXEC returns null →
+        // RedisSagaConcurrencyException → scope-per-attempt retry. The first attempt's
+        // queued saga-state HSET *and* outbox-row HSET/ZADD are discarded together as
+        // the MULTI batch is abandoned. Only the second attempt's commit produces a
+        // pending outbox row.
+        //
+        // This proves the EXEC-level atomicity claim (saga state and outbox writes
+        // committed-or-discarded as one), not just scope-per-attempt isolation.
         var counter = new SharedAttemptCounter();
-        var (sp, prefix) = BuildHost(services =>
+        var orderId = new OrderId(7002);
+        var sagaPrefix = $"saga-{Guid.NewGuid():N}";
+        var outboxPrefix = $"saga-outbox-{Guid.NewGuid():N}";
+
+        var sp = BuildHost(sagaPrefix, outboxPrefix, services =>
         {
-            // Decorate the saga store with a one-shot conflict thrower. The shared
-            // counter spans per-attempt scopes (the generator's retry loop creates
-            // a new IServiceScope per attempt).
-            for (int i = services.Count - 1; i >= 0; i--)
-            {
-                if (services[i].ServiceType == typeof(ISagaStore<OrderFulfillmentSaga, OrderId>))
-                    services.RemoveAt(i);
-            }
-            services.AddScoped<ISagaStore<OrderFulfillmentSaga, OrderId>>(s =>
-            {
-                var inner = ActivatorUtilities.CreateInstance<RedisSagaStore<OrderFulfillmentSaga, OrderId>>(s);
-                return new OneShotConflictStore(inner, counter);
-            });
+            services.AddScoped<IRedisSagaTransactionContributor>(_ =>
+                new WatchConflictInjector(_fx.Multiplexer.GetDatabase(), sagaPrefix, orderId, counter));
         });
 
         var ledger = new CommandLedger();
         CommandLedger.Current = ledger;
 
-        var orderId = new OrderId(7002);
         await PublishAsync(sp, new OrderPlaced(orderId, 42m));
 
-        // CRITICAL: exactly ONE outbox row even though the saga handler made TWO
-        // attempts (the first conflict, the second succeeded). The first attempt's
-        // enlisted writes were discarded with its disposed scope.
+        // Post-conditions:
+        // 1. Conflict was injected exactly once on attempt 1 (and the contributor was
+        //    invoked at least twice — once per attempt — proving the saga store retried).
+        Assert.Equal(1, counter.ConflictsInjected);
+        Assert.True(counter.Attempts >= 2, $"expected ≥2 attempts, got {counter.Attempts}");
+
+        // 2. Exactly ONE outbox row in pending. Attempt 1's row was inside the
+        //    aborted MULTI; attempt 2's row is the only one that committed.
         var db = _fx.Multiplexer.GetDatabase();
-        var pending = await db.SortedSetRangeByRankWithScoresAsync($"{prefix}:pending");
+        var pending = await db.SortedSetRangeByRankWithScoresAsync($"{outboxPrefix}:pending");
         Assert.Single(pending);
 
-        // Drive the poller — exactly one dispatch.
+        // 3. Saga state matches attempt 2's commit. The injector's transient HSET was
+        //    DEL'd before returning so attempt 2 saw a clean key, then committed normally.
+        var sagaKey = $"{sagaPrefix}:OrderFulfillmentSaga:{orderId}";
+        var version = (string?)await db.HashGetAsync(sagaKey, "version");
+        Assert.NotNull(version);
+        Assert.NotEqual("watch-conflict-injected", version);
+
+        // 4. Driving the poller dispatches exactly once.
         var poller = sp.GetServices<IHostedService>().OfType<OutboxSagaCommandPoller>().Single();
         await poller.PollOnceAsync(default);
 
@@ -141,28 +152,100 @@ public sealed class E2ETests : IAsyncLifetime
 #pragma warning restore HLQ005
     }
 
-    private sealed class SharedAttemptCounter
+    [Fact]
+    public void Dispatcher_And_Contributor_Resolve_Same_UnitOfWork_Instance()
     {
-        private int _saves;
-        public bool TryConsumeFirstSave() => Interlocked.Increment(ref _saves) == 1;
+        // Load-bearing invariant: the dispatcher resolves ISagaUnitOfWork to enlist
+        // outbox-row writes; the contributor resolves RedisSagaUnitOfWork to drain
+        // them inside the saga store's MULTI. If these were two different instances
+        // (e.g. via accidental TryAddScoped registration ordering), enlisted writes
+        // would go to a buffer the contributor never sees, silently breaking atomicity.
+        // This regression test guards against any future change to the WithRedisOutbox
+        // alias-via-factory pattern.
+        var sp = BuildHost($"saga-{Guid.NewGuid():N}", $"saga-outbox-{Guid.NewGuid():N}");
+        using var scope = sp.CreateScope();
+        var asUow = scope.ServiceProvider.GetRequiredService<ISagaUnitOfWork>();
+        var asConcrete = scope.ServiceProvider.GetRequiredService<RedisSagaUnitOfWork>();
+        Assert.Same(asConcrete, asUow);
     }
 
-    private sealed class OneShotConflictStore : ISagaStore<OrderFulfillmentSaga, OrderId>
+    [Fact]
+    public async Task CrossReplica_NoDuplicateOutboxRow_ForSameSagaCorrelation()
     {
-        private readonly ISagaStore<OrderFulfillmentSaga, OrderId> _inner;
+        // The cross-process race claim from docs/outbox-redis.md. Two replicas
+        // (separate IServiceProviders, separate scopes, but the same Redis instance)
+        // process the same OrderPlaced. The saga store's WATCH/MULTI/EXEC OCC ensures
+        // at most one replica's MULTI commits the OrderPlaced step; the other reloads
+        // and observes the existing FSM state, so its OrderPlaced TryFire returns false
+        // (the trigger isn't valid past Initial). Either way: a single outbox row in
+        // pending — no duplicates across replicas.
+        //
+        // This is a serialized two-replica scenario. The WATCH-abort-mid-MULTI
+        // mechanism itself is exercised by AtomicRollback_WatchConflict_Mid_MULTI...
+        var sagaPrefix = $"shared-saga-{Guid.NewGuid():N}";
+        var outboxPrefix = $"shared-outbox-{Guid.NewGuid():N}";
+        var spA = BuildHost(sagaPrefix, outboxPrefix);
+        var spB = BuildHost(sagaPrefix, outboxPrefix);
+
+        var ledger = new CommandLedger();
+        CommandLedger.Current = ledger;
+
+        var orderId = new OrderId(7003);
+        await PublishAsync(spA, new OrderPlaced(orderId, 333m));
+        await PublishAsync(spB, new OrderPlaced(orderId, 333m));
+
+        // Replica B's publish reloaded the saga A wrote. The FSM was already past
+        // Initial → TryFire(OrderPlaced) returned false → no second outbox row.
+        var db = _fx.Multiplexer.GetDatabase();
+        var pending = await db.SortedSetRangeByRankWithScoresAsync($"{outboxPrefix}:pending");
+        Assert.Single(pending);
+    }
+
+    private sealed class SharedAttemptCounter
+    {
+        private int _attempts;
+        private int _conflictsInjected;
+        public int Attempts => Volatile.Read(ref _attempts);
+        public int ConflictsInjected => Volatile.Read(ref _conflictsInjected);
+        public bool TryConsumeFirst()
+        {
+            var n = Interlocked.Increment(ref _attempts);
+            if (n != 1) return false;
+            Interlocked.Increment(ref _conflictsInjected);
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Test-only contributor that triggers a real WATCH abort on its first invocation.
+    /// Writes to the saga's watched key via a sibling Redis connection, then immediately
+    /// deletes the key so the next attempt's TryLoad sees a clean slate. Redis records
+    /// the (transient) modification, so EXEC returns null → RedisSagaConcurrencyException.
+    /// </summary>
+    private sealed class WatchConflictInjector : IRedisSagaTransactionContributor
+    {
+        private readonly IDatabase _siblingDb;
+        private readonly string _sagaPrefix;
+        private readonly OrderId _targetKey;
         private readonly SharedAttemptCounter _counter;
 
-        public OneShotConflictStore(ISagaStore<OrderFulfillmentSaga, OrderId> inner, SharedAttemptCounter counter)
-        { _inner = inner; _counter = counter; }
-
-        public ValueTask<OrderFulfillmentSaga?> TryLoadAsync(OrderId key, CancellationToken ct) => _inner.TryLoadAsync(key, ct);
-        public ValueTask<OrderFulfillmentSaga> LoadOrCreateAsync(OrderId key, CancellationToken ct) => _inner.LoadOrCreateAsync(key, ct);
-        public ValueTask SaveAsync(OrderId key, OrderFulfillmentSaga saga, CancellationToken ct)
+        public WatchConflictInjector(IDatabase siblingDb, string sagaPrefix, OrderId targetKey, SharedAttemptCounter counter)
         {
-            if (_counter.TryConsumeFirstSave())
-                throw new RedisSagaConcurrencyException($"saga-test:{key}");
-            return _inner.SaveAsync(key, saga, ct);
+            _siblingDb = siblingDb;
+            _sagaPrefix = sagaPrefix;
+            _targetKey = targetKey;
+            _counter = counter;
         }
-        public ValueTask RemoveAsync(OrderId key, CancellationToken ct) => _inner.RemoveAsync(key, ct);
+
+        public void Contribute(ITransaction transaction)
+        {
+            if (!_counter.TryConsumeFirst()) return;
+            var sagaKey = $"{_sagaPrefix}:OrderFulfillmentSaga:{_targetKey}";
+            // Modify (creates) and then immediately delete the watched key. Redis records
+            // the modification regardless of net change — EXEC will abort. The DEL ensures
+            // attempt 2's TryLoad observes a non-existent key (fresh saga), not a malformed one.
+            _siblingDb.HashSet(sagaKey, "version", "watch-conflict-injected");
+            _siblingDb.KeyDelete(sagaKey);
+        }
     }
 }

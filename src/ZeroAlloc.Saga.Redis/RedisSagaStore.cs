@@ -116,6 +116,12 @@ public sealed class RedisSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
                 throw new RedisSagaConcurrencyException(redisKey);
             }
 
+            // StackExchange.Redis 2.x ITransaction is a client-side queue: commands
+            // accumulate in the local batch object until ExecuteAsync flushes them
+            // as MULTI/…/EXEC. If a contributor throws below before ExecuteAsync runs,
+            // the unflushed batch is simply discarded with the abandoned ITransaction —
+            // there is no server-side state to clean up, and the WATCH is released by
+            // the UNWATCH in the finally block.
             var tran = _db.CreateTransaction();
             _ = tran.HashSetAsync(redisKey, [
                 new HashEntry("state", stateBytes),
@@ -124,9 +130,7 @@ public sealed class RedisSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
             ]);
             // Drain transaction contributors (e.g. ZeroAlloc.Saga.Outbox.Redis's
             // outbox-row writes) into the same MULTI batch so EXEC commits them
-            // atomically with the saga state save. Materialise to a list so we can
-            // re-iterate on retry if the underlying enumerable is regenerable
-            // (DI scoped services are stable per resolve, but defensive).
+            // atomically with the saga state save.
             foreach (var c in _contributors)
             {
                 c.Contribute(tran);
