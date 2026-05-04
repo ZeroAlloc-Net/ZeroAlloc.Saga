@@ -11,9 +11,12 @@ namespace ZeroAlloc.Saga.Outbox;
 
 /// <summary>
 /// <see cref="ISagaCommandDispatcher"/> that serializes the saga step command via
-/// <see cref="ISerializer{T}"/> resolved from DI and writes it to <see cref="IOutboxStore"/>.
-/// The outbox row commits atomically with the saga state save when both stores share a
-/// transactional substrate (e.g. EfCore's scoped DbContext).
+/// <see cref="ISerializer{T}"/> resolved from DI and writes it to <see cref="IOutboxStore"/>
+/// using the deferred-write API. The outbox row sits in the underlying store's pending
+/// changes (e.g. EfCore's <c>ChangeTracker</c>) until the next sibling write — typically
+/// the saga store's <c>SaveAsync</c> calling <c>SaveChangesAsync</c> on the same scoped
+/// <c>DbContext</c> — which commits both atomically. An OCC retry rolls both back together,
+/// fixing the duplicate-dispatch caveat documented in Saga 1.1.
 /// </summary>
 public sealed class OutboxSagaCommandDispatcher : ISagaCommandDispatcher
 {
@@ -33,10 +36,9 @@ public sealed class OutboxSagaCommandDispatcher : ISagaCommandDispatcher
         var serializer = _services.GetRequiredService<ISerializer<TCommand>>();
         var buffer = new ArrayBufferWriter<byte>();
         serializer.Serialize(buffer, cmd);
-        await _store.EnqueueAsync(
+        await _store.EnqueueDeferredAsync(
             typeName: typeof(TCommand).FullName!,
             payload: buffer.WrittenMemory,
-            transaction: null,
             ct: ct).ConfigureAwait(false);
     }
 }
