@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v1.4.0...ZeroAlloc.Saga-v1.5.0) (2026-05-04)
+
+
+### Features
+
+* **generator:** rename Add{Saga}Saga() → With{Saga}Saga() with [Obsolete] shim ([#27](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/27)) ([879f6c1](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/879f6c17266a565812070ee8d7dd46d20de811e8))
+
 ## [1.4.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v1.3.0...ZeroAlloc.Saga-v1.4.0) (2026-05-04)
 
 
