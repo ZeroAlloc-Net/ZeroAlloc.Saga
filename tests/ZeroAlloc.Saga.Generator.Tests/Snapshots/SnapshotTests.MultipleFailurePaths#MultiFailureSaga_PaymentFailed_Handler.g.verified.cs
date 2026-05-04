@@ -75,7 +75,7 @@ internal sealed class MultiFailureSaga_PaymentFailed_Handler : INotificationHand
                 await store.RemoveAsync(key, ct).ConfigureAwait(false);
                 return;
             }
-            catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsEfCoreConflict(ex))
+            catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsBackendConflict(ex))
             {
                 attempts++;
                 _log.LogWarning("Saga {Saga}: OCC conflict on compensation for key {Key}, retry {Attempt}/{Max}", "MultiFailureSaga", key, attempts, _retry.MaxRetryAttempts);
@@ -84,17 +84,18 @@ internal sealed class MultiFailureSaga_PaymentFailed_Handler : INotificationHand
                     : _retry.RetryBaseDelay;
                 await Task.Delay(delay, ct).ConfigureAwait(false);
             }
-            catch (Exception ex) when (IsEfCoreConflict(ex))
+            catch (Exception ex) when (IsBackendConflict(ex))
             {
                 throw new SagaConcurrencyException("MultiFailureSaga", key.ToString() ?? string.Empty, attempts, ex);
             }
         }
     }
 
-    private static bool IsEfCoreConflict(Exception ex)
+    private static bool IsBackendConflict(Exception ex)
     {
         var typeName = ex.GetType().FullName;
         return typeName == "Microsoft.EntityFrameworkCore.DbUpdateException"
-            || typeName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException";
+            || typeName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException"
+            || typeName == "ZeroAlloc.Saga.Redis.RedisSagaConcurrencyException";
     }
 }

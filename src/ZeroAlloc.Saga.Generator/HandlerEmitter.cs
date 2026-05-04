@@ -34,6 +34,7 @@ internal static class HandlerEmitter
 {
     private const string DbUpdateConcurrencyExceptionFullName = "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException";
     private const string DbUpdateExceptionFullName = "Microsoft.EntityFrameworkCore.DbUpdateException";
+    private const string RedisSagaConcurrencyExceptionFullName = "ZeroAlloc.Saga.Redis.RedisSagaConcurrencyException";
 
     public static void Emit(SourceProductionContext spc, SagaModel model)
     {
@@ -140,7 +141,7 @@ internal static class HandlerEmitter
         // unique-constraint INSERT race when two processes both create a fresh
         // saga row) and DbUpdateConcurrencyException (UPDATE OCC clash) are
         // recovered by the same retry path.
-        sb.AppendLine("            catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsEfCoreConflict(ex))");
+        sb.AppendLine("            catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsBackendConflict(ex))");
         sb.AppendLine("            {");
         sb.AppendLine("                attempts++;");
         sb.Append("                _log.LogWarning(\"Saga {Saga}: OCC conflict on key {Key}, retry {Attempt}/{Max}\", \"")
@@ -150,18 +151,19 @@ internal static class HandlerEmitter
         sb.AppendLine("                    : _retry.RetryBaseDelay;");
         sb.AppendLine("                await Task.Delay(delay, ct).ConfigureAwait(false);");
         sb.AppendLine("            }");
-        sb.AppendLine("            catch (Exception ex) when (IsEfCoreConflict(ex))");
+        sb.AppendLine("            catch (Exception ex) when (IsBackendConflict(ex))");
         sb.AppendLine("            {");
         sb.Append("                throw new SagaConcurrencyException(\"").Append(model.ClassName).AppendLine("\", key.ToString() ?? string.Empty, attempts, ex);");
         sb.AppendLine("            }");
         sb.AppendLine("        }");
         sb.AppendLine("    }");
         sb.AppendLine();
-        sb.AppendLine("    private static bool IsEfCoreConflict(Exception ex)");
+        sb.AppendLine("    private static bool IsBackendConflict(Exception ex)");
         sb.AppendLine("    {");
         sb.AppendLine("        var typeName = ex.GetType().FullName;");
         sb.Append("        return typeName == \"").Append(DbUpdateExceptionFullName).AppendLine("\"");
-        sb.Append("            || typeName == \"").Append(DbUpdateConcurrencyExceptionFullName).AppendLine("\";");
+        sb.Append("            || typeName == \"").Append(DbUpdateConcurrencyExceptionFullName).AppendLine("\"");
+        sb.Append("            || typeName == \"").Append(RedisSagaConcurrencyExceptionFullName).AppendLine("\";");
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
@@ -276,7 +278,7 @@ internal static class HandlerEmitter
         // already been dispatched once; if the entity is still there on retry,
         // they may be dispatched a second time. The retry-loop's "idempotency
         // is the user's responsibility" contract (ZASAGA015) covers this.
-        sb.AppendLine("            catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsEfCoreConflict(ex))");
+        sb.AppendLine("            catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsBackendConflict(ex))");
         sb.AppendLine("            {");
         sb.AppendLine("                attempts++;");
         sb.Append("                _log.LogWarning(\"Saga {Saga}: OCC conflict on compensation for key {Key}, retry {Attempt}/{Max}\", \"")
@@ -286,18 +288,19 @@ internal static class HandlerEmitter
         sb.AppendLine("                    : _retry.RetryBaseDelay;");
         sb.AppendLine("                await Task.Delay(delay, ct).ConfigureAwait(false);");
         sb.AppendLine("            }");
-        sb.AppendLine("            catch (Exception ex) when (IsEfCoreConflict(ex))");
+        sb.AppendLine("            catch (Exception ex) when (IsBackendConflict(ex))");
         sb.AppendLine("            {");
         sb.Append("                throw new SagaConcurrencyException(\"").Append(model.ClassName).AppendLine("\", key.ToString() ?? string.Empty, attempts, ex);");
         sb.AppendLine("            }");
         sb.AppendLine("        }");
         sb.AppendLine("    }");
         sb.AppendLine();
-        sb.AppendLine("    private static bool IsEfCoreConflict(Exception ex)");
+        sb.AppendLine("    private static bool IsBackendConflict(Exception ex)");
         sb.AppendLine("    {");
         sb.AppendLine("        var typeName = ex.GetType().FullName;");
         sb.Append("        return typeName == \"").Append(DbUpdateExceptionFullName).AppendLine("\"");
-        sb.Append("            || typeName == \"").Append(DbUpdateConcurrencyExceptionFullName).AppendLine("\";");
+        sb.Append("            || typeName == \"").Append(DbUpdateConcurrencyExceptionFullName).AppendLine("\"");
+        sb.Append("            || typeName == \"").Append(RedisSagaConcurrencyExceptionFullName).AppendLine("\";");
         sb.AppendLine("    }");
         sb.AppendLine("}");
 

@@ -18,4 +18,7 @@ public interface ISagaBuilderMutable
 {
     /// <summary>Settable mirror of <see cref="ISagaBuilder.IsEfCoreBackend"/>.</summary>
     bool IsEfCoreBackend { get; set; }
+
+    /// <summary>Settable mirror of <see cref="ISagaBuilder.IsRedisBackend"/>.</summary>
+    bool IsRedisBackend { get; set; }
 }

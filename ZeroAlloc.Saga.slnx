@@ -4,6 +4,7 @@
     <Project Path="src/ZeroAlloc.Saga.EfCore/ZeroAlloc.Saga.EfCore.csproj" />
     <Project Path="src/ZeroAlloc.Saga.Generator/ZeroAlloc.Saga.Generator.csproj" />
     <Project Path="src/ZeroAlloc.Saga.Outbox/ZeroAlloc.Saga.Outbox.csproj" />
+    <Project Path="src/ZeroAlloc.Saga.Redis/ZeroAlloc.Saga.Redis.csproj" />
     <Project Path="src/ZeroAlloc.Saga.Resilience/ZeroAlloc.Saga.Resilience.csproj" />
   </Folder>
   <Folder Name="/tests/">
@@ -12,6 +13,7 @@
     <Project Path="tests/ZeroAlloc.Saga.Diagnostics.Tests/ZeroAlloc.Saga.Diagnostics.Tests.csproj" />
     <Project Path="tests/ZeroAlloc.Saga.EfCore.Tests/ZeroAlloc.Saga.EfCore.Tests.csproj" />
     <Project Path="tests/ZeroAlloc.Saga.Outbox.Tests/ZeroAlloc.Saga.Outbox.Tests.csproj" />
+    <Project Path="tests/ZeroAlloc.Saga.Redis.Tests/ZeroAlloc.Saga.Redis.Tests.csproj" />
     <Project Path="tests/ZeroAlloc.Saga.Resilience.Tests/ZeroAlloc.Saga.Resilience.Tests.csproj" />
   </Folder>
   <Folder Name="/samples/">
