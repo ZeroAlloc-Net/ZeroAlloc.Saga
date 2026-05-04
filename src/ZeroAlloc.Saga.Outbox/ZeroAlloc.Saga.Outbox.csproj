@@ -11,6 +11,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\ZeroAlloc.Saga\ZeroAlloc.Saga.csproj" />
+    <PackageReference Include="ZeroAlloc.Mediator" />
     <PackageReference Include="ZeroAlloc.Outbox" />
     <PackageReference Include="ZeroAlloc.Serialisation" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
