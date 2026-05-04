@@ -64,3 +64,31 @@ jobs:
         run: dotnet build samples/AotSmokeEfCore/AotSmokeEfCore.csproj -c Release
       - name: Run AotSmokeEfCore
         run: dotnet run --project samples/AotSmokeEfCore/AotSmokeEfCore.csproj -c Release --no-build
+
+  aot-smoke-outbox:
+    name: publish + run AotSmokeOutbox (linux-x64, outbox bridge)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: Restore solution
+        run: dotnet restore ZeroAlloc.Saga.slnx
+      # Empirically verify the Phase 3a AOT-rooting contract: the saga
+      # generator's [DynamicDependency] on MediatorSagaCommandDispatcher's
+      # constructor must keep ZeroAlloc.Saga.Generated.SagaCommandRegistry
+      # alive after trimming so SagaOutboxBuilderExtensions.CreateRegistryDispatcher
+      # can locate it reflectively. PublishAot=true is set in
+      # AotSmokeOutbox.csproj itself (not on the command line — same reasoning
+      # as AotSmoke). The published binary asserts: saga step → outbox enqueue
+      # → poller drain → mediator dispatch round-trip succeeds. Exit code 0
+      # is the load-bearing assertion — without the [DynamicDependency] the
+      # registry would be trimmed and the first poll cycle would throw
+      # "could not locate the generator-emitted SagaCommandRegistry".
+      - name: Publish AotSmokeOutbox
+        run: dotnet publish samples/AotSmokeOutbox/AotSmokeOutbox.csproj -c Release -o aot-out-outbox
+      - name: Run AotSmokeOutbox
+        run: ./aot-out-outbox/AotSmokeOutbox

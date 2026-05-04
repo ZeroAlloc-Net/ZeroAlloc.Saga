@@ -42,15 +42,15 @@ public static class SagaOutboxBuilderExtensions
         return builder;
     }
 
-    [SuppressMessage(
+    [UnconditionalSuppressMessage(
         "Trimming",
         "IL2026:RequiresUnreferencedCode",
         Justification = "SagaCommandRegistry is rooted by [DynamicDependency(PublicMethods, typeof(SagaCommandRegistry))] emitted on the saga generator's MediatorSagaCommandDispatcher. That dispatcher is rooted by the generator-emitted Add{Saga}Saga DI registration, transitively keeping the registry's DispatchAsync alive under PublishAot=true.")]
-    [SuppressMessage(
+    [UnconditionalSuppressMessage(
         "Trimming",
         "IL2075:RequiresUnreferencedCode",
         Justification = "Same: SagaCommandRegistry's public methods are kept by the [DynamicDependency] on MediatorSagaCommandDispatcher; the GetMethod lookup will find DispatchAsync after trimming.")]
-    [SuppressMessage(
+    [UnconditionalSuppressMessage(
         "AOT",
         "IL3050:RequiresDynamicCode",
         Justification = "Reflective MethodInfo.Invoke is over a non-generic static method; no dynamic code generation needed for AOT.")]
@@ -105,7 +105,7 @@ public static class SagaOutboxBuilderExtensions
             "Ensure ZeroAlloc.Saga 1.2+ is referenced AND at least one [Saga]-decorated class exists in the compilation, AND ZeroAlloc.Serialisation is referenced.");
     }
 
-    [SuppressMessage(
+    [UnconditionalSuppressMessage(
         "Trimming",
         "IL2026:RequiresUnreferencedCode",
         Justification = "Walks loaded assemblies looking for the generator-emitted IMediator; types are rooted by the consumer's Mediator generator.")]
