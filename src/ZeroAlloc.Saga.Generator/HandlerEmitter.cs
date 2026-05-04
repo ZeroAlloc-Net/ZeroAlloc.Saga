@@ -63,6 +63,7 @@ internal static class HandlerEmitter
         sb.AppendLine("using System;");
         sb.AppendLine("using System.Threading;");
         sb.AppendLine("using System.Threading.Tasks;");
+        sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
         sb.AppendLine("using Microsoft.Extensions.Logging;");
         sb.AppendLine("using ZeroAlloc.Mediator;");
         sb.AppendLine("using ZeroAlloc.Saga;");
@@ -76,19 +77,25 @@ internal static class HandlerEmitter
         sb.Append("internal sealed class ").Append(handlerName)
           .Append(" : INotificationHandler<").Append(eventType).AppendLine(">");
         sb.AppendLine("{");
-        sb.Append("    private readonly ISagaStore<").Append(model.ClassName).Append(", ").Append(keyType).AppendLine("> _store;");
+        sb.AppendLine("    // Scope-per-attempt: ISagaStore<TSaga,TKey> and ISagaCommandDispatcher");
+        sb.AppendLine("    // are resolved from a fresh IServiceScope inside the retry loop. On a");
+        sb.AppendLine("    // DbUpdateException / DbUpdateConcurrencyException catch, the scope's");
+        sb.AppendLine("    // DbContext (and any tracked outbox row added by OutboxSagaCommandDispatcher)");
+        sb.AppendLine("    // is disposed before the next attempt — so a retry that eventually succeeds");
+        sb.AppendLine("    // commits exactly ONE outbox row (the winning attempt's). The lock manager,");
+        sb.AppendLine("    // retry options, and logger live outside the per-attempt scope because the");
+        sb.AppendLine("    // lock must be held across the whole retry loop and the others have no");
+        sb.AppendLine("    // per-attempt state.");
+        sb.AppendLine("    private readonly IServiceScopeFactory _scopeFactory;");
         sb.Append("    private readonly SagaLockManager<").Append(keyType).AppendLine("> _locks;");
-        sb.AppendLine("    private readonly ISagaCommandDispatcher _dispatcher;");
         sb.AppendLine("    private readonly SagaRetryOptions _retry;");
         sb.Append("    private readonly ILogger<").Append(handlerName).AppendLine("> _log;");
         sb.AppendLine();
-        sb.Append("    public ").Append(handlerName).Append("(ISagaStore<").Append(model.ClassName)
-          .Append(", ").Append(keyType).Append("> store, SagaLockManager<").Append(keyType)
-          .Append("> locks, ISagaCommandDispatcher dispatcher, SagaRetryOptions retry, ILogger<").Append(handlerName).AppendLine("> log)");
+        sb.Append("    public ").Append(handlerName).Append("(IServiceScopeFactory scopeFactory, SagaLockManager<").Append(keyType)
+          .Append("> locks, SagaRetryOptions retry, ILogger<").Append(handlerName).AppendLine("> log)");
         sb.AppendLine("    {");
-        sb.AppendLine("        _store = store;");
+        sb.AppendLine("        _scopeFactory = scopeFactory;");
         sb.AppendLine("        _locks = locks;");
-        sb.AppendLine("        _dispatcher = dispatcher;");
         sb.AppendLine("        _retry = retry;");
         sb.AppendLine("        _log = log;");
         sb.AppendLine("    }");
@@ -101,9 +108,12 @@ internal static class HandlerEmitter
         sb.AppendLine("        var attempts = 0;");
         sb.AppendLine("        while (true)");
         sb.AppendLine("        {");
+        sb.AppendLine("            using var scope = _scopeFactory.CreateScope();");
+        sb.Append("            var store = scope.ServiceProvider.GetRequiredService<ISagaStore<").Append(model.ClassName).Append(", ").Append(keyType).AppendLine(">>();");
+        sb.AppendLine("            var dispatcher = scope.ServiceProvider.GetRequiredService<ISagaCommandDispatcher>();");
         sb.AppendLine("            try");
         sb.AppendLine("            {");
-        sb.AppendLine("                var saga = await _store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);");
+        sb.AppendLine("                var saga = await store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);");
         sb.Append("                if (!saga.Fsm.TryFire(").Append(fsmType).Append(".Trigger.").Append(eventSimple).AppendLine("))");
         sb.AppendLine("                {");
         sb.Append("                    _log.LogDebug(\"Saga {Saga}: late ").Append(eventSimple).AppendLine(" for key {Key}; ignored\", \"" + model.ClassName + "\", key);");
@@ -111,16 +121,16 @@ internal static class HandlerEmitter
         sb.AppendLine("                }");
         sb.AppendLine();
         sb.Append("                var cmd = saga.").Append(step.MethodName).AppendLine("(@event);");
-        sb.AppendLine("                await _dispatcher.DispatchAsync(cmd, ct).ConfigureAwait(false);");
+        sb.AppendLine("                await dispatcher.DispatchAsync(cmd, ct).ConfigureAwait(false);");
         sb.AppendLine();
         if (isLastStep)
         {
             sb.Append("                saga.Fsm.TryFire(").Append(fsmType).AppendLine(".Trigger.Complete);");
-            sb.AppendLine("                await _store.RemoveAsync(key, ct).ConfigureAwait(false);");
+            sb.AppendLine("                await store.RemoveAsync(key, ct).ConfigureAwait(false);");
         }
         else
         {
-            sb.AppendLine("                await _store.SaveAsync(key, saga, ct).ConfigureAwait(false);");
+            sb.AppendLine("                await store.SaveAsync(key, saga, ct).ConfigureAwait(false);");
         }
         sb.AppendLine("                return;");
         sb.AppendLine("            }");
@@ -172,6 +182,7 @@ internal static class HandlerEmitter
         sb.AppendLine("using System;");
         sb.AppendLine("using System.Threading;");
         sb.AppendLine("using System.Threading.Tasks;");
+        sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
         sb.AppendLine("using Microsoft.Extensions.Logging;");
         sb.AppendLine("using ZeroAlloc.Mediator;");
         sb.AppendLine("using ZeroAlloc.Saga;");
@@ -185,19 +196,17 @@ internal static class HandlerEmitter
         sb.Append("internal sealed class ").Append(handlerName)
           .Append(" : INotificationHandler<").Append(eventType).AppendLine(">");
         sb.AppendLine("{");
-        sb.Append("    private readonly ISagaStore<").Append(model.ClassName).Append(", ").Append(keyType).AppendLine("> _store;");
+        sb.AppendLine("    // Scope-per-attempt: see the same-named comment in the forward handler.");
+        sb.AppendLine("    private readonly IServiceScopeFactory _scopeFactory;");
         sb.Append("    private readonly SagaLockManager<").Append(keyType).AppendLine("> _locks;");
-        sb.AppendLine("    private readonly ISagaCommandDispatcher _dispatcher;");
         sb.AppendLine("    private readonly SagaRetryOptions _retry;");
         sb.Append("    private readonly ILogger<").Append(handlerName).AppendLine("> _log;");
         sb.AppendLine();
-        sb.Append("    public ").Append(handlerName).Append("(ISagaStore<").Append(model.ClassName)
-          .Append(", ").Append(keyType).Append("> store, SagaLockManager<").Append(keyType)
-          .Append("> locks, ISagaCommandDispatcher dispatcher, SagaRetryOptions retry, ILogger<").Append(handlerName).AppendLine("> log)");
+        sb.Append("    public ").Append(handlerName).Append("(IServiceScopeFactory scopeFactory, SagaLockManager<").Append(keyType)
+          .Append("> locks, SagaRetryOptions retry, ILogger<").Append(handlerName).AppendLine("> log)");
         sb.AppendLine("    {");
-        sb.AppendLine("        _store = store;");
+        sb.AppendLine("        _scopeFactory = scopeFactory;");
         sb.AppendLine("        _locks = locks;");
-        sb.AppendLine("        _dispatcher = dispatcher;");
         sb.AppendLine("        _retry = retry;");
         sb.AppendLine("        _log = log;");
         sb.AppendLine("    }");
@@ -211,9 +220,12 @@ internal static class HandlerEmitter
         sb.AppendLine("        var attempts = 0;");
         sb.AppendLine("        while (true)");
         sb.AppendLine("        {");
+        sb.AppendLine("            using var scope = _scopeFactory.CreateScope();");
+        sb.Append("            var store = scope.ServiceProvider.GetRequiredService<ISagaStore<").Append(model.ClassName).Append(", ").Append(keyType).AppendLine(">>();");
+        sb.AppendLine("            var dispatcher = scope.ServiceProvider.GetRequiredService<ISagaCommandDispatcher>();");
         sb.AppendLine("            try");
         sb.AppendLine("            {");
-        sb.AppendLine("                var saga = await _store.TryLoadAsync(key, ct).ConfigureAwait(false);");
+        sb.AppendLine("                var saga = await store.TryLoadAsync(key, ct).ConfigureAwait(false);");
         sb.AppendLine("                if (saga is null)");
         sb.AppendLine("                {");
         sb.Append("                    _log.LogWarning(\"Saga {Saga}: orphan ").Append(eventSimple).AppendLine(" for key {Key}; no instance to compensate\", \"" + model.ClassName + "\", key);");
@@ -246,7 +258,7 @@ internal static class HandlerEmitter
             {
                 var s = model.Steps[j];
                 if (s.CompensateMethodName is null) continue;
-                sb.Append("                        await _dispatcher.DispatchAsync(saga.").Append(s.CompensateMethodName).AppendLine("(), ct).ConfigureAwait(false);");
+                sb.Append("                        await dispatcher.DispatchAsync(saga.").Append(s.CompensateMethodName).AppendLine("(), ct).ConfigureAwait(false);");
             }
             sb.AppendLine("                        break;");
         }
@@ -254,7 +266,7 @@ internal static class HandlerEmitter
         sb.AppendLine("                }");
         sb.AppendLine();
         sb.Append("                saga.Fsm.TryFire(").Append(fsmType).AppendLine(".Trigger.CompensateDone);");
-        sb.AppendLine("                await _store.RemoveAsync(key, ct).ConfigureAwait(false);");
+        sb.AppendLine("                await store.RemoveAsync(key, ct).ConfigureAwait(false);");
         sb.AppendLine("                return;");
         sb.AppendLine("            }");
         // Note: if RemoveAsync throws DbUpdateConcurrencyException (third-party

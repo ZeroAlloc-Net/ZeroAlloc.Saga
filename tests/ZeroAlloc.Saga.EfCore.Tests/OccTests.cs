@@ -100,12 +100,13 @@ public sealed class OccTests
                 services.RemoveAt(i);
             }
         }
+        var insertRaceCounter = new SharedAttemptCounter();
         services.AddScoped<ISagaStore<OrderFulfillmentSaga, OrderId>>(sp =>
         {
             var inner = new EfCoreSagaStore<OrderFulfillmentSaga, OrderId>(
                 sp.GetRequiredService<TestDbContext>(),
                 NullLogger<EfCoreSagaStore<OrderFulfillmentSaga, OrderId>>.Instance);
-            return new OneShotInsertRaceStore(inner);
+            return new OneShotInsertRaceStore(inner, insertRaceCounter);
         });
 
         var sp = services.BuildServiceProvider();
@@ -127,8 +128,9 @@ public sealed class OccTests
     private sealed class OneShotInsertRaceStore : ISagaStore<OrderFulfillmentSaga, OrderId>
     {
         private readonly ISagaStore<OrderFulfillmentSaga, OrderId> _inner;
-        private int _attemptedSaves;
-        public OneShotInsertRaceStore(ISagaStore<OrderFulfillmentSaga, OrderId> inner) => _inner = inner;
+        private readonly SharedAttemptCounter _counter;
+        public OneShotInsertRaceStore(ISagaStore<OrderFulfillmentSaga, OrderId> inner, SharedAttemptCounter counter)
+        { _inner = inner; _counter = counter; }
 
         public ValueTask<OrderFulfillmentSaga?> TryLoadAsync(OrderId key, CancellationToken ct)
             => _inner.TryLoadAsync(key, ct);
@@ -136,7 +138,7 @@ public sealed class OccTests
             => _inner.LoadOrCreateAsync(key, ct);
         public ValueTask SaveAsync(OrderId key, OrderFulfillmentSaga saga, CancellationToken ct)
         {
-            if (System.Threading.Interlocked.Increment(ref _attemptedSaves) == 1)
+            if (_counter.TryConsumeFirstSave())
             {
                 // Simulate a unique-constraint INSERT race: DbUpdateException,
                 // NOT a DbUpdateConcurrencyException. Pre-Fix-C1 the handler
@@ -177,12 +179,17 @@ public sealed class OccTests
                 services.RemoveAt(i);
             }
         }
+        // Counter lives outside the per-attempt scope (the saga handler now
+        // resolves ISagaStore<> from a fresh scope on every attempt). A
+        // shared counter ensures only the FIRST physical save throws —
+        // subsequent attempts see the inner store cleanly.
+        var attemptCounter = new SharedAttemptCounter();
         services.AddScoped<ISagaStore<OrderFulfillmentSaga, OrderId>>(sp =>
         {
             var inner = new EfCoreSagaStore<OrderFulfillmentSaga, OrderId>(
                 sp.GetRequiredService<TestDbContext>(),
                 NullLogger<EfCoreSagaStore<OrderFulfillmentSaga, OrderId>>.Instance);
-            return new OneShotConflictStore(inner);
+            return new OneShotConflictStore(inner, attemptCounter);
         });
 
         var sp = services.BuildServiceProvider();
@@ -198,15 +205,28 @@ public sealed class OccTests
         // (initial attempt + retry). At-most-once-from-OCC's-view but
         // at-least-once-from-mediator's-view; idempotency is the user's
         // responsibility under OCC retry (ZASAGA015 documents this).
+        //
+        // Note: the bare ISagaCommandDispatcher used here forwards to
+        // IMediator.Send synchronously, so the failed first attempt's
+        // dispatch IS observed. Under the Saga.Outbox bridge the dispatch
+        // is deferred to the outbox row commit, which rolls back with the
+        // failed scope's DbContext — see Saga.Outbox.Tests for that path.
         Assert.True(ledger.CommandsOfType<ReserveStockCommand>().Count >= 2,
             "Expected ReserveStock to be dispatched at least twice (initial attempt + retry after conflict)");
+    }
+
+    private sealed class SharedAttemptCounter
+    {
+        private int _attemptedSaves;
+        public bool TryConsumeFirstSave() => System.Threading.Interlocked.Increment(ref _attemptedSaves) == 1;
     }
 
     private sealed class OneShotConflictStore : ISagaStore<OrderFulfillmentSaga, OrderId>
     {
         private readonly ISagaStore<OrderFulfillmentSaga, OrderId> _inner;
-        private int _attemptedSaves;
-        public OneShotConflictStore(ISagaStore<OrderFulfillmentSaga, OrderId> inner) => _inner = inner;
+        private readonly SharedAttemptCounter _counter;
+        public OneShotConflictStore(ISagaStore<OrderFulfillmentSaga, OrderId> inner, SharedAttemptCounter counter)
+        { _inner = inner; _counter = counter; }
 
         public ValueTask<OrderFulfillmentSaga?> TryLoadAsync(OrderId key, CancellationToken ct)
             => _inner.TryLoadAsync(key, ct);
@@ -214,7 +234,7 @@ public sealed class OccTests
             => _inner.LoadOrCreateAsync(key, ct);
         public ValueTask SaveAsync(OrderId key, OrderFulfillmentSaga saga, CancellationToken ct)
         {
-            if (System.Threading.Interlocked.Increment(ref _attemptedSaves) == 1)
+            if (_counter.TryConsumeFirstSave())
             {
                 throw new DbUpdateConcurrencyException("Transient conflict (test).");
             }

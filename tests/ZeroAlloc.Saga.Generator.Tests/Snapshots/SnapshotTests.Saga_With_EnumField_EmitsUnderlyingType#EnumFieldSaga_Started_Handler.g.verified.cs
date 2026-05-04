@@ -4,6 +4,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ZeroAlloc.Mediator;
 using ZeroAlloc.Saga;
@@ -12,17 +13,24 @@ namespace Sample;
 
 internal sealed class EnumFieldSaga_Started_Handler : INotificationHandler<global::Sample.Started>
 {
-    private readonly ISagaStore<EnumFieldSaga, int> _store;
+    // Scope-per-attempt: ISagaStore<TSaga,TKey> and ISagaCommandDispatcher
+    // are resolved from a fresh IServiceScope inside the retry loop. On a
+    // DbUpdateException / DbUpdateConcurrencyException catch, the scope's
+    // DbContext (and any tracked outbox row added by OutboxSagaCommandDispatcher)
+    // is disposed before the next attempt — so a retry that eventually succeeds
+    // commits exactly ONE outbox row (the winning attempt's). The lock manager,
+    // retry options, and logger live outside the per-attempt scope because the
+    // lock must be held across the whole retry loop and the others have no
+    // per-attempt state.
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly SagaLockManager<int> _locks;
-    private readonly ISagaCommandDispatcher _dispatcher;
     private readonly SagaRetryOptions _retry;
     private readonly ILogger<EnumFieldSaga_Started_Handler> _log;
 
-    public EnumFieldSaga_Started_Handler(ISagaStore<EnumFieldSaga, int> store, SagaLockManager<int> locks, ISagaCommandDispatcher dispatcher, SagaRetryOptions retry, ILogger<EnumFieldSaga_Started_Handler> log)
+    public EnumFieldSaga_Started_Handler(IServiceScopeFactory scopeFactory, SagaLockManager<int> locks, SagaRetryOptions retry, ILogger<EnumFieldSaga_Started_Handler> log)
     {
-        _store = store;
+        _scopeFactory = scopeFactory;
         _locks = locks;
-        _dispatcher = dispatcher;
         _retry = retry;
         _log = log;
     }
@@ -35,9 +43,12 @@ internal sealed class EnumFieldSaga_Started_Handler : INotificationHandler<globa
         var attempts = 0;
         while (true)
         {
+            using var scope = _scopeFactory.CreateScope();
+            var store = scope.ServiceProvider.GetRequiredService<ISagaStore<EnumFieldSaga, int>>();
+            var dispatcher = scope.ServiceProvider.GetRequiredService<ISagaCommandDispatcher>();
             try
             {
-                var saga = await _store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);
+                var saga = await store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);
                 if (!saga.Fsm.TryFire(EnumFieldSagaFsm.Trigger.Started))
                 {
                     _log.LogDebug("Saga {Saga}: late Started for key {Key}; ignored", "EnumFieldSaga", key);
@@ -45,10 +56,10 @@ internal sealed class EnumFieldSaga_Started_Handler : INotificationHandler<globa
                 }
 
                 var cmd = saga.Step1(@event);
-                await _dispatcher.DispatchAsync(cmd, ct).ConfigureAwait(false);
+                await dispatcher.DispatchAsync(cmd, ct).ConfigureAwait(false);
 
                 saga.Fsm.TryFire(EnumFieldSagaFsm.Trigger.Complete);
-                await _store.RemoveAsync(key, ct).ConfigureAwait(false);
+                await store.RemoveAsync(key, ct).ConfigureAwait(false);
                 return;
             }
             catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsEfCoreConflict(ex))

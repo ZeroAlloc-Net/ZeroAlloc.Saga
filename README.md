@@ -2,14 +2,16 @@
 
 Source-generated long-running process orchestration for the ZeroAlloc ecosystem.
 
-> **Status:** AOT compatible. The `ZeroAlloc.Saga.Outbox` bridge
-> (this release) commits every step command atomically with the saga
-> state save, eliminating the cross-process "OCC retry can dispatch
-> twice" race. Durable persistence via `ZeroAlloc.Saga.EfCore` (single
-> shared `SagaInstance` table, row-version OCC, retry-on-conflict) is
-> unchanged. InMemory remains the default backend; switch to EfCore
-> with one fluent call, and opt into the outbox bridge with
-> `.WithOutbox()`. See
+> **Status:** AOT compatible. The generator-emitted saga handler runs
+> each OCC retry attempt in a fresh `IServiceScope`, and the
+> `ZeroAlloc.Saga.Outbox` bridge commits every step command's dispatch
+> row atomically with the saga state save — together they eliminate
+> Saga 1.1's "OCC retry can dispatch twice" caveat for both
+> cross-process races and same-process retries. Durable persistence via
+> `ZeroAlloc.Saga.EfCore` (single shared `SagaInstance` table,
+> row-version OCC, retry-on-conflict) is unchanged. InMemory remains
+> the default backend; switch to EfCore with one fluent call, and opt
+> into the outbox bridge with `.WithOutbox()`. See
 > [`docs/persistence-efcore.md`](docs/persistence-efcore.md) and
 > [`docs/outbox.md`](docs/outbox.md).
 
@@ -93,8 +95,7 @@ services.AddSaga()
 Requires `ZeroAlloc.Outbox` 2.4.0+ (introduces
 `IOutboxStore.EnqueueDeferredAsync`) and `ZeroAlloc.Serialisation` 2.1.0+.
 See [`docs/outbox.md`](docs/outbox.md) for the full setup, marker
-diagnostics (`ZASAGA016`/`ZASAGA017`), poller knobs, and the residual
-same-process retry caveat.
+diagnostics (`ZASAGA016`/`ZASAGA017`), and poller knobs.
 
 ### `ZeroAlloc.Saga` runtime
 
@@ -223,15 +224,6 @@ worked example.
 
 ## Known limitations
 
-- **Same-process OCC retry retains at-least-once command dispatch.** The
-  `Saga.Outbox` bridge eliminates the cross-process duplicate-dispatch
-  race (the dispatch row commits atomically with the saga state save), but
-  the generator-emitted handler reuses the same scoped `DbContext` across
-  retry attempts within one process. EF Core does not clear the
-  `ChangeTracker` on `DbUpdateConcurrencyException`, so a retried
-  in-process attempt that eventually succeeds will commit *both* outbox
-  rows. Step command handlers must remain idempotent (`ZASAGA015`). See
-  [`docs/outbox.md`](docs/outbox.md) for the full discussion.
 - **InMemory persistence is not durable.** Process crash loses all in-flight
   sagas. Switch to `ZeroAlloc.Saga.EfCore` for durability.
 - **`ZeroAlloc.Saga.EfCore` Native AOT publish** — the runtime library
