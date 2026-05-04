@@ -24,6 +24,7 @@ public static class AuditSagaBuilderExtensions
         builder.Services.TryAddSingleton<SagaLockManager<global::Sample.OrderId>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<AuditSaga>, AuditSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<AuditSaga, global::Sample.OrderId>, SagaManager<AuditSaga, global::Sample.OrderId>>();
+        builder.Services.TryAddScoped<global::ZeroAlloc.Saga.ISagaCommandDispatcher, global::ZeroAlloc.Saga.Generated.MediatorSagaCommandDispatcher>();
 
         builder.Services.AddTransient<INotificationHandler<global::Sample.OrderShipped>, AuditSaga_OrderShipped_Handler>();
         return builder;
@@ -32,8 +33,8 @@ public static class AuditSagaBuilderExtensions
 
 internal sealed class AuditSagaCompensationDispatcher : ISagaCompensationDispatcher<AuditSaga>
 {
-    private readonly IMediator _mediator;
-    public AuditSagaCompensationDispatcher(IMediator mediator) => _mediator = mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
+    public AuditSagaCompensationDispatcher(ISagaCommandDispatcher dispatcher) => _dispatcher = dispatcher;
 
     public async ValueTask CompensateAsync(AuditSaga saga, CancellationToken ct)
     {

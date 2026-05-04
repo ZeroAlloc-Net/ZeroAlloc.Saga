@@ -24,6 +24,7 @@ public static class ThreeStepSagaBuilderExtensions
         builder.Services.TryAddSingleton<SagaLockManager<global::Sample.OrderId>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<ThreeStepSaga>, ThreeStepSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<ThreeStepSaga, global::Sample.OrderId>, SagaManager<ThreeStepSaga, global::Sample.OrderId>>();
+        builder.Services.TryAddScoped<global::ZeroAlloc.Saga.ISagaCommandDispatcher, global::ZeroAlloc.Saga.Generated.MediatorSagaCommandDispatcher>();
 
         builder.Services.AddTransient<INotificationHandler<global::Sample.OrderPlaced>, ThreeStepSaga_OrderPlaced_Handler>();
         builder.Services.AddTransient<INotificationHandler<global::Sample.StockReserved>, ThreeStepSaga_StockReserved_Handler>();
@@ -35,8 +36,8 @@ public static class ThreeStepSagaBuilderExtensions
 
 internal sealed class ThreeStepSagaCompensationDispatcher : ISagaCompensationDispatcher<ThreeStepSaga>
 {
-    private readonly IMediator _mediator;
-    public ThreeStepSagaCompensationDispatcher(IMediator mediator) => _mediator = mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
+    public ThreeStepSagaCompensationDispatcher(ISagaCommandDispatcher dispatcher) => _dispatcher = dispatcher;
 
     public async ValueTask CompensateAsync(ThreeStepSaga saga, CancellationToken ct)
     {
@@ -44,15 +45,15 @@ internal sealed class ThreeStepSagaCompensationDispatcher : ISagaCompensationDis
         switch (stateAtFailure)
         {
             case ThreeStepSagaFsm.State.Step3:
-                await _mediator.Send(saga.Refund(), ct).ConfigureAwait(false);
-                await _mediator.Send(saga.CancelReservation(), ct).ConfigureAwait(false);
+                await _dispatcher.DispatchAsync(saga.Refund(), ct).ConfigureAwait(false);
+                await _dispatcher.DispatchAsync(saga.CancelReservation(), ct).ConfigureAwait(false);
                 break;
             case ThreeStepSagaFsm.State.Step2:
-                await _mediator.Send(saga.Refund(), ct).ConfigureAwait(false);
-                await _mediator.Send(saga.CancelReservation(), ct).ConfigureAwait(false);
+                await _dispatcher.DispatchAsync(saga.Refund(), ct).ConfigureAwait(false);
+                await _dispatcher.DispatchAsync(saga.CancelReservation(), ct).ConfigureAwait(false);
                 break;
             case ThreeStepSagaFsm.State.Step1:
-                await _mediator.Send(saga.CancelReservation(), ct).ConfigureAwait(false);
+                await _dispatcher.DispatchAsync(saga.CancelReservation(), ct).ConfigureAwait(false);
                 break;
             default: break;
         }

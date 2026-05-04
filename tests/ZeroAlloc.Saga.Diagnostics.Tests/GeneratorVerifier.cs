@@ -19,12 +19,25 @@ internal static class GeneratorVerifier
     private static readonly IReadOnlyList<MetadataReference> References = BuildReferences();
 
     public static Task<ImmutableArrayWrapper> RunAsync(string source, CancellationToken ct = default)
+        => RunAsync(source, extraReferences: null, ct);
+
+    /// <summary>
+    /// Variant that adds extra <see cref="MetadataReference"/>s to the test
+    /// compilation. Used by ZASAGA017 tests to simulate a step command type
+    /// declared in a referenced assembly.
+    /// </summary>
+    public static Task<ImmutableArrayWrapper> RunAsync(
+        string source,
+        IEnumerable<MetadataReference>? extraReferences,
+        CancellationToken ct = default)
     {
         var syntaxTree = CSharpSyntaxTree.ParseText(source, cancellationToken: ct);
+        var allRefs = new List<MetadataReference>(References);
+        if (extraReferences is not null) allRefs.AddRange(extraReferences);
         var compilation = CSharpCompilation.Create(
             assemblyName: "Saga.Diag.Test",
             syntaxTrees: new[] { syntaxTree },
-            references: References,
+            references: allRefs,
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
 
         var driver = CSharpGeneratorDriver.Create(new ZeroAlloc.Saga.Generator.SagaGenerator())
@@ -32,6 +45,30 @@ internal static class GeneratorVerifier
 
         var result = driver.GetRunResult();
         return Task.FromResult(new ImmutableArrayWrapper(result.Diagnostics));
+    }
+
+    /// <summary>
+    /// Compiles a source string into an in-memory PE image and returns a
+    /// <see cref="MetadataReference"/> to it. Used to materialize types
+    /// declared in a "referenced assembly" for cross-assembly tests.
+    /// </summary>
+    public static MetadataReference CompileToReference(string source, string assemblyName)
+    {
+        var syntaxTree = CSharpSyntaxTree.ParseText(source);
+        var compilation = CSharpCompilation.Create(
+            assemblyName: assemblyName,
+            syntaxTrees: new[] { syntaxTree },
+            references: References,
+            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
+        var ms = new System.IO.MemoryStream();
+        var emit = compilation.Emit(ms);
+        if (!emit.Success)
+        {
+            var msgs = string.Join("\n", System.Linq.Enumerable.Select(emit.Diagnostics, d => d.ToString()));
+            throw new System.InvalidOperationException("Helper compilation failed:\n" + msgs);
+        }
+        ms.Position = 0;
+        return MetadataReference.CreateFromStream(ms);
     }
 
     public static async Task ExpectAsync(string source, params string[] diagnosticIds)

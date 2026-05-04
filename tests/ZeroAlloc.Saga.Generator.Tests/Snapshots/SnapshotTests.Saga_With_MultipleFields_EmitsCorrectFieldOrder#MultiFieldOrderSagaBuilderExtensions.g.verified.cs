@@ -24,6 +24,7 @@ public static class MultiFieldOrderSagaBuilderExtensions
         builder.Services.TryAddSingleton<SagaLockManager<int>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<MultiFieldOrderSaga>, MultiFieldOrderSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<MultiFieldOrderSaga, int>, SagaManager<MultiFieldOrderSaga, int>>();
+        builder.Services.TryAddScoped<global::ZeroAlloc.Saga.ISagaCommandDispatcher, global::ZeroAlloc.Saga.Generated.MediatorSagaCommandDispatcher>();
 
         builder.Services.AddTransient<INotificationHandler<global::Sample.Started>, MultiFieldOrderSaga_Started_Handler>();
         return builder;
@@ -32,8 +33,8 @@ public static class MultiFieldOrderSagaBuilderExtensions
 
 internal sealed class MultiFieldOrderSagaCompensationDispatcher : ISagaCompensationDispatcher<MultiFieldOrderSaga>
 {
-    private readonly IMediator _mediator;
-    public MultiFieldOrderSagaCompensationDispatcher(IMediator mediator) => _mediator = mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
+    public MultiFieldOrderSagaCompensationDispatcher(ISagaCommandDispatcher dispatcher) => _dispatcher = dispatcher;
 
     public async ValueTask CompensateAsync(MultiFieldOrderSaga saga, CancellationToken ct)
     {

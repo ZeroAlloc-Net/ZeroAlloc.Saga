@@ -24,6 +24,7 @@ public static class PrimitiveFieldsSagaBuilderExtensions
         builder.Services.TryAddSingleton<SagaLockManager<int>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<PrimitiveFieldsSaga>, PrimitiveFieldsSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<PrimitiveFieldsSaga, int>, SagaManager<PrimitiveFieldsSaga, int>>();
+        builder.Services.TryAddScoped<global::ZeroAlloc.Saga.ISagaCommandDispatcher, global::ZeroAlloc.Saga.Generated.MediatorSagaCommandDispatcher>();
 
         builder.Services.AddTransient<INotificationHandler<global::Sample.Started>, PrimitiveFieldsSaga_Started_Handler>();
         return builder;
@@ -32,8 +33,8 @@ public static class PrimitiveFieldsSagaBuilderExtensions
 
 internal sealed class PrimitiveFieldsSagaCompensationDispatcher : ISagaCompensationDispatcher<PrimitiveFieldsSaga>
 {
-    private readonly IMediator _mediator;
-    public PrimitiveFieldsSagaCompensationDispatcher(IMediator mediator) => _mediator = mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
+    public PrimitiveFieldsSagaCompensationDispatcher(ISagaCommandDispatcher dispatcher) => _dispatcher = dispatcher;
 
     public async ValueTask CompensateAsync(PrimitiveFieldsSaga saga, CancellationToken ct)
     {

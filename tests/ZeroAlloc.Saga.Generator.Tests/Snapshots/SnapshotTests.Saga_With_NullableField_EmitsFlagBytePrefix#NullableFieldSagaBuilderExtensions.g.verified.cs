@@ -24,6 +24,7 @@ public static class NullableFieldSagaBuilderExtensions
         builder.Services.TryAddSingleton<SagaLockManager<int>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<NullableFieldSaga>, NullableFieldSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<NullableFieldSaga, int>, SagaManager<NullableFieldSaga, int>>();
+        builder.Services.TryAddScoped<global::ZeroAlloc.Saga.ISagaCommandDispatcher, global::ZeroAlloc.Saga.Generated.MediatorSagaCommandDispatcher>();
 
         builder.Services.AddTransient<INotificationHandler<global::Sample.Started>, NullableFieldSaga_Started_Handler>();
         return builder;
@@ -32,8 +33,8 @@ public static class NullableFieldSagaBuilderExtensions
 
 internal sealed class NullableFieldSagaCompensationDispatcher : ISagaCompensationDispatcher<NullableFieldSaga>
 {
-    private readonly IMediator _mediator;
-    public NullableFieldSagaCompensationDispatcher(IMediator mediator) => _mediator = mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
+    public NullableFieldSagaCompensationDispatcher(ISagaCommandDispatcher dispatcher) => _dispatcher = dispatcher;
 
     public async ValueTask CompensateAsync(NullableFieldSaga saga, CancellationToken ct)
     {

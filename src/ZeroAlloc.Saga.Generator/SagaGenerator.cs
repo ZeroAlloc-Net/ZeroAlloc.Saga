@@ -56,6 +56,107 @@ public sealed class SagaGenerator : IIncrementalGenerator
             ReportCrossSagaDiagnostics(spc, results);
         });
 
+        // Per-compilation SagaCommandRegistry — single emit covering every
+        // forward and compensation command type across all sagas in the consumer
+        // assembly. Conditional on ZeroAlloc.Serialisation being referenced — the
+        // registry uses ISerializer<T> to deserialize outbox payloads, so without
+        // the package the emitted code wouldn't compile. Saga consumers that
+        // don't use the outbox bridge see no change in generator output.
+        var serialisationReferenced = context.CompilationProvider
+            .Select(static (compilation, _) =>
+                compilation.GetTypeByMetadataName("ZeroAlloc.Serialisation.ZeroAllocSerializableAttribute") is not null);
+
+        // Per-compilation MediatorSagaCommandDispatcher — single emit covering every
+        // [Step] command type across all sagas in the consumer assembly. Lives in the
+        // consumer's compilation so it can reference IMediator directly (which is
+        // emitted per-assembly by the Mediator source generator). Combined with
+        // serialisationReferenced so the emitter can attach a [DynamicDependency]
+        // on SagaCommandRegistry when (and only when) the registry is also being
+        // emitted — this roots the registry under PublishAot=true.
+        context.RegisterSourceOutput(
+            allModels.Combine(serialisationReferenced),
+            static (spc, tuple) =>
+            {
+                var (results, hasSerialisation) = tuple;
+                MediatorSagaCommandDispatcherEmitter.Emit(spc, results, registryAlsoEmitted: hasSerialisation);
+            });
+
+        context.RegisterSourceOutput(
+            allModels.Combine(serialisationReferenced),
+            static (spc, tuple) =>
+            {
+                var (results, hasSerialisation) = tuple;
+                if (!hasSerialisation) return;
+                SagaCommandRegistryEmitter.Emit(spc, results);
+            });
+
+        // Auto-apply [ZeroAllocSerializable(SerializationFormat.SystemTextJson)] to each
+        // step command type via a partial-class extension when ZeroAlloc.Serialisation
+        // is referenced. Skips cross-assembly types (ZASAGA017), non-partial types
+        // (ZASAGA016), and types where the user already applied the attribute themselves.
+        // The CompilationProvider is required to resolve the existing-attribute check
+        // and to determine the type-keyword sequence (record/struct/class).
+        context.RegisterSourceOutput(
+            allModels.Combine(context.CompilationProvider),
+            static (spc, tuple) =>
+            {
+                var (results, compilation) = tuple;
+                SerializableExtensionEmitter.Emit(spc, results, compilation);
+            });
+
+        // ZASAGA016 / ZASAGA017 — fired only when ZeroAlloc.Serialisation is
+        // referenced. ZASAGA016 (Warning) covers step command types declared in
+        // the current compilation that are not yet 'partial'; the Saga generator
+        // needs the partial modifier to attach [ZeroAllocSerializable] via
+        // partial-class extension. ZASAGA017 (Info) covers step command types
+        // declared in a referenced assembly — partial-class extension cannot
+        // reach foreign types, so the user must apply [ZeroAllocSerializable]
+        // manually at the type's source declaration site.
+        context.RegisterSourceOutput(
+            allModels.Combine(serialisationReferenced),
+            static (spc, tuple) =>
+            {
+                var (results, hasSerialisation) = tuple;
+                if (!hasSerialisation) return;
+
+                // De-dupe by command type FQN so a single command used by multiple
+                // steps / sagas only fires once per category.
+                var reportedNotPartial = new HashSet<string>(System.StringComparer.Ordinal);
+                var reportedCrossAssembly = new HashSet<string>(System.StringComparer.Ordinal);
+
+                foreach (var result in results)
+                {
+                    var model = result.Model;
+                    if (model is null) continue;
+                    foreach (var step in model.Steps)
+                    {
+                        if (step.CommandTypeIsInOwnAssembly == true)
+                        {
+                            if (!step.CommandTypeIsPartial && reportedNotPartial.Add(step.CommandTypeFqn))
+                            {
+                                spc.ReportDiagnostic(Diagnostic.Create(
+                                    SagaDiagnostics.StepCommandTypeNotPartial,
+                                    location: step.CommandTypeLocation,
+                                    step.CommandTypeFqn));
+                            }
+                        }
+                        else if (step.CommandTypeIsInOwnAssembly == false)
+                        {
+                            // Cross-assembly: location is None — the type's
+                            // declaration is not in this compilation. That's
+                            // acceptable for an Info-severity diagnostic.
+                            if (reportedCrossAssembly.Add(step.CommandTypeFqn))
+                            {
+                                spc.ReportDiagnostic(Diagnostic.Create(
+                                    SagaDiagnostics.StepCommandTypeCrossAssembly,
+                                    location: Location.None,
+                                    step.CommandTypeFqn));
+                            }
+                        }
+                    }
+                }
+            });
+
         // ZASAGA015: best-effort idempotency hint when a durable backend is wired
         // anywhere in the same compilation. We don't bind the call — we look for
         // any invocation whose name starts with WithEfCoreStore / WithRedisStore,

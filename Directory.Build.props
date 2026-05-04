@@ -14,12 +14,15 @@
     <PackageProjectUrl>https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga</PackageProjectUrl>
     <RepositoryUrl>https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>zeroalloc;saga;orchestration;source-generator;mediator;state-machine</PackageTags>
+    <Description>Source-generated long-running process orchestration for the ZeroAlloc ecosystem. Express multi-step business workflows declaratively as a partial class; the Roslyn generator emits state-machine code, notification handlers, and dispatch wiring with no reflection. Native AOT compatible. Optional EfCore-backed durable persistence and a transactional outbox bridge for atomic command dispatch.</Description>
+    <PackageTags>zeroalloc;saga;orchestration;source-generator;mediator;state-machine;outbox;efcore;aot</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
     <Copyright>Copyright (c) Marcel Roozekrans</Copyright>
   </PropertyGroup>
   <ItemGroup Condition="'$(IsPackable)' == 'true'">
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
+    <None Include="$(MSBuildThisFileDirectory)assets\icon.png" Pack="true" PackagePath="\" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' != 'netstandard2.0'">
     <PackageReference Include="Meziantou.Analyzer">

@@ -1,0 +1,21 @@
+#nullable enable
+ZeroAlloc.Saga.Outbox.OutboxSagaCommandDispatcher
+ZeroAlloc.Saga.Outbox.OutboxSagaCommandDispatcher.OutboxSagaCommandDispatcher(ZeroAlloc.Outbox.IOutboxStore! store, System.IServiceProvider! services) -> void
+ZeroAlloc.Saga.Outbox.OutboxSagaCommandDispatcher.DispatchAsync<TCommand>(TCommand cmd, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.Outbox.OutboxSagaCommandPoller
+ZeroAlloc.Saga.Outbox.OutboxSagaCommandPoller.OutboxSagaCommandPoller(Microsoft.Extensions.DependencyInjection.IServiceScopeFactory! scopeFactory, ZeroAlloc.Saga.Outbox.SagaCommandRegistryDispatcher! dispatch, Microsoft.Extensions.Logging.ILogger<ZeroAlloc.Saga.Outbox.OutboxSagaCommandPoller!>! log, ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions? options = null) -> void
+ZeroAlloc.Saga.Outbox.OutboxSagaCommandPoller.PollOnceAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions
+ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions.OutboxSagaPollerOptions() -> void
+ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions.PollInterval.get -> System.TimeSpan
+ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions.PollInterval.init -> void
+ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions.BatchSize.get -> int
+ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions.BatchSize.init -> void
+ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions.MaxRetries.get -> int
+ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions.MaxRetries.init -> void
+ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions.RetryDelay.get -> System.TimeSpan
+ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions.RetryDelay.init -> void
+ZeroAlloc.Saga.Outbox.SagaCommandRegistryDispatcher
+virtual ZeroAlloc.Saga.Outbox.SagaCommandRegistryDispatcher.Invoke(string! typeName, System.ReadOnlyMemory<byte> bytes, System.IServiceProvider! services, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.Outbox.SagaOutboxBuilderExtensions
+static ZeroAlloc.Saga.Outbox.SagaOutboxBuilderExtensions.WithOutbox(this ZeroAlloc.Saga.ISagaBuilder! builder) -> ZeroAlloc.Saga.ISagaBuilder!

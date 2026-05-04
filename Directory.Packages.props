@@ -8,15 +8,22 @@
     <PackageVersion Include="ZeroAlloc.Mediator" Version="3.0.*" />
     <PackageVersion Include="ZeroAlloc.Pipeline" Version="1.0.*" />
     <PackageVersion Include="ZeroAlloc.Mediator.Generator" Version="3.0.*" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="9.0.3" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.3" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="9.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="9.0.4" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.4" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="9.0.4" />
 
     <!-- EfCore backend deps -->
     <PackageVersion Include="ZeroAlloc.Saga" Version="1.2.*" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.3" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.3" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.4" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.4" />
     <PackageVersion Include="ZeroAlloc.ValueObjects.EfCore" Version="1.3.*" />
+
+    <!-- Outbox bridge deps -->
+    <PackageVersion Include="ZeroAlloc.Outbox" Version="2.4.0" />
+    <PackageVersion Include="ZeroAlloc.Outbox.EfCore" Version="2.4.0" />
+    <PackageVersion Include="ZeroAlloc.Serialisation" Version="2.1.0" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.4" />
 
     <!-- Generator deps -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.*" />

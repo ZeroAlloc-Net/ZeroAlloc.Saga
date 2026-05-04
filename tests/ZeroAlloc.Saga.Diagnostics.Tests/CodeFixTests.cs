@@ -77,6 +77,49 @@ public class CodeFixTests
     }
 
     [Fact]
+    public async Task ZASAGA016_AddPartialModifier_FixAddsPartialKeyword()
+    {
+        // The full-source pattern (mirroring the ZASAGA016 diagnostic test
+        // in DiagnosticTests.cs) — we need both the Serialisation stub
+        // namespace (to trip the gate) and a saga referencing a non-partial
+        // step command type.
+        var src = """
+            using System;
+            using ZeroAlloc.Mediator;
+            using ZeroAlloc.Saga;
+
+            namespace ZeroAlloc.Serialisation
+            {
+                [System.AttributeUsage(System.AttributeTargets.Class | System.AttributeTargets.Struct)]
+                public sealed class ZeroAllocSerializableAttribute : System.Attribute { }
+            }
+
+            namespace Sample
+            {
+                public readonly record struct OrderId(int V) : IEquatable<OrderId>;
+                public sealed record OrderPlaced(OrderId OrderId) : INotification;
+                public readonly record struct ReserveCmd(OrderId OrderId) : IRequest<Unit>;
+
+                [Saga]
+                public partial class TwoStepSaga
+                {
+                    [CorrelationKey] public OrderId Correlation(OrderPlaced e) => e.OrderId;
+                    [Step(Order = 1)] public ReserveCmd Reserve(OrderPlaced e) => new(e.OrderId);
+                }
+            }
+            """;
+
+        var fixedSrc = await CodeFixVerifier.ApplyFixAsync(src, new AddPartialModifierCodeFix(), "ZASAGA016");
+
+        // The fix should turn the record struct declaration into a partial.
+        Assert.Contains("partial record struct ReserveCmd", fixedSrc);
+
+        // After applying the fix the diagnostic must no longer fire.
+        var run = await GeneratorVerifier.RunAsync(fixedSrc);
+        Assert.DoesNotContain(run.Diagnostics, d => d.Id == "ZASAGA016");
+    }
+
+    [Fact]
     public async Task ZASAGA009_AddMissingCompensation_FixAddsStubMethod()
     {
         var src = """

@@ -24,6 +24,7 @@ public static class FulfillmentSagaBuilderExtensions
         builder.Services.TryAddSingleton<SagaLockManager<global::Sample.OrderId>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<FulfillmentSaga>, FulfillmentSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<FulfillmentSaga, global::Sample.OrderId>, SagaManager<FulfillmentSaga, global::Sample.OrderId>>();
+        builder.Services.TryAddScoped<global::ZeroAlloc.Saga.ISagaCommandDispatcher, global::ZeroAlloc.Saga.Generated.MediatorSagaCommandDispatcher>();
 
         builder.Services.AddTransient<INotificationHandler<global::Sample.OrderPlaced>, FulfillmentSaga_OrderPlaced_Handler>();
         return builder;
@@ -32,8 +33,8 @@ public static class FulfillmentSagaBuilderExtensions
 
 internal sealed class FulfillmentSagaCompensationDispatcher : ISagaCompensationDispatcher<FulfillmentSaga>
 {
-    private readonly IMediator _mediator;
-    public FulfillmentSagaCompensationDispatcher(IMediator mediator) => _mediator = mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
+    public FulfillmentSagaCompensationDispatcher(ISagaCommandDispatcher dispatcher) => _dispatcher = dispatcher;
 
     public async ValueTask CompensateAsync(FulfillmentSaga saga, CancellationToken ct)
     {

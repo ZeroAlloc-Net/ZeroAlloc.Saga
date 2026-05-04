@@ -14,15 +14,15 @@ internal sealed class FulfillmentSaga_OrderPlaced_Handler : INotificationHandler
 {
     private readonly ISagaStore<FulfillmentSaga, global::Sample.OrderId> _store;
     private readonly SagaLockManager<global::Sample.OrderId> _locks;
-    private readonly IMediator _mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
     private readonly SagaRetryOptions _retry;
     private readonly ILogger<FulfillmentSaga_OrderPlaced_Handler> _log;
 
-    public FulfillmentSaga_OrderPlaced_Handler(ISagaStore<FulfillmentSaga, global::Sample.OrderId> store, SagaLockManager<global::Sample.OrderId> locks, IMediator mediator, SagaRetryOptions retry, ILogger<FulfillmentSaga_OrderPlaced_Handler> log)
+    public FulfillmentSaga_OrderPlaced_Handler(ISagaStore<FulfillmentSaga, global::Sample.OrderId> store, SagaLockManager<global::Sample.OrderId> locks, ISagaCommandDispatcher dispatcher, SagaRetryOptions retry, ILogger<FulfillmentSaga_OrderPlaced_Handler> log)
     {
         _store = store;
         _locks = locks;
-        _mediator = mediator;
+        _dispatcher = dispatcher;
         _retry = retry;
         _log = log;
     }
@@ -45,7 +45,7 @@ internal sealed class FulfillmentSaga_OrderPlaced_Handler : INotificationHandler
                 }
 
                 var cmd = saga.Reserve(@event);
-                await _mediator.Send(cmd, ct).ConfigureAwait(false);
+                await _dispatcher.DispatchAsync(cmd, ct).ConfigureAwait(false);
 
                 saga.Fsm.TryFire(FulfillmentSagaFsm.Trigger.Complete);
                 await _store.RemoveAsync(key, ct).ConfigureAwait(false);

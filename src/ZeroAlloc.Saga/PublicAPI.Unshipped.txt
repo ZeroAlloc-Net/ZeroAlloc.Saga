@@ -7,6 +7,8 @@ ZeroAlloc.Saga.ISagaBuilder.Services.get -> Microsoft.Extensions.DependencyInjec
 ZeroAlloc.Saga.ISagaBuilderMutable
 ZeroAlloc.Saga.ISagaBuilderMutable.IsEfCoreBackend.get -> bool
 ZeroAlloc.Saga.ISagaBuilderMutable.IsEfCoreBackend.set -> void
+ZeroAlloc.Saga.ISagaCommandDispatcher
+ZeroAlloc.Saga.ISagaCommandDispatcher.DispatchAsync<TCommand>(TCommand cmd, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
 ZeroAlloc.Saga.ISagaCompensationDispatcher<TSaga>
 ZeroAlloc.Saga.ISagaCompensationDispatcher<TSaga>.CompensateAsync(TSaga! saga, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
 ZeroAlloc.Saga.ISagaManager<TSaga, TKey>

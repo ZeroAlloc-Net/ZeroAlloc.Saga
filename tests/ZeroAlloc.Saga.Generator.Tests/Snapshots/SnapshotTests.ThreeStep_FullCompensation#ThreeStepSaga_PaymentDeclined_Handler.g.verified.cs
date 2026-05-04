@@ -14,15 +14,15 @@ internal sealed class ThreeStepSaga_PaymentDeclined_Handler : INotificationHandl
 {
     private readonly ISagaStore<ThreeStepSaga, global::Sample.OrderId> _store;
     private readonly SagaLockManager<global::Sample.OrderId> _locks;
-    private readonly IMediator _mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
     private readonly SagaRetryOptions _retry;
     private readonly ILogger<ThreeStepSaga_PaymentDeclined_Handler> _log;
 
-    public ThreeStepSaga_PaymentDeclined_Handler(ISagaStore<ThreeStepSaga, global::Sample.OrderId> store, SagaLockManager<global::Sample.OrderId> locks, IMediator mediator, SagaRetryOptions retry, ILogger<ThreeStepSaga_PaymentDeclined_Handler> log)
+    public ThreeStepSaga_PaymentDeclined_Handler(ISagaStore<ThreeStepSaga, global::Sample.OrderId> store, SagaLockManager<global::Sample.OrderId> locks, ISagaCommandDispatcher dispatcher, SagaRetryOptions retry, ILogger<ThreeStepSaga_PaymentDeclined_Handler> log)
     {
         _store = store;
         _locks = locks;
-        _mediator = mediator;
+        _dispatcher = dispatcher;
         _retry = retry;
         _log = log;
     }
@@ -62,8 +62,8 @@ internal sealed class ThreeStepSaga_PaymentDeclined_Handler : INotificationHandl
                 switch (stateAtFailure)
                 {
                     case ThreeStepSagaFsm.State.Step2:
-                        await _mediator.Send(saga.Refund(), ct).ConfigureAwait(false);
-                        await _mediator.Send(saga.CancelReservation(), ct).ConfigureAwait(false);
+                        await _dispatcher.DispatchAsync(saga.Refund(), ct).ConfigureAwait(false);
+                        await _dispatcher.DispatchAsync(saga.CancelReservation(), ct).ConfigureAwait(false);
                         break;
                     default: break;
                 }

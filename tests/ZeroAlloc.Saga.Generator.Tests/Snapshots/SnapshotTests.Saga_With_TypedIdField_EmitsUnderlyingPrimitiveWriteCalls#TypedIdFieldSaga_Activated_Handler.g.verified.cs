@@ -14,15 +14,15 @@ internal sealed class TypedIdFieldSaga_Activated_Handler : INotificationHandler<
 {
     private readonly ISagaStore<TypedIdFieldSaga, global::Sample.CustomerId> _store;
     private readonly SagaLockManager<global::Sample.CustomerId> _locks;
-    private readonly IMediator _mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
     private readonly SagaRetryOptions _retry;
     private readonly ILogger<TypedIdFieldSaga_Activated_Handler> _log;
 
-    public TypedIdFieldSaga_Activated_Handler(ISagaStore<TypedIdFieldSaga, global::Sample.CustomerId> store, SagaLockManager<global::Sample.CustomerId> locks, IMediator mediator, SagaRetryOptions retry, ILogger<TypedIdFieldSaga_Activated_Handler> log)
+    public TypedIdFieldSaga_Activated_Handler(ISagaStore<TypedIdFieldSaga, global::Sample.CustomerId> store, SagaLockManager<global::Sample.CustomerId> locks, ISagaCommandDispatcher dispatcher, SagaRetryOptions retry, ILogger<TypedIdFieldSaga_Activated_Handler> log)
     {
         _store = store;
         _locks = locks;
-        _mediator = mediator;
+        _dispatcher = dispatcher;
         _retry = retry;
         _log = log;
     }
@@ -45,7 +45,7 @@ internal sealed class TypedIdFieldSaga_Activated_Handler : INotificationHandler<
                 }
 
                 var cmd = saga.Greet(@event);
-                await _mediator.Send(cmd, ct).ConfigureAwait(false);
+                await _dispatcher.DispatchAsync(cmd, ct).ConfigureAwait(false);
 
                 saga.Fsm.TryFire(TypedIdFieldSagaFsm.Trigger.Complete);
                 await _store.RemoveAsync(key, ct).ConfigureAwait(false);

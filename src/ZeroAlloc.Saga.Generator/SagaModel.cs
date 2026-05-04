@@ -190,7 +190,44 @@ internal sealed record SagaModel(
 
                 var eventTypeFqn = StripGlobalPrefix(member.Parameters[0].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
                 var commandTypeFqn = StripGlobalPrefix(member.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
-                steps.Add(new StepInfo(order, member.Name, eventTypeFqn, commandTypeFqn, compensateName, compensateOnFqn, memberLoc));
+
+                // Capture cross-assembly / partial info on the command type for
+                // ZASAGA016 / ZASAGA017. We do this here because we have the
+                // semantic model in hand; the diagnostic itself is gated later
+                // on whether ZeroAlloc.Serialisation is referenced.
+                bool? cmdInOwnAssembly = null;
+                bool cmdIsPartial = false;
+                Location? cmdTypeLoc = memberLoc;
+                if (member.ReturnType is INamedTypeSymbol cmdNamed)
+                {
+                    cmdInOwnAssembly = SymbolEqualityComparer.Default.Equals(
+                        cmdNamed.ContainingAssembly,
+                        ctx.SemanticModel.Compilation.Assembly);
+
+                    if (cmdInOwnAssembly == true)
+                    {
+                        foreach (var declRef in cmdNamed.DeclaringSyntaxReferences)
+                        {
+                            var declNode = declRef.GetSyntax(ct);
+                            if (declNode is TypeDeclarationSyntax tds)
+                            {
+                                cmdTypeLoc = tds.Identifier.GetLocation();
+                                if (tds.Modifiers.Any(m => m.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.PartialKeyword)))
+                                {
+                                    cmdIsPartial = true;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                steps.Add(new StepInfo(
+                    order, member.Name, eventTypeFqn, commandTypeFqn,
+                    compensateName, compensateOnFqn,
+                    Location: memberLoc,
+                    CommandTypeIsInOwnAssembly: cmdInOwnAssembly,
+                    CommandTypeIsPartial: cmdIsPartial,
+                    CommandTypeLocation: cmdTypeLoc));
             }
         }
 
@@ -225,8 +262,9 @@ internal sealed record SagaModel(
 
         // ── ZASAGA009 / ZASAGA010 / ZASAGA012 ───────────────────────────────
         var allMembers = classSymbol.GetMembers().OfType<IMethodSymbol>().ToList();
-        foreach (var step in steps)
+        for (int idx = 0; idx < steps.Count; idx++)
         {
+            var step = steps[idx];
             // ZASAGA009: Compensate target must exist and be parameterless, non-void.
             if (step.CompensateMethodName is not null)
             {
@@ -241,6 +279,14 @@ internal sealed record SagaModel(
                         step.Location,
                         step.MethodName,
                         step.CompensateMethodName));
+                }
+                else
+                {
+                    // Capture the compensation command's return type so the
+                    // per-compilation MediatorSagaCommandDispatcher emits a
+                    // dispatch arm for it.
+                    var compCmdFqn = StripGlobalPrefix(target!.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+                    steps[idx] = step with { CompensateCommandTypeFqn = compCmdFqn };
                 }
             }
 
@@ -583,7 +629,26 @@ internal sealed record StepInfo(
     string CommandTypeFqn,
     string? CompensateMethodName,
     string? CompensateOnEventTypeFqn,
-    Location? Location = null);
+    string? CompensateCommandTypeFqn = null,
+    Location? Location = null,
+    /// <summary>
+    /// True if the [Step] method's return-type symbol resolves to a type declared
+    /// in the current compilation's assembly. Null when the symbol could not be
+    /// resolved (e.g. error type). Used to distinguish ZASAGA016 (own-assembly,
+    /// must be partial) from ZASAGA017 (cross-assembly, manual attribute required).
+    /// </summary>
+    bool? CommandTypeIsInOwnAssembly = null,
+    /// <summary>
+    /// True if any declaration of the command type carries the 'partial' modifier.
+    /// Only meaningful when <see cref="CommandTypeIsInOwnAssembly"/> is true.
+    /// </summary>
+    bool CommandTypeIsPartial = false,
+    /// <summary>
+    /// Location of the command type's identifier — used as the diagnostic location
+    /// for ZASAGA016. Falls back to the [Step] method's location when the command
+    /// type's syntax is not in the compilation.
+    /// </summary>
+    Location? CommandTypeLocation = null);
 
 /// <summary>
 /// Information about a single saga state member (field or property) the

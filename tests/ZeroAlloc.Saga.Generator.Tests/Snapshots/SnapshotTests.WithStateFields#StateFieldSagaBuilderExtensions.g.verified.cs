@@ -24,6 +24,7 @@ public static class StateFieldSagaBuilderExtensions
         builder.Services.TryAddSingleton<SagaLockManager<global::Sample.OrderId>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<StateFieldSaga>, StateFieldSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<StateFieldSaga, global::Sample.OrderId>, SagaManager<StateFieldSaga, global::Sample.OrderId>>();
+        builder.Services.TryAddScoped<global::ZeroAlloc.Saga.ISagaCommandDispatcher, global::ZeroAlloc.Saga.Generated.MediatorSagaCommandDispatcher>();
 
         builder.Services.AddTransient<INotificationHandler<global::Sample.OrderPlaced>, StateFieldSaga_OrderPlaced_Handler>();
         return builder;
@@ -32,8 +33,8 @@ public static class StateFieldSagaBuilderExtensions
 
 internal sealed class StateFieldSagaCompensationDispatcher : ISagaCompensationDispatcher<StateFieldSaga>
 {
-    private readonly IMediator _mediator;
-    public StateFieldSagaCompensationDispatcher(IMediator mediator) => _mediator = mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
+    public StateFieldSagaCompensationDispatcher(ISagaCommandDispatcher dispatcher) => _dispatcher = dispatcher;
 
     public async ValueTask CompensateAsync(StateFieldSaga saga, CancellationToken ct)
     {

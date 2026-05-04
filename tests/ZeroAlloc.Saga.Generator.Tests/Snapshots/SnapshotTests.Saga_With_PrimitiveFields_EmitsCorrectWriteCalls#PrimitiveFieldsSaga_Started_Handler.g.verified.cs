@@ -14,15 +14,15 @@ internal sealed class PrimitiveFieldsSaga_Started_Handler : INotificationHandler
 {
     private readonly ISagaStore<PrimitiveFieldsSaga, int> _store;
     private readonly SagaLockManager<int> _locks;
-    private readonly IMediator _mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
     private readonly SagaRetryOptions _retry;
     private readonly ILogger<PrimitiveFieldsSaga_Started_Handler> _log;
 
-    public PrimitiveFieldsSaga_Started_Handler(ISagaStore<PrimitiveFieldsSaga, int> store, SagaLockManager<int> locks, IMediator mediator, SagaRetryOptions retry, ILogger<PrimitiveFieldsSaga_Started_Handler> log)
+    public PrimitiveFieldsSaga_Started_Handler(ISagaStore<PrimitiveFieldsSaga, int> store, SagaLockManager<int> locks, ISagaCommandDispatcher dispatcher, SagaRetryOptions retry, ILogger<PrimitiveFieldsSaga_Started_Handler> log)
     {
         _store = store;
         _locks = locks;
-        _mediator = mediator;
+        _dispatcher = dispatcher;
         _retry = retry;
         _log = log;
     }
@@ -45,7 +45,7 @@ internal sealed class PrimitiveFieldsSaga_Started_Handler : INotificationHandler
                 }
 
                 var cmd = saga.Step1(@event);
-                await _mediator.Send(cmd, ct).ConfigureAwait(false);
+                await _dispatcher.DispatchAsync(cmd, ct).ConfigureAwait(false);
 
                 saga.Fsm.TryFire(PrimitiveFieldsSagaFsm.Trigger.Complete);
                 await _store.RemoveAsync(key, ct).ConfigureAwait(false);
