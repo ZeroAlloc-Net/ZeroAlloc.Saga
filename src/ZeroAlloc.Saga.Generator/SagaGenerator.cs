@@ -84,6 +84,20 @@ public sealed class SagaGenerator : IIncrementalGenerator
                 SagaCommandRegistryEmitter.Emit(spc, results);
             });
 
+        // Auto-apply [ZeroAllocSerializable(SerializationFormat.Json)] to each
+        // step command type via a partial-class extension when ZeroAlloc.Serialisation
+        // is referenced. Skips cross-assembly types (ZASAGA017), non-partial types
+        // (ZASAGA016), and types where the user already applied the attribute themselves.
+        // The CompilationProvider is required to resolve the existing-attribute check
+        // and to determine the type-keyword sequence (record/struct/class).
+        context.RegisterSourceOutput(
+            allModels.Combine(context.CompilationProvider),
+            static (spc, tuple) =>
+            {
+                var (results, compilation) = tuple;
+                SerializableExtensionEmitter.Emit(spc, results, compilation);
+            });
+
         // ZASAGA016 / ZASAGA017 — fired only when ZeroAlloc.Serialisation is
         // referenced. ZASAGA016 (Warning) covers step command types declared in
         // the current compilation that are not yet 'partial'; the Saga generator
