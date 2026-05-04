@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga.Outbox-v1.4.0...ZeroAlloc.Saga.Outbox-v1.5.0) (2026-05-04)
+
+
+### Features
+
+* **saga:** introduce ISagaUnitOfWork abstraction (Phase 3a-2 stage 1) ([#29](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/29)) ([39ef0e3](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/39ef0e3f6d370b66760a805e007af88574b8b475))
+
 ## [1.4.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga.Outbox-v1.3.0...ZeroAlloc.Saga.Outbox-v1.4.0) (2026-05-04)
 
 
