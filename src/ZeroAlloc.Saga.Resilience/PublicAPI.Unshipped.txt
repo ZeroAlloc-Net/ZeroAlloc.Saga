@@ -1,0 +1,16 @@
+#nullable enable
+ZeroAlloc.Saga.Resilience.ResilientSagaCommandDispatcher
+ZeroAlloc.Saga.Resilience.ResilientSagaCommandDispatcher.DispatchAsync<TCommand>(TCommand cmd, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.Resilience.ResilientSagaCommandDispatcher.ResilientSagaCommandDispatcher(ZeroAlloc.Saga.ISagaCommandDispatcher! inner, ZeroAlloc.Saga.Resilience.SagaResilienceOptions! options) -> void
+ZeroAlloc.Saga.Resilience.SagaResilienceBuilderExtensions
+ZeroAlloc.Saga.Resilience.SagaResilienceOptions
+ZeroAlloc.Saga.Resilience.SagaResilienceOptions.CircuitBreaker.get -> ZeroAlloc.Resilience.CircuitBreakerPolicy?
+ZeroAlloc.Saga.Resilience.SagaResilienceOptions.CircuitBreaker.set -> void
+ZeroAlloc.Saga.Resilience.SagaResilienceOptions.RateLimiter.get -> ZeroAlloc.Resilience.RateLimiter?
+ZeroAlloc.Saga.Resilience.SagaResilienceOptions.RateLimiter.set -> void
+ZeroAlloc.Saga.Resilience.SagaResilienceOptions.Retry.get -> ZeroAlloc.Resilience.RetryPolicy?
+ZeroAlloc.Saga.Resilience.SagaResilienceOptions.Retry.set -> void
+ZeroAlloc.Saga.Resilience.SagaResilienceOptions.SagaResilienceOptions() -> void
+ZeroAlloc.Saga.Resilience.SagaResilienceOptions.Timeout.get -> ZeroAlloc.Resilience.TimeoutPolicy?
+ZeroAlloc.Saga.Resilience.SagaResilienceOptions.Timeout.set -> void
+static ZeroAlloc.Saga.Resilience.SagaResilienceBuilderExtensions.WithResilience(this ZeroAlloc.Saga.ISagaBuilder! builder, System.Action<ZeroAlloc.Saga.Resilience.SagaResilienceOptions!>! configure) -> ZeroAlloc.Saga.ISagaBuilder!

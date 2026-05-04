@@ -25,6 +25,9 @@
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.4" />
 
+    <!-- Resilience bridge deps -->
+    <PackageVersion Include="ZeroAlloc.Resilience" Version="1.0.*" />
+
     <!-- Generator deps -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.*" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.11.*" />
