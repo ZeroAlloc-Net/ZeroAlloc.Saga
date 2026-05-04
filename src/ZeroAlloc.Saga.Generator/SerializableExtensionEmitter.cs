@@ -9,7 +9,7 @@ namespace ZeroAlloc.Saga.Generator;
 
 /// <summary>
 /// When <c>ZeroAlloc.Serialisation</c> is referenced, auto-applies
-/// <c>[ZeroAllocSerializable(SerializationFormat.Json)]</c> to each step command type via a
+/// <c>[ZeroAllocSerializable(SerializationFormat.SystemTextJson)]</c> to each step command type via a
 /// partial-class extension. C# attribute merging across partial declarations means
 /// <c>ZeroAlloc.Serialisation.Generator</c> (running in the same compilation) picks up
 /// the attribute and emits its <c>ISerializer&lt;T&gt;</c>. User-applied
@@ -109,7 +109,7 @@ internal static class SerializableExtensionEmitter
             sb.Append("namespace ").Append(ns).AppendLine(";");
             sb.AppendLine();
         }
-        sb.AppendLine("[ZeroAllocSerializable(SerializationFormat.Json)]");
+        sb.AppendLine("[ZeroAllocSerializable(SerializationFormat.SystemTextJson)]");
         sb.Append("partial ").Append(typeKindKeyword).Append(' ').Append(symbol.Name).AppendLine(";");
 
         spc.AddSource($"{safeName}.SagaSerializable.g.cs", sb.ToString());

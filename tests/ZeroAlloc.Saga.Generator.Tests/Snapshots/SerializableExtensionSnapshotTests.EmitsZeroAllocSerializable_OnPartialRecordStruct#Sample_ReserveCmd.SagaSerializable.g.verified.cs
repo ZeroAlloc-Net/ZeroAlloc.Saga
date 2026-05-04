@@ -5,5 +5,5 @@ using ZeroAlloc.Serialisation;
 
 namespace Sample;
 
-[ZeroAllocSerializable(SerializationFormat.Json)]
+[ZeroAllocSerializable(SerializationFormat.SystemTextJson)]
 partial record struct ReserveCmd;

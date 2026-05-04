@@ -84,7 +84,7 @@ public sealed class SagaGenerator : IIncrementalGenerator
                 SagaCommandRegistryEmitter.Emit(spc, results);
             });
 
-        // Auto-apply [ZeroAllocSerializable(SerializationFormat.Json)] to each
+        // Auto-apply [ZeroAllocSerializable(SerializationFormat.SystemTextJson)] to each
         // step command type via a partial-class extension when ZeroAlloc.Serialisation
         // is referenced. Skips cross-assembly types (ZASAGA017), non-partial types
         // (ZASAGA016), and types where the user already applied the attribute themselves.

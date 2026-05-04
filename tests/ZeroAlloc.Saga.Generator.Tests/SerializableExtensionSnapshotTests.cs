@@ -4,7 +4,7 @@ namespace ZeroAlloc.Saga.Generator.Tests;
 
 /// <summary>
 /// Snapshot tests for <c>SerializableExtensionEmitter</c>. Auto-applies
-/// <c>[ZeroAllocSerializable(SerializationFormat.Json)]</c> to step command types
+/// <c>[ZeroAllocSerializable(SerializationFormat.SystemTextJson)]</c> to step command types
 /// via a partial-class extension when <c>ZeroAlloc.Serialisation</c> is referenced.
 ///
 /// As with <see cref="SagaCommandRegistrySnapshotTests"/>, since
@@ -25,7 +25,7 @@ public class SerializableExtensionSnapshotTests
 
             namespace ZeroAlloc.Serialisation
             {
-                public enum SerializationFormat { Json, MessagePack, MemoryPack }
+                public enum SerializationFormat { SystemTextJson, MessagePack, MemoryPack }
 
                 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]
                 public sealed class ZeroAllocSerializableAttribute : Attribute
@@ -63,7 +63,7 @@ public class SerializableExtensionSnapshotTests
 
             namespace ZeroAlloc.Serialisation
             {
-                public enum SerializationFormat { Json, MessagePack, MemoryPack }
+                public enum SerializationFormat { SystemTextJson, MessagePack, MemoryPack }
 
                 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]
                 public sealed class ZeroAllocSerializableAttribute : Attribute
