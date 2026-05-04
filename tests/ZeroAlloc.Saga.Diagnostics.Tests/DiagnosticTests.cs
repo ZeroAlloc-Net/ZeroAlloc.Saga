@@ -300,6 +300,93 @@ public class DiagnosticTests
         Assert.DoesNotContain(run.Diagnostics, d => d.Id == "ZASAGA016");
     }
 
+    // ── ZASAGA017 ───────────────────────────────────────────────────────────
+    // Cross-assembly fixture: the step command type lives in a separately
+    // compiled assembly attached as a MetadataReference. The generator should
+    // see ContainingAssembly != Compilation.Assembly and fire ZASAGA017
+    // (Info-severity, location: None) instead of ZASAGA016.
+    [Fact]
+    public async Task ZASAGA017_FiresWhen_StepCommandType_IsCrossAssembly_AndSerialisationStubPresent()
+    {
+        // Foreign assembly carries the IRequest<Unit> command type.
+        var foreignSrc = """
+            using System;
+            using ZeroAlloc.Mediator;
+
+            namespace Foreign;
+
+            public readonly record struct OrderId(int V) : IEquatable<OrderId>;
+            public readonly record struct ReserveCmd(OrderId OrderId) : IRequest<Unit>;
+            """;
+        var foreignRef = GeneratorVerifier.CompileToReference(foreignSrc, "Foreign.Asm");
+
+        var src = """
+            using System;
+            using ZeroAlloc.Mediator;
+            using ZeroAlloc.Saga;
+            using Foreign;
+
+            namespace ZeroAlloc.Serialisation
+            {
+                [System.AttributeUsage(System.AttributeTargets.Class | System.AttributeTargets.Struct)]
+                public sealed class ZeroAllocSerializableAttribute : System.Attribute { }
+            }
+
+            namespace Sample;
+
+            public sealed record OrderPlaced(OrderId OrderId) : INotification;
+
+            [Saga]
+            public partial class CrossAsmSaga
+            {
+                [CorrelationKey] public OrderId Correlation(OrderPlaced e) => e.OrderId;
+                [Step(Order = 1)] public ReserveCmd Reserve(OrderPlaced e) => new(e.OrderId);
+            }
+            """;
+
+        var run = await GeneratorVerifier.RunAsync(src, new[] { foreignRef });
+        Assert.Contains(run.Diagnostics, d => d.Id == "ZASAGA017");
+        // And the same shape must NOT trigger ZASAGA016 — the type is foreign,
+        // partial-class extension cannot reach it, so ZASAGA016 would mislead.
+        Assert.DoesNotContain(run.Diagnostics, d => d.Id == "ZASAGA016");
+    }
+
+    [Fact]
+    public async Task ZASAGA017_DoesNotFire_WhenSerialisationNotReferenced()
+    {
+        var foreignSrc = """
+            using System;
+            using ZeroAlloc.Mediator;
+
+            namespace Foreign;
+
+            public readonly record struct OrderId(int V) : IEquatable<OrderId>;
+            public readonly record struct ReserveCmd(OrderId OrderId) : IRequest<Unit>;
+            """;
+        var foreignRef = GeneratorVerifier.CompileToReference(foreignSrc, "Foreign.Asm");
+
+        var src = """
+            using System;
+            using ZeroAlloc.Mediator;
+            using ZeroAlloc.Saga;
+            using Foreign;
+
+            namespace Sample;
+
+            public sealed record OrderPlaced(OrderId OrderId) : INotification;
+
+            [Saga]
+            public partial class CrossAsmSaga
+            {
+                [CorrelationKey] public OrderId Correlation(OrderPlaced e) => e.OrderId;
+                [Step(Order = 1)] public ReserveCmd Reserve(OrderPlaced e) => new(e.OrderId);
+            }
+            """;
+
+        var run = await GeneratorVerifier.RunAsync(src, new[] { foreignRef });
+        Assert.DoesNotContain(run.Diagnostics, d => d.Id == "ZASAGA017");
+    }
+
     [Fact]
     public async Task ZASAGA016_DoesNotFire_WhenSerialisationNotReferenced()
     {

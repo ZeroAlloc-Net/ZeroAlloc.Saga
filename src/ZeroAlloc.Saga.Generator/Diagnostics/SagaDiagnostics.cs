@@ -139,4 +139,11 @@ internal static class SagaDiagnostics
         messageFormat: "Step command type '{0}' must be 'partial' so the Saga generator can apply [ZeroAllocSerializable] via partial-class extension. Add the 'partial' modifier.",
         severity: DiagnosticSeverity.Warning,
         description: "When ZeroAlloc.Serialisation is referenced the Saga generator extends each step's command type with a partial declaration carrying [ZeroAllocSerializable]. The command type must therefore be declared 'partial' so the generated partial can attach.");
+
+    public static readonly DiagnosticDescriptor StepCommandTypeCrossAssembly = Make(
+        id: "ZASAGA017",
+        title: "Step command type is in a referenced assembly",
+        messageFormat: "Step command type '{0}' is declared in a referenced assembly. The Saga generator cannot apply [ZeroAllocSerializable] via partial-class extension on foreign types. Apply [ZeroAllocSerializable] manually on the type's declaration.",
+        severity: DiagnosticSeverity.Info,
+        description: "Partial-class extension can only attach to types declared in the same compilation. For step command types declared in a referenced assembly, apply [ZeroAllocSerializable] manually at the type's source declaration site.");
 }

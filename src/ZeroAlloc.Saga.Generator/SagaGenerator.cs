@@ -84,10 +84,14 @@ public sealed class SagaGenerator : IIncrementalGenerator
                 SagaCommandRegistryEmitter.Emit(spc, results);
             });
 
-        // ZASAGA016 — fired only when ZeroAlloc.Serialisation is referenced.
-        // Covers step command types declared in the current compilation that are
-        // not yet 'partial'; the Saga generator needs the partial modifier to
-        // attach [ZeroAllocSerializable] via partial-class extension.
+        // ZASAGA016 / ZASAGA017 — fired only when ZeroAlloc.Serialisation is
+        // referenced. ZASAGA016 (Warning) covers step command types declared in
+        // the current compilation that are not yet 'partial'; the Saga generator
+        // needs the partial modifier to attach [ZeroAllocSerializable] via
+        // partial-class extension. ZASAGA017 (Info) covers step command types
+        // declared in a referenced assembly — partial-class extension cannot
+        // reach foreign types, so the user must apply [ZeroAllocSerializable]
+        // manually at the type's source declaration site.
         context.RegisterSourceOutput(
             allModels.Combine(serialisationReferenced),
             static (spc, tuple) =>
@@ -96,8 +100,9 @@ public sealed class SagaGenerator : IIncrementalGenerator
                 if (!hasSerialisation) return;
 
                 // De-dupe by command type FQN so a single command used by multiple
-                // steps / sagas only fires once.
+                // steps / sagas only fires once per category.
                 var reportedNotPartial = new HashSet<string>(System.StringComparer.Ordinal);
+                var reportedCrossAssembly = new HashSet<string>(System.StringComparer.Ordinal);
 
                 foreach (var result in results)
                 {
@@ -105,14 +110,28 @@ public sealed class SagaGenerator : IIncrementalGenerator
                     if (model is null) continue;
                     foreach (var step in model.Steps)
                     {
-                        if (step.CommandTypeIsInOwnAssembly == true
-                            && !step.CommandTypeIsPartial
-                            && reportedNotPartial.Add(step.CommandTypeFqn))
+                        if (step.CommandTypeIsInOwnAssembly == true)
                         {
-                            spc.ReportDiagnostic(Diagnostic.Create(
-                                SagaDiagnostics.StepCommandTypeNotPartial,
-                                location: step.CommandTypeLocation,
-                                step.CommandTypeFqn));
+                            if (!step.CommandTypeIsPartial && reportedNotPartial.Add(step.CommandTypeFqn))
+                            {
+                                spc.ReportDiagnostic(Diagnostic.Create(
+                                    SagaDiagnostics.StepCommandTypeNotPartial,
+                                    location: step.CommandTypeLocation,
+                                    step.CommandTypeFqn));
+                            }
+                        }
+                        else if (step.CommandTypeIsInOwnAssembly == false)
+                        {
+                            // Cross-assembly: location is None — the type's
+                            // declaration is not in this compilation. That's
+                            // acceptable for an Info-severity diagnostic.
+                            if (reportedCrossAssembly.Add(step.CommandTypeFqn))
+                            {
+                                spc.ReportDiagnostic(Diagnostic.Create(
+                                    SagaDiagnostics.StepCommandTypeCrossAssembly,
+                                    location: Location.None,
+                                    step.CommandTypeFqn));
+                            }
                         }
                     }
                 }
