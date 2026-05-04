@@ -86,12 +86,12 @@ rate-limit. One fluent call configures the pipeline:
 ```csharp
 services.AddSaga()
     .WithEfCoreStore<AppDbContext>(opts => opts.MaxRetryAttempts = 3)
+    .AddOrderFulfillmentSaga()
     .WithResilience(r =>
     {
         r.Retry = new RetryPolicy(maxAttempts: 5, backoffMs: 200, jitter: true, perAttemptTimeoutMs: 5_000);
         r.CircuitBreaker = new CircuitBreakerPolicy(maxFailures: 10, resetMs: 30_000, halfOpenProbes: 1);
-    })
-    .AddOrderFulfillmentSaga();
+    });
 ```
 
 Composition order is outermost-first: `circuit-breaker → rate-limit →

@@ -48,7 +48,8 @@ optional jitter.
 services.AddMediator();
 services.AddSaga()
     .WithEfCoreStore<AppDbContext>(opts => opts.MaxRetryAttempts = 3)
-    .WithResilience(r =>
+    .AddOrderFulfillmentSaga()                  // <-- registers ISagaCommandDispatcher
+    .WithResilience(r =>                        // <-- decorates it (must come AFTER)
     {
         r.Retry = new RetryPolicy(
             maxAttempts: 5,
@@ -59,20 +60,28 @@ services.AddSaga()
             maxFailures: 10,
             resetMs: 30_000,
             halfOpenProbes: 1);
-    })
-    .AddOrderFulfillmentSaga();
+    });
 ```
 
 `WithResilience` decorates the **currently registered**
-`ISagaCommandDispatcher`. Order matters when combined with other
-dispatcher-replacing extensions:
+`ISagaCommandDispatcher`, so it must come **after** the per-saga
+registration that installs it. Generator-emitted
+`Add{Saga}Saga()` is what registers the default dispatcher (and
+`WithOutbox()` replaces it). If `WithResilience` is called before
+`Add{Saga}Saga()`, it throws `InvalidOperationException` with a
+helpful message.
 
-- `.WithResilience().WithOutbox()` — `WithOutbox` re-`Replace`s the
-  registration after `WithResilience` decorates, so the resilience
-  layer is **lost**. Don't write it this way.
-- `.WithOutbox().WithResilience()` — outbox replaces, resilience
-  decorates the outbox dispatcher. Functional but wraps the enqueue
-  path, which has limited value (see the next section).
+Order matters when combined with other dispatcher-replacing
+extensions:
+
+- `.AddXxxSaga().WithResilience().WithOutbox()` — `WithOutbox`
+  re-`Replace`s the registration after `WithResilience` decorates,
+  so the resilience layer is **lost**. Don't write it this way.
+- `.AddXxxSaga().WithOutbox().WithResilience()` — outbox replaces,
+  resilience decorates the outbox dispatcher. Functional but wraps
+  the enqueue path, which has limited value (see the next section);
+  the dispatcher logs a one-shot warning at first resolve when this
+  shape is detected.
 
 ## Composition with the outbox bridge
 

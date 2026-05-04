@@ -17,20 +17,24 @@ public static class SagaResilienceBuilderExtensions
 {
     /// <summary>
     /// Decorates the current <see cref="ISagaCommandDispatcher"/> registration with
-    /// <see cref="ResilientSagaCommandDispatcher"/>. Order matters: call this AFTER
-    /// any other dispatcher-replacing extension (e.g. <c>WithOutbox()</c>) so the
-    /// resilience layer sits outermost.
+    /// <see cref="ResilientSagaCommandDispatcher"/>.
     /// </summary>
     /// <param name="builder">The saga builder.</param>
     /// <param name="configure">Configures retry / timeout / circuit-breaker / rate-limit policies.</param>
     /// <remarks>
-    /// Composition note for users of <c>ZeroAlloc.Saga.Outbox</c>: with the outbox bridge,
-    /// the dispatcher's call site is the deferred-enqueue path, which rarely sees transient
-    /// failures (the actual delivery happens later inside <c>OutboxSagaCommandPoller</c>).
-    /// In that case, prefer configuring <c>OutboxSagaPollerOptions</c>'s retry/dead-letter
-    /// for receiver-side resilience. <see cref="WithResilience"/> still works after
-    /// <c>WithOutbox()</c> — it wraps the enqueue, which catches the rare local failures
-    /// (serialiser throw, DI miss) — but its primary value is on the no-outbox path.
+    /// <para><strong>Order matters.</strong> If you also call <c>WithOutbox()</c>, call
+    /// <see cref="WithResilience"/> AFTER it — <c>WithOutbox()</c> uses
+    /// <c>services.Replace</c>, which discards any prior decoration including this one.
+    /// The reverse order (<c>.WithResilience().WithOutbox()</c>) silently drops the
+    /// resilience layer.</para>
+    /// <para><strong>Composition with the outbox bridge.</strong> Under
+    /// <c>ZeroAlloc.Saga.Outbox</c> the dispatcher's call site is the deferred-enqueue
+    /// path, which rarely sees transient failures — actual delivery happens later
+    /// inside <c>OutboxSagaCommandPoller</c>. For receiver-side retry/circuit-breaker
+    /// under outbox, prefer <c>OutboxSagaPollerOptions</c>; <see cref="WithResilience"/>
+    /// is most useful on the no-outbox synchronous path. Wrapping the outbox dispatcher
+    /// is permitted but emits a one-shot warning at first resolve to surface this caveat.
+    /// See <c>docs/resilience.md</c>.</para>
     /// </remarks>
     /// <summary>The type name (not a typed reference, to avoid a project dep on Saga.Outbox) of the
     /// outbox dispatcher. Used by <see cref="WithResilience"/> to detect a low-value composition

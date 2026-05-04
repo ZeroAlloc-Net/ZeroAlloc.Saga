@@ -19,5 +19,6 @@
     <Project Path="samples/AotSmoke/AotSmoke.csproj" />
     <Project Path="samples/AotSmokeEfCore/AotSmokeEfCore.csproj" />
     <Project Path="samples/AotSmokeOutbox/AotSmokeOutbox.csproj" />
+    <Project Path="samples/ResilienceSample/ResilienceSample.csproj" />
   </Folder>
 </Solution>
