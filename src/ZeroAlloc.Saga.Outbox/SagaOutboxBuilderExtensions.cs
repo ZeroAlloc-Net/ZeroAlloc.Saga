@@ -45,11 +45,11 @@ public static class SagaOutboxBuilderExtensions
     [SuppressMessage(
         "Trimming",
         "IL2026:RequiresUnreferencedCode",
-        Justification = "ZeroAlloc.Saga.Generated.SagaCommandRegistry is preserved by the saga generator's [DynamicDependency] in consumer code; AOT-safe.")]
+        Justification = "SagaCommandRegistry is rooted by [DynamicDependency(PublicMethods, typeof(SagaCommandRegistry))] emitted on the saga generator's MediatorSagaCommandDispatcher. That dispatcher is rooted by the generator-emitted Add{Saga}Saga DI registration, transitively keeping the registry's DispatchAsync alive under PublishAot=true.")]
     [SuppressMessage(
         "Trimming",
         "IL2075:RequiresUnreferencedCode",
-        Justification = "Same: type rooted in consumer assembly via the saga generator's [DynamicDependency].")]
+        Justification = "Same: SagaCommandRegistry's public methods are kept by the [DynamicDependency] on MediatorSagaCommandDispatcher; the GetMethod lookup will find DispatchAsync after trimming.")]
     [SuppressMessage(
         "AOT",
         "IL3050:RequiresDynamicCode",

@@ -130,17 +130,30 @@ public sealed class E2ETests
     }
 
     [Fact]
-    public async Task OccConflict_RollsBackOutboxRow_NoDuplicateDispatch()
+    public async Task EmulatedCrossScopeRollback_DiscardsDeferredOutboxRow_NoDuplicateDispatch()
     {
-        // Task 15: THE regression artifact. Pre-bridge (Saga 1.1) an OCC retry
-        // dispatched the step command twice — once on the failing attempt
-        // (already at the mediator) and again on the retry. With the outbox
-        // bridge, the failing attempt's outbox row Add is discarded together
-        // with its DbContext (or, here, by the OneShotConflictStore wrapper
-        // clearing the ChangeTracker after the simulated row-version mismatch),
-        // so only the successful retry's outbox row reaches the database. The
-        // poller therefore drains exactly ONE row and the ledger sees exactly
-        // ONE ReserveStockCommand.
+        // Task 15: documents the cross-scope rollback semantic that powers the
+        // bridge's atomicity guarantee. The OneShotConflictAndRollbackStore
+        // wrapper clears ChangeTracker before raising DbUpdateConcurrencyException
+        // — a single-process emulation of what happens to a parallel writer's
+        // DbContext when its row-version-mismatched UPDATE aborts: the implicit
+        // transaction discards BOTH the saga UPDATE and the deferred outbox
+        // INSERT, and the disposed DbContext takes its tracked entities with it.
+        //
+        // What this test PROVES: when a deferred outbox row is rolled back as
+        // part of a failed save, a successful retry produces exactly one outbox
+        // row and the poller dispatches the command exactly once.
+        //
+        // What this test does NOT prove: that the same-process retry loop
+        // (which reuses one scoped DbContext across attempts) produces single
+        // dispatch. It does not — see "Same-process OCC retry still has
+        // at-least-once semantics" in docs/outbox.md. That quirk requires a
+        // scope-per-attempt retry loop to fix and remains ZASAGA015's territory.
+        //
+        // The cross-process race that Saga 1.1 documented as "OCC retry can
+        // dispatch twice" — where each replica has its own DbContext — IS
+        // fixed; this test is the cleanest deterministic demonstration of the
+        // rollback path that fix relies on.
         await using var fx = new SqliteFixture();
         await fx.EnsureCreatedAsync();
 

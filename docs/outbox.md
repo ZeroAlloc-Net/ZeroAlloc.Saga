@@ -43,10 +43,17 @@ With the outbox bridge:
    the entry is rescheduled (or dead-lettered after
    `OutboxSagaPollerOptions.MaxRetries`).
 
-A losing scope's `DbUpdateConcurrencyException` rolls back **both** the
-saga update **and** the outbox row, so a retry from a fresh scope cannot
-result in a phantom dispatch. That's the durable atomicity guarantee
-this package adds.
+When a losing scope's `SaveChangesAsync` raises
+`DbUpdateConcurrencyException` and that scope is then disposed (the
+typical cross-process and cross-scope shape — different replicas, or
+explicit `IServiceScope` per attempt), the tracked outbox row is
+discarded along with the failed saga update. A retry from a fresh
+scope cannot result in a phantom dispatch. That's the durable
+atomicity guarantee this package adds for the cross-process race.
+
+In-process OCC retries that **reuse the same scope** behave
+differently — see "Same-process OCC retry still has at-least-once
+semantics" under Limitations below.
 
 ## When to use it
 
@@ -66,16 +73,20 @@ public sealed class AppDbContext : DbContext
     public AppDbContext(DbContextOptions<AppDbContext> opts) : base(opts) { }
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.AddSagas();        // SagaInstance schema
-        modelBuilder.AddOutboxModel();  // OutboxMessage schema (Outbox.EfCore)
+        modelBuilder.AddSagas();           // SagaInstance schema (Saga.EfCore)
+        modelBuilder.AddOutboxMessages();  // OutboxMessage schema (Outbox.EfCore)
     }
 }
 
-// 2. Service registration.
+// 2. Service registration. AddDbContext registers the DbContext as Scoped;
+//    AddOutbox().WithEfCore<TContext>() registers IOutboxStore as Scoped so
+//    EfCoreOutboxStore<T> resolves the same scoped DbContext as the saga store
+//    — that shared scope is what makes the dispatch row commit atomically with
+//    the saga state save.
 services.AddDbContext<AppDbContext>(opts => opts.UseNpgsql(connectionString),
     ServiceLifetime.Scoped);
 
-services.AddSingleton<IOutboxStore, EfCoreOutboxStore<AppDbContext>>();
+services.AddOutbox().WithEfCore<AppDbContext>();
 
 services.AddMediator();
 services.AddSaga()

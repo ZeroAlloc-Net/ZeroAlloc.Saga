@@ -56,15 +56,6 @@ public sealed class SagaGenerator : IIncrementalGenerator
             ReportCrossSagaDiagnostics(spc, results);
         });
 
-        // Per-compilation MediatorSagaCommandDispatcher — single emit covering every
-        // [Step] command type across all sagas in the consumer assembly. Lives in the
-        // consumer's compilation so it can reference IMediator directly (which is
-        // emitted per-assembly by the Mediator source generator).
-        context.RegisterSourceOutput(allModels, static (spc, results) =>
-        {
-            MediatorSagaCommandDispatcherEmitter.Emit(spc, results);
-        });
-
         // Per-compilation SagaCommandRegistry — single emit covering every
         // forward and compensation command type across all sagas in the consumer
         // assembly. Conditional on ZeroAlloc.Serialisation being referenced — the
@@ -74,6 +65,21 @@ public sealed class SagaGenerator : IIncrementalGenerator
         var serialisationReferenced = context.CompilationProvider
             .Select(static (compilation, _) =>
                 compilation.GetTypeByMetadataName("ZeroAlloc.Serialisation.ZeroAllocSerializableAttribute") is not null);
+
+        // Per-compilation MediatorSagaCommandDispatcher — single emit covering every
+        // [Step] command type across all sagas in the consumer assembly. Lives in the
+        // consumer's compilation so it can reference IMediator directly (which is
+        // emitted per-assembly by the Mediator source generator). Combined with
+        // serialisationReferenced so the emitter can attach a [DynamicDependency]
+        // on SagaCommandRegistry when (and only when) the registry is also being
+        // emitted — this roots the registry under PublishAot=true.
+        context.RegisterSourceOutput(
+            allModels.Combine(serialisationReferenced),
+            static (spc, tuple) =>
+            {
+                var (results, hasSerialisation) = tuple;
+                MediatorSagaCommandDispatcherEmitter.Emit(spc, results, registryAlsoEmitted: hasSerialisation);
+            });
 
         context.RegisterSourceOutput(
             allModels.Combine(serialisationReferenced),
