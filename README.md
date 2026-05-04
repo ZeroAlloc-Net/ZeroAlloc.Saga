@@ -77,6 +77,34 @@ automatically.
 
 ## What's new
 
+### `ZeroAlloc.Saga.Redis` (new package)
+
+Second durable backend, mirroring `Saga.EfCore`. One Redis Hash per saga
+instance with `state` (bytes) + `version` (Guid) fields; OCC via
+`WATCH/MULTI/EXEC`; conflicts surface as `RedisSagaConcurrencyException`
+which the generator-emitted handler's retry loop catches alongside EfCore's
+exceptions.
+
+```csharp
+services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect("..."));
+services.AddSaga()
+    .WithRedisStore(opts => opts.KeyPrefix = "myapp:saga")
+    .WithOrderFulfillmentSaga();
+```
+
+Mutually exclusive with `WithEfCoreStore<TContext>()`. Composition with
+`WithOutbox()` works for the dispatch path but full atomic-commit
+guarantees await Stage 3 (`ZeroAlloc.Saga.Outbox.Redis`). Requires
+`StackExchange.Redis` 2.8+. See [`docs/persistence-redis.md`](docs/persistence-redis.md).
+
+### `ISagaUnitOfWork` abstraction (Phase 3a-2 stage 1)
+
+The dispatch-side outbox enlistment now goes through `ISagaUnitOfWork`
+instead of `IOutboxStore` directly, opening the door for backend-specific
+unit-of-work implementations (Redis MULTI/EXEC, etc.). No behavior change
+for existing EfCore + Outbox consumers — the default
+`OutboxStoreSagaUnitOfWork` is a passthrough.
+
 ### Builder API: `Add{Saga}Saga()` → `With{Saga}Saga()`
 
 The generator-emitted per-saga registration method is renamed from
@@ -292,7 +320,7 @@ worked example.
 | v1.1 | `ZeroAlloc.Saga` 1.1, `ZeroAlloc.Saga.EfCore` 1.0 | durable persistence (EfCore), retry-on-OCC-conflict, snapshot/rehydrate via `ISagaPersistableState` |
 | **this release** | `ZeroAlloc.Saga`, `ZeroAlloc.Saga.Outbox` (new) | atomic command dispatch via transactional outbox (`.WithOutbox()`), `ISagaCommandDispatcher` indirection |
 | **this release** | `ZeroAlloc.Saga.Resilience` (new) | retry / timeout / circuit-breaker / rate-limit policies wrapping step dispatch (`.WithResilience()`) |
-| v1.3 | `ZeroAlloc.Saga.Redis` | second durable backend |
+| **this release** | `ZeroAlloc.Saga.Redis` (new) | second durable backend (Redis Hash + WATCH/MULTI/EXEC OCC) |
 | v1.4 | (Scheduling integration) | per-step timeouts, deadlines |
 | v1.5 | `ZeroAlloc.Saga.Telemetry`, `ZeroAlloc.Saga.Dashboard` | OTel spans/metrics, ops dashboard |
 | v1.6 stretch | `ZeroAlloc.Saga.EventSourcing` | ES-backed store, choreography mode |

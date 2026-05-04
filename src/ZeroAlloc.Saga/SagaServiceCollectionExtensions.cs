@@ -35,6 +35,7 @@ public static class SagaServiceCollectionExtensions
     {
         public IServiceCollection Services { get; }
         public bool IsEfCoreBackend { get; set; }
+        public bool IsRedisBackend { get; set; }
         public SagaBuilder(IServiceCollection services) => Services = services;
     }
 }

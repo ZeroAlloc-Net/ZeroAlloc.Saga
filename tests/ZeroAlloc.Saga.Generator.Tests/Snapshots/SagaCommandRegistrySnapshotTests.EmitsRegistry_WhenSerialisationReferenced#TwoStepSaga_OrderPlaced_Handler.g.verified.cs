@@ -61,7 +61,7 @@ internal sealed class TwoStepSaga_OrderPlaced_Handler : INotificationHandler<glo
                 await store.SaveAsync(key, saga, ct).ConfigureAwait(false);
                 return;
             }
-            catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsEfCoreConflict(ex))
+            catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsBackendConflict(ex))
             {
                 attempts++;
                 _log.LogWarning("Saga {Saga}: OCC conflict on key {Key}, retry {Attempt}/{Max}", "TwoStepSaga", key, attempts, _retry.MaxRetryAttempts);
@@ -70,17 +70,18 @@ internal sealed class TwoStepSaga_OrderPlaced_Handler : INotificationHandler<glo
                     : _retry.RetryBaseDelay;
                 await Task.Delay(delay, ct).ConfigureAwait(false);
             }
-            catch (Exception ex) when (IsEfCoreConflict(ex))
+            catch (Exception ex) when (IsBackendConflict(ex))
             {
                 throw new SagaConcurrencyException("TwoStepSaga", key.ToString() ?? string.Empty, attempts, ex);
             }
         }
     }
 
-    private static bool IsEfCoreConflict(Exception ex)
+    private static bool IsBackendConflict(Exception ex)
     {
         var typeName = ex.GetType().FullName;
         return typeName == "Microsoft.EntityFrameworkCore.DbUpdateException"
-            || typeName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException";
+            || typeName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException"
+            || typeName == "ZeroAlloc.Saga.Redis.RedisSagaConcurrencyException";
     }
 }

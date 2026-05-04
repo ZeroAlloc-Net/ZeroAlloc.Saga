@@ -28,6 +28,10 @@
     <!-- Resilience bridge deps -->
     <PackageVersion Include="ZeroAlloc.Resilience" Version="1.0.*" />
 
+    <!-- Redis backend deps -->
+    <PackageVersion Include="StackExchange.Redis" Version="2.8.*" />
+    <PackageVersion Include="Testcontainers.Redis" Version="4.6.*" />
+
     <!-- Generator deps -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.*" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.11.*" />

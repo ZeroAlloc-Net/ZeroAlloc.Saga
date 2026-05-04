@@ -1,0 +1,17 @@
+#nullable enable
+ZeroAlloc.Saga.Redis.RedisSagaConcurrencyException
+ZeroAlloc.Saga.Redis.RedisSagaConcurrencyException.Key.get -> string!
+ZeroAlloc.Saga.Redis.RedisSagaConcurrencyException.RedisSagaConcurrencyException(string! key) -> void
+ZeroAlloc.Saga.Redis.RedisSagaConcurrencyException.RedisSagaConcurrencyException(string! key, string! message) -> void
+ZeroAlloc.Saga.Redis.RedisSagaStore<TSaga, TKey>
+ZeroAlloc.Saga.Redis.RedisSagaStore<TSaga, TKey>.LoadOrCreateAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<TSaga!>
+ZeroAlloc.Saga.Redis.RedisSagaStore<TSaga, TKey>.RedisSagaStore(StackExchange.Redis.IDatabase! db, ZeroAlloc.Saga.Redis.RedisSagaStoreOptions! options, Microsoft.Extensions.Logging.ILogger<ZeroAlloc.Saga.Redis.RedisSagaStore<TSaga!, TKey>!>! log) -> void
+ZeroAlloc.Saga.Redis.RedisSagaStore<TSaga, TKey>.RemoveAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.Redis.RedisSagaStore<TSaga, TKey>.SaveAsync(TKey key, TSaga! saga, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.Redis.RedisSagaStore<TSaga, TKey>.TryLoadAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<TSaga?>
+ZeroAlloc.Saga.Redis.RedisSagaStoreOptions
+ZeroAlloc.Saga.Redis.RedisSagaStoreOptions.KeyPrefix.get -> string!
+ZeroAlloc.Saga.Redis.RedisSagaStoreOptions.KeyPrefix.set -> void
+ZeroAlloc.Saga.Redis.RedisSagaStoreOptions.RedisSagaStoreOptions() -> void
+ZeroAlloc.Saga.Redis.SagaRedisBuilderExtensions
+static ZeroAlloc.Saga.Redis.SagaRedisBuilderExtensions.WithRedisStore(this ZeroAlloc.Saga.ISagaBuilder! builder, System.Action<ZeroAlloc.Saga.Redis.RedisSagaStoreOptions!>? configure = null) -> ZeroAlloc.Saga.ISagaBuilder!

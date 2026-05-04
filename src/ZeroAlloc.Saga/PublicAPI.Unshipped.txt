@@ -3,10 +3,13 @@ ZeroAlloc.Saga.CorrelationKeyAttribute
 ZeroAlloc.Saga.CorrelationKeyAttribute.CorrelationKeyAttribute() -> void
 ZeroAlloc.Saga.ISagaBuilder
 ZeroAlloc.Saga.ISagaBuilder.IsEfCoreBackend.get -> bool
+ZeroAlloc.Saga.ISagaBuilder.IsRedisBackend.get -> bool
 ZeroAlloc.Saga.ISagaBuilder.Services.get -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 ZeroAlloc.Saga.ISagaBuilderMutable
 ZeroAlloc.Saga.ISagaBuilderMutable.IsEfCoreBackend.get -> bool
 ZeroAlloc.Saga.ISagaBuilderMutable.IsEfCoreBackend.set -> void
+ZeroAlloc.Saga.ISagaBuilderMutable.IsRedisBackend.get -> bool
+ZeroAlloc.Saga.ISagaBuilderMutable.IsRedisBackend.set -> void
 ZeroAlloc.Saga.ISagaCommandDispatcher
 ZeroAlloc.Saga.ISagaCommandDispatcher.DispatchAsync<TCommand>(TCommand cmd, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
 ZeroAlloc.Saga.ISagaCompensationDispatcher<TSaga>
@@ -119,6 +122,7 @@ ZeroAlloc.Saga.StepAttribute.Order.get -> int
 ZeroAlloc.Saga.StepAttribute.Order.init -> void
 ZeroAlloc.Saga.StepAttribute.StepAttribute() -> void
 static ZeroAlloc.Saga.SagaBuilderMutationExtensions.SetEfCoreBackend(this ZeroAlloc.Saga.ISagaBuilder! builder) -> void
+static ZeroAlloc.Saga.SagaBuilderMutationExtensions.SetRedisBackend(this ZeroAlloc.Saga.ISagaBuilder! builder) -> void
 static ZeroAlloc.Saga.SagaServiceCollectionExtensions.AddSaga(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> ZeroAlloc.Saga.ISagaBuilder!
 static ZeroAlloc.Saga.SagaStoreRegistrar.Apply<TSaga, TKey>(ZeroAlloc.Saga.ISagaBuilder! builder) -> void
 static ZeroAlloc.Saga.SagaStoreRegistrar.OverrideStore<TSaga, TKey, TStore>(ZeroAlloc.Saga.ISagaBuilder! builder) -> void

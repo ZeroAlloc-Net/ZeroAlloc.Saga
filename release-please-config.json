@@ -18,6 +18,11 @@
       "release-type": "simple",
       "changelog-path": "CHANGELOG.md"
     },
+    "src/ZeroAlloc.Saga.Redis": {
+      "package-name": "ZeroAlloc.Saga.Redis",
+      "release-type": "simple",
+      "changelog-path": "CHANGELOG.md"
+    },
     "src/ZeroAlloc.Saga.Resilience": {
       "package-name": "ZeroAlloc.Saga.Resilience",
       "release-type": "simple",

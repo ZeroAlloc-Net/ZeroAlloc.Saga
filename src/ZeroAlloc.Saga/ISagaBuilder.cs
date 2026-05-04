@@ -22,8 +22,24 @@ public interface ISagaBuilder
     /// </summary>
     /// <remarks>
     /// Default <see langword="false"/>. Backend packages
-    /// (<c>ZeroAlloc.Saga.EfCore</c> in v1.1, <c>ZeroAlloc.Saga.Redis</c>
-    /// later) flip this via the <see cref="ISagaBuilderMutable"/> contract.
+    /// (<c>ZeroAlloc.Saga.EfCore</c>) flip this via the
+    /// <see cref="ISagaBuilderMutable"/> contract.
     /// </remarks>
     bool IsEfCoreBackend { get; }
+
+    /// <summary>
+    /// True when <c>ZeroAlloc.Saga.Redis</c>'s <c>WithRedisStore</c> has been
+    /// configured on this builder. Mutually exclusive with
+    /// <see cref="IsEfCoreBackend"/>: calling both throws.
+    /// </summary>
+    /// <remarks>
+    /// Default <see langword="false"/> via DIM so existing
+    /// <see cref="ISagaBuilder"/> implementations from before
+    /// <c>ZeroAlloc.Saga.Redis</c> shipped continue to compile and behave
+    /// correctly. <c>ZeroAlloc.Saga.Redis</c> flips this via the
+    /// <see cref="ISagaBuilderMutable"/> contract. The OCC retry path in the
+    /// generator-emitted handler covers <c>RedisSagaConcurrencyException</c>
+    /// alongside the EfCore exceptions.
+    /// </remarks>
+    bool IsRedisBackend => false;
 }

@@ -62,7 +62,7 @@ internal sealed class NullableFieldSaga_Started_Handler : INotificationHandler<g
                 await store.RemoveAsync(key, ct).ConfigureAwait(false);
                 return;
             }
-            catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsEfCoreConflict(ex))
+            catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsBackendConflict(ex))
             {
                 attempts++;
                 _log.LogWarning("Saga {Saga}: OCC conflict on key {Key}, retry {Attempt}/{Max}", "NullableFieldSaga", key, attempts, _retry.MaxRetryAttempts);
@@ -71,17 +71,18 @@ internal sealed class NullableFieldSaga_Started_Handler : INotificationHandler<g
                     : _retry.RetryBaseDelay;
                 await Task.Delay(delay, ct).ConfigureAwait(false);
             }
-            catch (Exception ex) when (IsEfCoreConflict(ex))
+            catch (Exception ex) when (IsBackendConflict(ex))
             {
                 throw new SagaConcurrencyException("NullableFieldSaga", key.ToString() ?? string.Empty, attempts, ex);
             }
         }
     }
 
-    private static bool IsEfCoreConflict(Exception ex)
+    private static bool IsBackendConflict(Exception ex)
     {
         var typeName = ex.GetType().FullName;
         return typeName == "Microsoft.EntityFrameworkCore.DbUpdateException"
-            || typeName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException";
+            || typeName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException"
+            || typeName == "ZeroAlloc.Saga.Redis.RedisSagaConcurrencyException";
     }
 }
