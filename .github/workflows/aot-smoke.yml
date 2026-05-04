@@ -92,3 +92,26 @@ jobs:
         run: dotnet publish samples/AotSmokeOutbox/AotSmokeOutbox.csproj -c Release -o aot-out-outbox
       - name: Run AotSmokeOutbox
         run: ./aot-out-outbox/AotSmokeOutbox
+
+  resilience-sample:
+    name: build + run ResilienceSample (linux-x64, JIT)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: Restore solution
+        run: dotnet restore ZeroAlloc.Saga.slnx
+      # ResilienceSample is JIT-only — it demonstrates the Saga.Resilience bridge's
+      # retry policy recovering from transient receiver failures. The bridge itself
+      # has no AOT-specific concerns (pure DI-side decorator with hand-rolled
+      # ZeroAlloc.Resilience policy invocations), so a JIT smoke is sufficient. If
+      # AOT-specific verification ever becomes useful, mirror the AotSmokeOutbox
+      # publish-and-run pattern here.
+      - name: Build ResilienceSample
+        run: dotnet build samples/ResilienceSample/ResilienceSample.csproj -c Release
+      - name: Run ResilienceSample
+        run: dotnet run --project samples/ResilienceSample/ResilienceSample.csproj -c Release --no-build

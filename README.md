@@ -77,6 +77,29 @@ automatically.
 
 ## What's new
 
+### `ZeroAlloc.Saga.Resilience` (new package)
+
+Optional bridge that wraps every saga step command's dispatch in a
+`ZeroAlloc.Resilience` policy stack — retry, timeout, circuit-breaker,
+rate-limit. One fluent call configures the pipeline:
+
+```csharp
+services.AddSaga()
+    .WithEfCoreStore<AppDbContext>(opts => opts.MaxRetryAttempts = 3)
+    .AddOrderFulfillmentSaga()
+    .WithResilience(r =>
+    {
+        r.Retry = new RetryPolicy(maxAttempts: 5, backoffMs: 200, jitter: true, perAttemptTimeoutMs: 5_000);
+        r.CircuitBreaker = new CircuitBreakerPolicy(maxFailures: 10, resetMs: 30_000, halfOpenProbes: 1);
+    });
+```
+
+Composition order is outermost-first: `circuit-breaker → rate-limit →
+timeout → retry → inner.DispatchAsync`. Caller cancellation propagates
+as `OperationCanceledException`; policy denials surface as
+`ResilienceException(Policy: ...)` so consumers can disambiguate.
+Requires `ZeroAlloc.Resilience` 1.0+. See [`docs/resilience.md`](docs/resilience.md).
+
 ### `ZeroAlloc.Saga.Outbox` (new package)
 
 Optional bridge that routes every saga step command through
@@ -247,7 +270,8 @@ worked example.
 | v1.0 | `ZeroAlloc.Saga` 1.0 | runtime + generator + InMemory + diagnostics + AOT |
 | v1.1 | `ZeroAlloc.Saga` 1.1, `ZeroAlloc.Saga.EfCore` 1.0 | durable persistence (EfCore), retry-on-OCC-conflict, snapshot/rehydrate via `ISagaPersistableState` |
 | **this release** | `ZeroAlloc.Saga`, `ZeroAlloc.Saga.Outbox` (new) | atomic command dispatch via transactional outbox (`.WithOutbox()`), `ISagaCommandDispatcher` indirection |
-| v1.3 | `ZeroAlloc.Saga.Resilience`, `ZeroAlloc.Saga.Redis` | retry/circuit-breaker policies, second durable backend |
+| **this release** | `ZeroAlloc.Saga.Resilience` (new) | retry / timeout / circuit-breaker / rate-limit policies wrapping step dispatch (`.WithResilience()`) |
+| v1.3 | `ZeroAlloc.Saga.Redis` | second durable backend |
 | v1.4 | (Scheduling integration) | per-step timeouts, deadlines |
 | v1.5 | `ZeroAlloc.Saga.Telemetry`, `ZeroAlloc.Saga.Dashboard` | OTel spans/metrics, ops dashboard |
 | v1.6 stretch | `ZeroAlloc.Saga.EventSourcing` | ES-backed store, choreography mode |

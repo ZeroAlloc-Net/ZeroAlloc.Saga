@@ -17,6 +17,11 @@
       "package-name": "ZeroAlloc.Saga.Outbox",
       "release-type": "simple",
       "changelog-path": "CHANGELOG.md"
+    },
+    "src/ZeroAlloc.Saga.Resilience": {
+      "package-name": "ZeroAlloc.Saga.Resilience",
+      "release-type": "simple",
+      "changelog-path": "CHANGELOG.md"
     }
   },
   "changelog-sections": [
