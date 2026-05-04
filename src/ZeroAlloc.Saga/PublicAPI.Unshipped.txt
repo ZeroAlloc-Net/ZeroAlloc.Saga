@@ -26,6 +26,8 @@ ZeroAlloc.Saga.ISagaStore<TSaga, TKey>.SaveAsync(TKey key, TSaga! saga, System.T
 ZeroAlloc.Saga.ISagaStore<TSaga, TKey>.TryLoadAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<TSaga?>
 ZeroAlloc.Saga.ISagaStoreRegistrar
 ZeroAlloc.Saga.ISagaStoreRegistrar.Register<TSaga, TKey>(ZeroAlloc.Saga.ISagaBuilder! builder) -> void
+ZeroAlloc.Saga.ISagaUnitOfWork
+ZeroAlloc.Saga.ISagaUnitOfWork.EnlistOutboxRowAsync(string! typeName, System.ReadOnlyMemory<byte> payload, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
 ZeroAlloc.Saga.InMemorySagaStore<TSaga, TKey>
 ZeroAlloc.Saga.InMemorySagaStore<TSaga, TKey>.InMemorySagaStore() -> void
 ZeroAlloc.Saga.InMemorySagaStore<TSaga, TKey>.LoadOrCreateAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<TSaga!>

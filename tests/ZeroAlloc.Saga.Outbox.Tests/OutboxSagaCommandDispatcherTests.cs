@@ -37,78 +37,71 @@ public class OutboxSagaCommandDispatcherTests
             => new(BinaryPrimitives.ReadInt32LittleEndian(buffer));
     }
 
-    private sealed class CapturingOutboxStore : IOutboxStore
+    /// <summary>
+    /// Captures EnlistOutboxRowAsync invocations so the dispatcher's contract
+    /// (serialize via ISerializer, then enlist via ISagaUnitOfWork) can be asserted
+    /// without dragging in a real backend.
+    /// </summary>
+    private sealed class CapturingSagaUnitOfWork : ISagaUnitOfWork
     {
         public string? CapturedTypeName;
         public byte[]? CapturedPayload;
         public int CallCount;
 
-        public ValueTask EnqueueAsync(string typeName, ReadOnlyMemory<byte> payload, DbTransaction? transaction, CancellationToken ct)
+        public ValueTask EnlistOutboxRowAsync(string typeName, ReadOnlyMemory<byte> payload, CancellationToken ct)
         {
             CallCount++;
             CapturedTypeName = typeName;
             CapturedPayload = payload.ToArray();
             return default;
         }
-
-        public ValueTask<IReadOnlyList<OutboxEntry>> FetchPendingAsync(int batchSize, CancellationToken ct)
-            => throw new NotSupportedException();
-
-        public ValueTask MarkSucceededAsync(OutboxMessageId id, CancellationToken ct)
-            => throw new NotSupportedException();
-
-        public ValueTask MarkFailedAsync(OutboxMessageId id, int retryCount, DateTimeOffset nextRetryAt, CancellationToken ct)
-            => throw new NotSupportedException();
-
-        public ValueTask DeadLetterAsync(OutboxMessageId id, string error, CancellationToken ct)
-            => throw new NotSupportedException();
     }
 
     [Fact]
-    public async Task DispatchAsync_SerializesAndEnqueues()
+    public async Task DispatchAsync_SerializesAndEnlists()
     {
-        var store = new CapturingOutboxStore();
+        var uow = new CapturingSagaUnitOfWork();
         var services = new ServiceCollection();
         services.AddSingleton<ISerializer<DispatchableCmd>>(new FakeSerializer());
         using var sp = services.BuildServiceProvider();
 
-        var dispatcher = new OutboxSagaCommandDispatcher(store, sp);
+        var dispatcher = new OutboxSagaCommandDispatcher(uow, sp);
         await dispatcher.DispatchAsync(new DispatchableCmd(42), CancellationToken.None);
 
-        Assert.Equal(1, store.CallCount);
-        Assert.NotNull(store.CapturedTypeName);
-        Assert.Contains("DispatchableCmd", store.CapturedTypeName!, StringComparison.Ordinal);
-        Assert.NotNull(store.CapturedPayload);
-        Assert.Equal(4, store.CapturedPayload!.Length);
-        Assert.Equal(42, BinaryPrimitives.ReadInt32LittleEndian(store.CapturedPayload));
+        Assert.Equal(1, uow.CallCount);
+        Assert.NotNull(uow.CapturedTypeName);
+        Assert.Contains("DispatchableCmd", uow.CapturedTypeName!, StringComparison.Ordinal);
+        Assert.NotNull(uow.CapturedPayload);
+        Assert.Equal(4, uow.CapturedPayload!.Length);
+        Assert.Equal(42, BinaryPrimitives.ReadInt32LittleEndian(uow.CapturedPayload));
     }
 
     [Fact]
     public async Task DispatchAsync_TypeName_IsFullyQualified()
     {
-        var store = new CapturingOutboxStore();
+        var uow = new CapturingSagaUnitOfWork();
         var services = new ServiceCollection();
         services.AddSingleton<ISerializer<DispatchableCmd>>(new FakeSerializer());
         using var sp = services.BuildServiceProvider();
 
-        var dispatcher = new OutboxSagaCommandDispatcher(store, sp);
+        var dispatcher = new OutboxSagaCommandDispatcher(uow, sp);
         await dispatcher.DispatchAsync(new DispatchableCmd(7), CancellationToken.None);
 
         // Matches the case label written by the generator-emitted SagaCommandRegistry.
-        Assert.Equal(typeof(DispatchableCmd).FullName, store.CapturedTypeName);
+        Assert.Equal(typeof(DispatchableCmd).FullName, uow.CapturedTypeName);
     }
 
     [Fact]
     public async Task DispatchAsync_MissingSerializer_Throws()
     {
-        var store = new CapturingOutboxStore();
+        var uow = new CapturingSagaUnitOfWork();
         var services = new ServiceCollection();
         using var sp = services.BuildServiceProvider();
 
-        var dispatcher = new OutboxSagaCommandDispatcher(store, sp);
+        var dispatcher = new OutboxSagaCommandDispatcher(uow, sp);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
             async () => await dispatcher.DispatchAsync(new DispatchableCmd(1), CancellationToken.None).ConfigureAwait(false));
-        Assert.Equal(0, store.CallCount);
+        Assert.Equal(0, uow.CallCount);
     }
 }

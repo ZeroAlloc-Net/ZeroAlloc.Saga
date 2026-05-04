@@ -36,6 +36,13 @@ public static class SagaOutboxBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
         var services = builder.Services;
+        // Default unit of work: passthrough to IOutboxStore.EnqueueDeferredAsync.
+        // Backend extensions that ship a transactional unit-of-work
+        // (e.g. ZeroAlloc.Saga.Redis's RedisSagaUnitOfWork) override this with
+        // services.Replace(...) so their MULTI/EXEC-based atomicity wins.
+        // TryAddScoped here ensures the default doesn't clobber a backend impl
+        // registered via WithRedisStore() before WithOutbox().
+        services.TryAddScoped<ISagaUnitOfWork, OutboxStoreSagaUnitOfWork>();
         services.Replace(ServiceDescriptor.Scoped<ISagaCommandDispatcher, OutboxSagaCommandDispatcher>());
         services.TryAddSingleton<SagaCommandRegistryDispatcher>(_ => CreateRegistryDispatcher());
         services.AddHostedService<OutboxSagaCommandPoller>();

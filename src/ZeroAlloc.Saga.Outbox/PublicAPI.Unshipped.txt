@@ -1,7 +1,10 @@
 #nullable enable
 ZeroAlloc.Saga.Outbox.OutboxSagaCommandDispatcher
-ZeroAlloc.Saga.Outbox.OutboxSagaCommandDispatcher.OutboxSagaCommandDispatcher(ZeroAlloc.Outbox.IOutboxStore! store, System.IServiceProvider! services) -> void
+ZeroAlloc.Saga.Outbox.OutboxSagaCommandDispatcher.OutboxSagaCommandDispatcher(ZeroAlloc.Saga.ISagaUnitOfWork! uow, System.IServiceProvider! services) -> void
 ZeroAlloc.Saga.Outbox.OutboxSagaCommandDispatcher.DispatchAsync<TCommand>(TCommand cmd, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.Outbox.OutboxStoreSagaUnitOfWork
+ZeroAlloc.Saga.Outbox.OutboxStoreSagaUnitOfWork.OutboxStoreSagaUnitOfWork(ZeroAlloc.Outbox.IOutboxStore! store) -> void
+ZeroAlloc.Saga.Outbox.OutboxStoreSagaUnitOfWork.EnlistOutboxRowAsync(string! typeName, System.ReadOnlyMemory<byte> payload, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
 ZeroAlloc.Saga.Outbox.OutboxSagaCommandPoller
 ZeroAlloc.Saga.Outbox.OutboxSagaCommandPoller.OutboxSagaCommandPoller(Microsoft.Extensions.DependencyInjection.IServiceScopeFactory! scopeFactory, ZeroAlloc.Saga.Outbox.SagaCommandRegistryDispatcher! dispatch, Microsoft.Extensions.Logging.ILogger<ZeroAlloc.Saga.Outbox.OutboxSagaCommandPoller!>! log, ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions? options = null) -> void
 ZeroAlloc.Saga.Outbox.OutboxSagaCommandPoller.PollOnceAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
