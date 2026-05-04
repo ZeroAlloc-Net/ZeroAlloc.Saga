@@ -32,6 +32,9 @@ ZeroAlloc.Saga.InMemorySagaStore<TSaga, TKey>.LoadOrCreateAsync(TKey key, System
 ZeroAlloc.Saga.InMemorySagaStore<TSaga, TKey>.RemoveAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
 ZeroAlloc.Saga.InMemorySagaStore<TSaga, TKey>.SaveAsync(TKey key, TSaga! saga, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
 ZeroAlloc.Saga.InMemorySagaStore<TSaga, TKey>.TryLoadAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<TSaga?>
+ZeroAlloc.Saga.MediatorSagaCommandDispatcher
+ZeroAlloc.Saga.MediatorSagaCommandDispatcher.DispatchAsync<TCommand>(TCommand cmd, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.MediatorSagaCommandDispatcher.MediatorSagaCommandDispatcher(object! mediator) -> void
 ZeroAlloc.Saga.NotSagaStateAttribute
 ZeroAlloc.Saga.NotSagaStateAttribute.NotSagaStateAttribute() -> void
 ZeroAlloc.Saga.SagaAttribute
