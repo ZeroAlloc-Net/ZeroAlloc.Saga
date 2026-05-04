@@ -17,3 +17,5 @@ ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions.RetryDelay.get -> System.TimeSpan
 ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions.RetryDelay.init -> void
 ZeroAlloc.Saga.Outbox.SagaCommandRegistryDispatcher
 virtual ZeroAlloc.Saga.Outbox.SagaCommandRegistryDispatcher.Invoke(string! typeName, System.ReadOnlyMemory<byte> bytes, System.IServiceProvider! services, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.Outbox.SagaOutboxBuilderExtensions
+static ZeroAlloc.Saga.Outbox.SagaOutboxBuilderExtensions.WithOutbox(this ZeroAlloc.Saga.ISagaBuilder! builder) -> ZeroAlloc.Saga.ISagaBuilder!
