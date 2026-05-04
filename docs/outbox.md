@@ -43,17 +43,15 @@ With the outbox bridge:
    the entry is rescheduled (or dead-lettered after
    `OutboxSagaPollerOptions.MaxRetries`).
 
-When a losing scope's `SaveChangesAsync` raises
-`DbUpdateConcurrencyException` and that scope is then disposed (the
-typical cross-process and cross-scope shape — different replicas, or
-explicit `IServiceScope` per attempt), the tracked outbox row is
-discarded along with the failed saga update. A retry from a fresh
-scope cannot result in a phantom dispatch. That's the durable
-atomicity guarantee this package adds for the cross-process race.
-
-In-process OCC retries that **reuse the same scope** behave
-differently — see "Same-process OCC retry still has at-least-once
-semantics" under Limitations below.
+When `SaveChangesAsync` raises `DbUpdateConcurrencyException` (or
+`DbUpdateException` for fresh-key INSERT races), the failing attempt's
+`IServiceScope` is disposed by the generated handler — its tracked
+outbox row goes away with the rolled-back saga update. The handler
+then retries in a fresh scope with a fresh `DbContext`. A retry that
+eventually succeeds commits exactly one outbox row, and the poller
+dispatches the command exactly once. Same guarantee for cross-process
+races (each replica has its own scope) and same-process OCC retries
+(scope-per-attempt makes them equivalent).
 
 ## When to use it
 
@@ -160,25 +158,26 @@ Per-entry failure isolation: a single dispatch failure does not poison the
 batch; the entry is rescheduled (or dead-lettered) and the poller continues
 with the next entry.
 
+## Single-dispatch under OCC retry
+
+The generator-emitted handler's retry loop creates a fresh
+`IServiceScope` per attempt, so `ISagaStore<TSaga,TKey>` and
+`ISagaCommandDispatcher` resolve a fresh `DbContext` on every iteration.
+On `DbUpdateConcurrencyException`, the failed attempt's scope is disposed
+— its tracked outbox row is discarded along with the rolled-back saga
+update. A later attempt that succeeds commits exactly **one** outbox row,
+and the poller dispatches the command exactly **once**.
+
+This holds for both same-process retries (one consumer, one OCC
+clash) and cross-process races (multiple replicas, one wins, the others
+retry into a now-stale FSM trigger and silently no-op). `ZASAGA015`'s
+"step commands must be idempotent" guidance remains good practice for
+the rare residual cases (the saga handler itself crashes between
+`SaveChangesAsync` and the message-bus ack, the outbox poller crashes
+after dispatching but before `MarkSucceededAsync`, etc.) but is no
+longer needed to defend against the bridge's own retry path.
+
 ## Limitations
-
-### Same-process OCC retry still has at-least-once semantics
-
-The generator-emitted handler's retry loop reuses the same scoped
-`DbContext` across attempts. EF Core does not clear the `ChangeTracker`
-when `SaveChangesAsync` throws `DbUpdateConcurrencyException`, so a retried
-`EnqueueDeferredAsync` adds a *second* tracked outbox row alongside the
-first. If a later attempt succeeds, both rows commit and the poller
-dispatches the command twice.
-
-The bridge therefore tightens **persistence atomicity** (the dispatch row
-and the saga update commit together or roll back together when scopes are
-disposed) but does **not** eliminate the at-least-once-from-mediator's-view
-quirk that `ZASAGA015` already documents for in-process OCC retries. Step
-command handlers must remain idempotent.
-
-A scope-per-attempt retry loop is a candidate follow-up that would close
-this gap.
 
 ### Shared scoped `DbContext` is required
 

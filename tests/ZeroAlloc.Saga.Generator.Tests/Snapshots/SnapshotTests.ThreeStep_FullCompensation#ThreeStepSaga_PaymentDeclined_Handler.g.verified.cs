@@ -4,6 +4,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ZeroAlloc.Mediator;
 using ZeroAlloc.Saga;
@@ -12,17 +13,16 @@ namespace Sample;
 
 internal sealed class ThreeStepSaga_PaymentDeclined_Handler : INotificationHandler<global::Sample.PaymentDeclined>
 {
-    private readonly ISagaStore<ThreeStepSaga, global::Sample.OrderId> _store;
+    // Scope-per-attempt: see the same-named comment in the forward handler.
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly SagaLockManager<global::Sample.OrderId> _locks;
-    private readonly ISagaCommandDispatcher _dispatcher;
     private readonly SagaRetryOptions _retry;
     private readonly ILogger<ThreeStepSaga_PaymentDeclined_Handler> _log;
 
-    public ThreeStepSaga_PaymentDeclined_Handler(ISagaStore<ThreeStepSaga, global::Sample.OrderId> store, SagaLockManager<global::Sample.OrderId> locks, ISagaCommandDispatcher dispatcher, SagaRetryOptions retry, ILogger<ThreeStepSaga_PaymentDeclined_Handler> log)
+    public ThreeStepSaga_PaymentDeclined_Handler(IServiceScopeFactory scopeFactory, SagaLockManager<global::Sample.OrderId> locks, SagaRetryOptions retry, ILogger<ThreeStepSaga_PaymentDeclined_Handler> log)
     {
-        _store = store;
+        _scopeFactory = scopeFactory;
         _locks = locks;
-        _dispatcher = dispatcher;
         _retry = retry;
         _log = log;
     }
@@ -36,9 +36,12 @@ internal sealed class ThreeStepSaga_PaymentDeclined_Handler : INotificationHandl
         var attempts = 0;
         while (true)
         {
+            using var scope = _scopeFactory.CreateScope();
+            var store = scope.ServiceProvider.GetRequiredService<ISagaStore<ThreeStepSaga, global::Sample.OrderId>>();
+            var dispatcher = scope.ServiceProvider.GetRequiredService<ISagaCommandDispatcher>();
             try
             {
-                var saga = await _store.TryLoadAsync(key, ct).ConfigureAwait(false);
+                var saga = await store.TryLoadAsync(key, ct).ConfigureAwait(false);
                 if (saga is null)
                 {
                     _log.LogWarning("Saga {Saga}: orphan PaymentDeclined for key {Key}; no instance to compensate", "ThreeStepSaga", key);
@@ -62,14 +65,14 @@ internal sealed class ThreeStepSaga_PaymentDeclined_Handler : INotificationHandl
                 switch (stateAtFailure)
                 {
                     case ThreeStepSagaFsm.State.Step2:
-                        await _dispatcher.DispatchAsync(saga.Refund(), ct).ConfigureAwait(false);
-                        await _dispatcher.DispatchAsync(saga.CancelReservation(), ct).ConfigureAwait(false);
+                        await dispatcher.DispatchAsync(saga.Refund(), ct).ConfigureAwait(false);
+                        await dispatcher.DispatchAsync(saga.CancelReservation(), ct).ConfigureAwait(false);
                         break;
                     default: break;
                 }
 
                 saga.Fsm.TryFire(ThreeStepSagaFsm.Trigger.CompensateDone);
-                await _store.RemoveAsync(key, ct).ConfigureAwait(false);
+                await store.RemoveAsync(key, ct).ConfigureAwait(false);
                 return;
             }
             catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsEfCoreConflict(ex))

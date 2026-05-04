@@ -130,44 +130,35 @@ public sealed class E2ETests
     }
 
     [Fact]
-    public async Task EmulatedCrossScopeRollback_DiscardsDeferredOutboxRow_NoDuplicateDispatch()
+    public async Task OccConflict_RollsBackOutboxRow_NoDuplicateDispatch()
     {
-        // Task 15: documents the cross-scope rollback semantic that powers the
-        // bridge's atomicity guarantee. The OneShotConflictAndRollbackStore
-        // wrapper clears ChangeTracker before raising DbUpdateConcurrencyException
-        // — a single-process emulation of what happens to a parallel writer's
-        // DbContext when its row-version-mismatched UPDATE aborts: the implicit
-        // transaction discards BOTH the saga UPDATE and the deferred outbox
-        // INSERT, and the disposed DbContext takes its tracked entities with it.
+        // THE load-bearing regression test for Phase 3a + scope-per-attempt.
         //
-        // What this test PROVES: when a deferred outbox row is rolled back as
-        // part of a failed save, a successful retry produces exactly one outbox
-        // row and the poller dispatches the command exactly once.
+        // Pre-Phase-3a: a saga handler's OCC retry would call mediator.Send
+        // BEFORE state save, so a save that fails after dispatch already had
+        // the side effect — at-least-once dispatch was unavoidable.
         //
-        // What this test does NOT prove: that the same-process retry loop
-        // (which reuses one scoped DbContext across attempts) produces single
-        // dispatch. It does not — see "Same-process OCC retry still has
-        // at-least-once semantics" in docs/outbox.md. That quirk requires a
-        // scope-per-attempt retry loop to fix and remains ZASAGA015's territory.
+        // Post-Phase-3a + scope-per-attempt: each retry attempt runs in its
+        // own DI scope. The dispatcher Adds a tracked outbox row to the
+        // attempt's scoped DbContext. If SaveChangesAsync throws
+        // DbUpdateConcurrencyException, the attempt's `using` scope is
+        // disposed — the failed DbContext (and its tracked outbox row) is
+        // gone. The handler retries in a fresh scope with a fresh DbContext.
+        // The successful attempt commits exactly ONE outbox row, the poller
+        // drains exactly ONE entry, and ReserveStockCommand is dispatched
+        // exactly ONCE.
         //
-        // The cross-process race that Saga 1.1 documented as "OCC retry can
-        // dispatch twice" — where each replica has its own DbContext — IS
-        // fixed; this test is the cleanest deterministic demonstration of the
-        // rollback path that fix relies on.
+        // The OneShotConflictStore decorator below uses a SHARED counter
+        // (lifted out of the per-scope wrapper) so only the FIRST physical
+        // save throws — subsequent retry attempts in fresh scopes see a
+        // clean inner store. NO ChangeTracker.Clear emulation: this is the
+        // real architectural mechanism, not a single-process simulation.
         await using var fx = new SqliteFixture();
         await fx.EnsureCreatedAsync();
 
+        var counter = new SharedAttemptCounter();
         var sp = BuildHost(fx, services =>
         {
-            // Decorate the EfCoreSagaStore with a one-shot conflict wrapper that
-            // simulates an OCC clash on the FIRST save by throwing
-            // DbUpdateConcurrencyException AND clearing the ChangeTracker — the
-            // latter models what happens to a parallel writer's DbContext when
-            // its row-version-mismatched UPDATE rolls back: the implicit
-            // transaction discards both the saga UPDATE and the deferred outbox
-            // INSERT. In production this rollback is provided by the failing
-            // DbContext going out of scope; here we emulate it by clearing
-            // tracked changes so the test stays single-process.
             for (int i = services.Count - 1; i >= 0; i--)
             {
                 if (services[i].ServiceType == typeof(ISagaStore<OrderFulfillmentSaga, OrderId>))
@@ -181,7 +172,7 @@ public sealed class E2ETests
                 var inner = new EfCoreSagaStore<OrderFulfillmentSaga, OrderId>(
                     ctx,
                     NullLogger<EfCoreSagaStore<OrderFulfillmentSaga, OrderId>>.Instance);
-                return new OneShotConflictAndRollbackStore(inner, ctx);
+                return new OneShotConflictStore(inner, counter);
             });
         });
         var ledger = new CommandLedger();
@@ -189,14 +180,13 @@ public sealed class E2ETests
 
         var orderId = new OrderId(7002);
         // Should NOT throw — the retry loop catches the simulated conflict and
-        // succeeds on the second attempt.
+        // succeeds on the second attempt (in a fresh scope).
         await PublishAsync(sp, new OrderPlaced(orderId, 42m));
 
-        // CRITICAL ASSERTION: exactly ONE outbox row in the database. Pre-bridge,
-        // the failing first attempt would have already dispatched ReserveStock
-        // through the mediator — and the retry would dispatch it again. With the
-        // bridge, the first attempt's deferred outbox row is discarded and only
-        // the retry's row is committed.
+        // CRITICAL ASSERTION: exactly ONE outbox row in the database. The
+        // failed first-attempt scope was disposed before its SaveChangesAsync
+        // succeeded, so its tracked outbox row Add never made it to the DB.
+        // Only the successful retry's outbox row is committed.
         using (var scope = sp.CreateScope())
         {
             var ctx = scope.ServiceProvider.GetRequiredService<OutboxE2EDbContext>();
@@ -209,8 +199,7 @@ public sealed class E2ETests
         }
 
         // Drive the poller once. With exactly one outbox row, ReserveStockCommand
-        // is dispatched exactly once. WITHOUT the outbox bridge, this count would
-        // be 2 (initial mediator dispatch + retry mediator dispatch).
+        // is dispatched exactly once.
         var poller = sp.GetServices<Microsoft.Extensions.Hosting.IHostedService>()
             .OfType<OutboxSagaCommandPoller>()
             .Single();
@@ -224,26 +213,37 @@ public sealed class E2ETests
     }
 
     /// <summary>
-    /// Wrapper around <see cref="ISagaStore{TSaga,TKey}"/> that throws
-    /// <see cref="DbUpdateConcurrencyException"/> on the first <c>SaveAsync</c>
-    /// call AND clears the <see cref="DbContext"/>'s <c>ChangeTracker</c>. Models
-    /// what happens to a parallel writer's DbContext when its OCC-mismatched
-    /// UPDATE rolls back: the implicit transaction discards both the saga
-    /// UPDATE and the deferred outbox INSERT. Subsequent calls forward to the
-    /// inner store, where the saga commits cleanly.
+    /// Counter shared across per-attempt scopes — lets one (and only one)
+    /// physical SaveAsync throw, regardless of how many fresh
+    /// <see cref="OneShotConflictStore"/> instances the scope-per-attempt
+    /// retry loop instantiates.
     /// </summary>
-    private sealed class OneShotConflictAndRollbackStore : ISagaStore<OrderFulfillmentSaga, OrderId>
+    private sealed class SharedAttemptCounter
+    {
+        private int _attemptedSaves;
+        public bool TryConsumeFirstSave() => Interlocked.Increment(ref _attemptedSaves) == 1;
+    }
+
+    /// <summary>
+    /// Wrapper around <see cref="ISagaStore{TSaga,TKey}"/> that throws
+    /// <see cref="DbUpdateConcurrencyException"/> on the first physical
+    /// <c>SaveAsync</c>. The shared <see cref="SharedAttemptCounter"/> ensures
+    /// only ONE save throws even though the scope-per-attempt retry loop
+    /// resolves a fresh wrapper instance per attempt — exactly the behaviour
+    /// of a real cross-process race where one replica wins and the other(s)
+    /// see DbUpdateException.
+    /// </summary>
+    private sealed class OneShotConflictStore : ISagaStore<OrderFulfillmentSaga, OrderId>
     {
         private readonly ISagaStore<OrderFulfillmentSaga, OrderId> _inner;
-        private readonly DbContext _ctx;
-        private int _attemptedSaves;
+        private readonly SharedAttemptCounter _counter;
 
-        public OneShotConflictAndRollbackStore(
+        public OneShotConflictStore(
             ISagaStore<OrderFulfillmentSaga, OrderId> inner,
-            DbContext ctx)
+            SharedAttemptCounter counter)
         {
             _inner = inner;
-            _ctx = ctx;
+            _counter = counter;
         }
 
         public ValueTask<OrderFulfillmentSaga?> TryLoadAsync(OrderId key, CancellationToken ct)
@@ -254,12 +254,14 @@ public sealed class E2ETests
 
         public ValueTask SaveAsync(OrderId key, OrderFulfillmentSaga saga, CancellationToken ct)
         {
-            if (Interlocked.Increment(ref _attemptedSaves) == 1)
+            if (_counter.TryConsumeFirstSave())
             {
-                // Simulate the rollback that a parallel-writer DbContext would
-                // experience: its tracked entities (the saga UPDATE AND the
-                // dispatcher's deferred outbox INSERT) are discarded together.
-                _ctx.ChangeTracker.Clear();
+                // Real OCC conflict — no ChangeTracker.Clear, no emulation. The
+                // attempt's `using` scope in the generated handler will dispose
+                // the DbContext when this exception unwinds, taking the tracked
+                // outbox row with it. The retry loop creates a fresh inner scope
+                // and the test's SharedAttemptCounter ensures the second save
+                // succeeds.
                 throw new DbUpdateConcurrencyException("Transient conflict (test).");
             }
             return _inner.SaveAsync(key, saga, ct);

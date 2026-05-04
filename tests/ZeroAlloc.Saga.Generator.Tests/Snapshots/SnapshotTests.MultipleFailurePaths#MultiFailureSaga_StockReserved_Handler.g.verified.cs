@@ -4,6 +4,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ZeroAlloc.Mediator;
 using ZeroAlloc.Saga;
@@ -12,17 +13,24 @@ namespace Sample;
 
 internal sealed class MultiFailureSaga_StockReserved_Handler : INotificationHandler<global::Sample.StockReserved>
 {
-    private readonly ISagaStore<MultiFailureSaga, global::Sample.OrderId> _store;
+    // Scope-per-attempt: ISagaStore<TSaga,TKey> and ISagaCommandDispatcher
+    // are resolved from a fresh IServiceScope inside the retry loop. On a
+    // DbUpdateException / DbUpdateConcurrencyException catch, the scope's
+    // DbContext (and any tracked outbox row added by OutboxSagaCommandDispatcher)
+    // is disposed before the next attempt — so a retry that eventually succeeds
+    // commits exactly ONE outbox row (the winning attempt's). The lock manager,
+    // retry options, and logger live outside the per-attempt scope because the
+    // lock must be held across the whole retry loop and the others have no
+    // per-attempt state.
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly SagaLockManager<global::Sample.OrderId> _locks;
-    private readonly ISagaCommandDispatcher _dispatcher;
     private readonly SagaRetryOptions _retry;
     private readonly ILogger<MultiFailureSaga_StockReserved_Handler> _log;
 
-    public MultiFailureSaga_StockReserved_Handler(ISagaStore<MultiFailureSaga, global::Sample.OrderId> store, SagaLockManager<global::Sample.OrderId> locks, ISagaCommandDispatcher dispatcher, SagaRetryOptions retry, ILogger<MultiFailureSaga_StockReserved_Handler> log)
+    public MultiFailureSaga_StockReserved_Handler(IServiceScopeFactory scopeFactory, SagaLockManager<global::Sample.OrderId> locks, SagaRetryOptions retry, ILogger<MultiFailureSaga_StockReserved_Handler> log)
     {
-        _store = store;
+        _scopeFactory = scopeFactory;
         _locks = locks;
-        _dispatcher = dispatcher;
         _retry = retry;
         _log = log;
     }
@@ -35,9 +43,12 @@ internal sealed class MultiFailureSaga_StockReserved_Handler : INotificationHand
         var attempts = 0;
         while (true)
         {
+            using var scope = _scopeFactory.CreateScope();
+            var store = scope.ServiceProvider.GetRequiredService<ISagaStore<MultiFailureSaga, global::Sample.OrderId>>();
+            var dispatcher = scope.ServiceProvider.GetRequiredService<ISagaCommandDispatcher>();
             try
             {
-                var saga = await _store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);
+                var saga = await store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);
                 if (!saga.Fsm.TryFire(MultiFailureSagaFsm.Trigger.StockReserved))
                 {
                     _log.LogDebug("Saga {Saga}: late StockReserved for key {Key}; ignored", "MultiFailureSaga", key);
@@ -45,9 +56,9 @@ internal sealed class MultiFailureSaga_StockReserved_Handler : INotificationHand
                 }
 
                 var cmd = saga.Charge(@event);
-                await _dispatcher.DispatchAsync(cmd, ct).ConfigureAwait(false);
+                await dispatcher.DispatchAsync(cmd, ct).ConfigureAwait(false);
 
-                await _store.SaveAsync(key, saga, ct).ConfigureAwait(false);
+                await store.SaveAsync(key, saga, ct).ConfigureAwait(false);
                 return;
             }
             catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsEfCoreConflict(ex))
