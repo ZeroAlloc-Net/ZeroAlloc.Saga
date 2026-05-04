@@ -24,6 +24,7 @@ public static class NullableFieldSagaBuilderExtensions
         builder.Services.TryAddSingleton<SagaLockManager<int>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<NullableFieldSaga>, NullableFieldSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<NullableFieldSaga, int>, SagaManager<NullableFieldSaga, int>>();
+        builder.Services.TryAddScoped<global::ZeroAlloc.Saga.ISagaCommandDispatcher, global::ZeroAlloc.Saga.Generated.MediatorSagaCommandDispatcher>();
 
         builder.Services.AddTransient<INotificationHandler<global::Sample.Started>, NullableFieldSaga_Started_Handler>();
         return builder;

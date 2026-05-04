@@ -24,6 +24,7 @@ public static class MultiFieldOrderSagaBuilderExtensions
         builder.Services.TryAddSingleton<SagaLockManager<int>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<MultiFieldOrderSaga>, MultiFieldOrderSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<MultiFieldOrderSaga, int>, SagaManager<MultiFieldOrderSaga, int>>();
+        builder.Services.TryAddScoped<global::ZeroAlloc.Saga.ISagaCommandDispatcher, global::ZeroAlloc.Saga.Generated.MediatorSagaCommandDispatcher>();
 
         builder.Services.AddTransient<INotificationHandler<global::Sample.Started>, MultiFieldOrderSaga_Started_Handler>();
         return builder;

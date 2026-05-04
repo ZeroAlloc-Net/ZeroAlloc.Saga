@@ -24,6 +24,7 @@ public static class StateFieldSagaBuilderExtensions
         builder.Services.TryAddSingleton<SagaLockManager<global::Sample.OrderId>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<StateFieldSaga>, StateFieldSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<StateFieldSaga, global::Sample.OrderId>, SagaManager<StateFieldSaga, global::Sample.OrderId>>();
+        builder.Services.TryAddScoped<global::ZeroAlloc.Saga.ISagaCommandDispatcher, global::ZeroAlloc.Saga.Generated.MediatorSagaCommandDispatcher>();
 
         builder.Services.AddTransient<INotificationHandler<global::Sample.OrderPlaced>, StateFieldSaga_OrderPlaced_Handler>();
         return builder;

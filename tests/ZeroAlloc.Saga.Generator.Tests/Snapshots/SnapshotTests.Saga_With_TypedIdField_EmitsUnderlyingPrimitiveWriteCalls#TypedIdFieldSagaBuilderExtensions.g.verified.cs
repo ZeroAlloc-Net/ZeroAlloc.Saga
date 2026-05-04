@@ -24,6 +24,7 @@ public static class TypedIdFieldSagaBuilderExtensions
         builder.Services.TryAddSingleton<SagaLockManager<global::Sample.CustomerId>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<TypedIdFieldSaga>, TypedIdFieldSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<TypedIdFieldSaga, global::Sample.CustomerId>, SagaManager<TypedIdFieldSaga, global::Sample.CustomerId>>();
+        builder.Services.TryAddScoped<global::ZeroAlloc.Saga.ISagaCommandDispatcher, global::ZeroAlloc.Saga.Generated.MediatorSagaCommandDispatcher>();
 
         builder.Services.AddTransient<INotificationHandler<global::Sample.Activated>, TypedIdFieldSaga_Activated_Handler>();
         return builder;

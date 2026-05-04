@@ -24,6 +24,7 @@ public static class SingleStepSagaBuilderExtensions
         builder.Services.TryAddSingleton<SagaLockManager<global::Sample.OrderId>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<SingleStepSaga>, SingleStepSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<SingleStepSaga, global::Sample.OrderId>, SagaManager<SingleStepSaga, global::Sample.OrderId>>();
+        builder.Services.TryAddScoped<global::ZeroAlloc.Saga.ISagaCommandDispatcher, global::ZeroAlloc.Saga.Generated.MediatorSagaCommandDispatcher>();
 
         builder.Services.AddTransient<INotificationHandler<global::Sample.OrderPlaced>, SingleStepSaga_OrderPlaced_Handler>();
         return builder;

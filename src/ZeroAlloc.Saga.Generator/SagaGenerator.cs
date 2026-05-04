@@ -56,6 +56,15 @@ public sealed class SagaGenerator : IIncrementalGenerator
             ReportCrossSagaDiagnostics(spc, results);
         });
 
+        // Per-compilation MediatorSagaCommandDispatcher — single emit covering every
+        // [Step] command type across all sagas in the consumer assembly. Lives in the
+        // consumer's compilation so it can reference IMediator directly (which is
+        // emitted per-assembly by the Mediator source generator).
+        context.RegisterSourceOutput(allModels, static (spc, results) =>
+        {
+            MediatorSagaCommandDispatcherEmitter.Emit(spc, results);
+        });
+
         // ZASAGA015: best-effort idempotency hint when a durable backend is wired
         // anywhere in the same compilation. We don't bind the call — we look for
         // any invocation whose name starts with WithEfCoreStore / WithRedisStore,

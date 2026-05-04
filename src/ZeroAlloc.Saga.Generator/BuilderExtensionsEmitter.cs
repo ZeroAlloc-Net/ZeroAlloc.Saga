@@ -59,6 +59,10 @@ internal static class BuilderExtensionsEmitter
         sb.Append("        builder.Services.TryAddTransient<ISagaCompensationDispatcher<").Append(model.ClassName).Append(">, ").Append(model.ClassName).AppendLine("CompensationDispatcher>();");
         sb.Append("        builder.Services.TryAddTransient<ISagaManager<").Append(model.ClassName).Append(", ").Append(keyType)
           .Append(">, SagaManager<").Append(model.ClassName).Append(", ").Append(keyType).AppendLine(">>();");
+        // Default ISagaCommandDispatcher: the per-compilation MediatorSagaCommandDispatcher
+        // emitted alongside this file. TryAddScoped so ZeroAlloc.Saga.Outbox.WithOutbox()
+        // can Replace it. Scoped to match IMediator's lifetime.
+        sb.AppendLine("        builder.Services.TryAddScoped<global::ZeroAlloc.Saga.ISagaCommandDispatcher, global::ZeroAlloc.Saga.Generated.MediatorSagaCommandDispatcher>();");
         sb.AppendLine();
 
         var allEvents = model.Steps.Select(s => s.EventTypeFqn)
