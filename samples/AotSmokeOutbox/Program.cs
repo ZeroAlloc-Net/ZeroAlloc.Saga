@@ -67,7 +67,7 @@ internal static class Program
 
         services.AddSaga()
             .WithOutbox()                        // <-- the load-bearing line under AOT
-            .AddOrderFulfillmentSaga();
+            .WithOrderFulfillmentSaga();
 
         var sp = services.BuildServiceProvider();
 

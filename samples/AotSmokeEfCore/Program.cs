@@ -74,7 +74,7 @@ internal static class Program
         services.AddDbContext<TestDbContext>(opts => opts.UseSqlite(connection),
             ServiceLifetime.Scoped);
 
-        // WithEfCoreStore<TContext>() MUST come BEFORE AddXxxSaga() — order
+        // WithEfCoreStore<TContext>() MUST come BEFORE WithXxxSaga() — order
         // is enforced by an InvalidOperationException guard in the builder.
         services.AddSaga()
             .WithEfCoreStore<TestDbContext>(opts =>
@@ -83,7 +83,7 @@ internal static class Program
                 opts.RetryBaseDelay = TimeSpan.FromMilliseconds(1);
                 opts.UseExponentialBackoff = false;
             })
-            .AddOrderFulfillmentSaga();
+            .WithOrderFulfillmentSaga();
         var sp = services.BuildServiceProvider();
 
         // Materialise the SagaInstance schema before publishing any events.

@@ -66,7 +66,7 @@ Wiring (one line per saga):
 // AddSaga() implicitly calls AddMediator() in v1.1 — separate AddMediator()
 // call is no longer needed, though it remains harmless (idempotent TryAdd*).
 services.AddSaga()
-    .AddOrderFulfillmentSaga();           // generator-emitted extension
+    .WithOrderFulfillmentSaga();           // generator-emitted extension
 ```
 
 That's it. Publish `OrderPlaced` via `IMediator.Publish` and the saga drives
@@ -77,6 +77,26 @@ automatically.
 
 ## What's new
 
+### Builder API: `Add{Saga}Saga()` → `With{Saga}Saga()`
+
+The generator-emitted per-saga registration method is renamed from
+`Add{Saga}Saga()` to `With{Saga}Saga()` so it aligns with the rest of
+the builder API (`WithEfCoreStore`, `WithOutbox`, `WithResilience`).
+The legacy `Add`-prefixed name still compiles, but emits diagnostic
+`ZASAGA018` pointing at the new name. The shim will be removed in v2.
+
+```csharp
+// Before:
+services.AddSaga()
+    .WithEfCoreStore<AppDbContext>()
+    .AddOrderFulfillmentSaga();
+
+// After:
+services.AddSaga()
+    .WithEfCoreStore<AppDbContext>()
+    .WithOrderFulfillmentSaga();
+```
+
 ### `ZeroAlloc.Saga.Resilience` (new package)
 
 Optional bridge that wraps every saga step command's dispatch in a
@@ -86,7 +106,7 @@ rate-limit. One fluent call configures the pipeline:
 ```csharp
 services.AddSaga()
     .WithEfCoreStore<AppDbContext>(opts => opts.MaxRetryAttempts = 3)
-    .AddOrderFulfillmentSaga()
+    .WithOrderFulfillmentSaga()
     .WithResilience(r =>
     {
         r.Retry = new RetryPolicy(maxAttempts: 5, backoffMs: 200, jitter: true, perAttemptTimeoutMs: 5_000);
@@ -112,7 +132,7 @@ delivered.
 services.AddSaga()
     .WithEfCoreStore<AppDbContext>(opts => opts.MaxRetryAttempts = 3)
     .WithOutbox()                        // <-- one fluent call
-    .AddOrderFulfillmentSaga();
+    .WithOrderFulfillmentSaga();
 ```
 
 Requires `ZeroAlloc.Outbox` 2.4.0+ (introduces
@@ -180,7 +200,7 @@ services.AddDbContext<AppDbContext>(opts => opts.UseSqlServer(connStr));
 
 services.AddSaga()
     .WithEfCoreStore<AppDbContext>()
-    .AddOrderFulfillmentSaga();
+    .WithOrderFulfillmentSaga();
 ```
 
 Plus, in your `DbContext`:
@@ -219,7 +239,7 @@ install.
 Hard dependencies pulled in transitively:
 
 - `ZeroAlloc.Mediator` — for `INotification`, `IRequest`, `IMediator.Send`
-- `Microsoft.Extensions.DependencyInjection` — for `AddSaga()`, `AddXxxSaga()`
+- `Microsoft.Extensions.DependencyInjection` — for `AddSaga()`, `WithXxxSaga()`
 - `Microsoft.Extensions.Logging.Abstractions` — for the saga-handler loggers
 
 ## Diagnostics
@@ -241,6 +261,7 @@ Hard dependencies pulled in transitively:
 | ZASAGA011 | `[CorrelationKey]` method appears to mutate state | warning |
 | ZASAGA012 | `Compensate` without `CompensateOn` — dead code | warning |
 | ZASAGA013 | Two sagas correlate on same event with different key types | warning |
+| ZASAGA018 | `Add{Saga}Saga()` is renamed to `With{Saga}Saga()` — legacy shim deprecated | warning (suppressible) |
 
 Every diagnostic links to [`docs/diagnostics.md`](docs/diagnostics.md) with a
 worked example.

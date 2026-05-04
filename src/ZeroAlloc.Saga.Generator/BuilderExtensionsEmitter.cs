@@ -34,9 +34,16 @@ internal static class BuilderExtensionsEmitter
 
         // Builder extension class — registers the closed-generic store, lock manager,
         // saga manager, compensation dispatcher, and one INotificationHandler per event.
+        // Emits BOTH the preferred With{Saga} method AND the legacy Add{Saga} shim
+        // (marked [Obsolete] with diagnostic ZASAGA018) so existing consumers compile
+        // with a guided-migration warning. The shim will be removed in v2.
         sb.Append("public static class ").Append(model.ClassName).AppendLine("BuilderExtensions");
         sb.AppendLine("{");
-        sb.Append("    public static ISagaBuilder Add").Append(model.ClassName).AppendLine("(this ISagaBuilder builder)");
+        sb.AppendLine("    /// <summary>");
+        sb.Append("    /// Registers <see cref=\"").Append(model.ClassName).AppendLine("\"/>'s store, lock manager,");
+        sb.AppendLine("    /// saga manager, compensation dispatcher, and notification handlers.");
+        sb.AppendLine("    /// </summary>");
+        sb.Append("    public static ISagaBuilder With").Append(model.ClassName).AppendLine("(this ISagaBuilder builder)");
         sb.AppendLine("    {");
         // Implicit AddMediator() — idempotent via TryAdd*. Users no longer need
         // to call services.AddMediator() before AddSaga(). The Mediator generator
@@ -77,6 +84,19 @@ internal static class BuilderExtensionsEmitter
 
         sb.AppendLine("        return builder;");
         sb.AppendLine("    }");
+        sb.AppendLine();
+
+        // Legacy Add{Saga} shim — keeps existing wiring code compiling, with an
+        // [Obsolete] warning pointing at the new With{Saga} name. ZASAGA018
+        // is the suppressible diagnostic id consumers can quiet during migration.
+        sb.AppendLine("    /// <summary>");
+        sb.Append("    /// Legacy alias for <see cref=\"With").Append(model.ClassName).AppendLine("\"/>.");
+        sb.AppendLine("    /// Will be removed in v2; use the <c>With</c>-prefixed name to align with the rest of the builder API.");
+        sb.AppendLine("    /// </summary>");
+        sb.Append("    [System.Obsolete(\"Use With").Append(model.ClassName).Append("() instead. Will be removed in the next major.\", DiagnosticId = \"ZASAGA018\")]");
+        sb.AppendLine();
+        sb.Append("    public static ISagaBuilder Add").Append(model.ClassName).AppendLine("(this ISagaBuilder builder)");
+        sb.Append("        => builder.With").Append(model.ClassName).AppendLine("();");
         sb.AppendLine("}");
         sb.AppendLine();
 

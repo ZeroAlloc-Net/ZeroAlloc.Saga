@@ -13,7 +13,11 @@ namespace Sample;
 
 public static class NullableFieldSagaBuilderExtensions
 {
-    public static ISagaBuilder AddNullableFieldSaga(this ISagaBuilder builder)
+    /// <summary>
+    /// Registers <see cref="NullableFieldSaga"/>'s store, lock manager,
+    /// saga manager, compensation dispatcher, and notification handlers.
+    /// </summary>
+    public static ISagaBuilder WithNullableFieldSaga(this ISagaBuilder builder)
     {
         builder.Services.AddMediator();
         builder.Services.TryAddSingleton<ISagaStore<NullableFieldSaga, int>, InMemorySagaStore<NullableFieldSaga, int>>();
@@ -29,6 +33,14 @@ public static class NullableFieldSagaBuilderExtensions
         builder.Services.AddTransient<INotificationHandler<global::Sample.Started>, NullableFieldSaga_Started_Handler>();
         return builder;
     }
+
+    /// <summary>
+    /// Legacy alias for <see cref="WithNullableFieldSaga"/>.
+    /// Will be removed in v2; use the <c>With</c>-prefixed name to align with the rest of the builder API.
+    /// </summary>
+    [System.Obsolete("Use WithNullableFieldSaga() instead. Will be removed in the next major.", DiagnosticId = "ZASAGA018")]
+    public static ISagaBuilder AddNullableFieldSaga(this ISagaBuilder builder)
+        => builder.WithNullableFieldSaga();
 }
 
 internal sealed class NullableFieldSagaCompensationDispatcher : ISagaCompensationDispatcher<NullableFieldSaga>

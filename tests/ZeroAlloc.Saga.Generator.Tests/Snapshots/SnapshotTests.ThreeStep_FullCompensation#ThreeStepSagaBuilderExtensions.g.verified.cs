@@ -13,7 +13,11 @@ namespace Sample;
 
 public static class ThreeStepSagaBuilderExtensions
 {
-    public static ISagaBuilder AddThreeStepSaga(this ISagaBuilder builder)
+    /// <summary>
+    /// Registers <see cref="ThreeStepSaga"/>'s store, lock manager,
+    /// saga manager, compensation dispatcher, and notification handlers.
+    /// </summary>
+    public static ISagaBuilder WithThreeStepSaga(this ISagaBuilder builder)
     {
         builder.Services.AddMediator();
         builder.Services.TryAddSingleton<ISagaStore<ThreeStepSaga, global::Sample.OrderId>, InMemorySagaStore<ThreeStepSaga, global::Sample.OrderId>>();
@@ -32,6 +36,14 @@ public static class ThreeStepSagaBuilderExtensions
         builder.Services.AddTransient<INotificationHandler<global::Sample.PaymentDeclined>, ThreeStepSaga_PaymentDeclined_Handler>();
         return builder;
     }
+
+    /// <summary>
+    /// Legacy alias for <see cref="WithThreeStepSaga"/>.
+    /// Will be removed in v2; use the <c>With</c>-prefixed name to align with the rest of the builder API.
+    /// </summary>
+    [System.Obsolete("Use WithThreeStepSaga() instead. Will be removed in the next major.", DiagnosticId = "ZASAGA018")]
+    public static ISagaBuilder AddThreeStepSaga(this ISagaBuilder builder)
+        => builder.WithThreeStepSaga();
 }
 
 internal sealed class ThreeStepSagaCompensationDispatcher : ISagaCompensationDispatcher<ThreeStepSaga>

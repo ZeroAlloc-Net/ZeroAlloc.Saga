@@ -34,7 +34,7 @@ public class RuntimeTests
         services.AddMediator();
 
         services.AddSaga()
-            .AddOrderFulfillmentSaga();
+            .WithOrderFulfillmentSaga();
         configure?.Invoke(services);
         var sp = services.BuildServiceProvider();
 
@@ -261,8 +261,8 @@ public class RuntimeTests
         services.AddMediator();
 
         services.AddSaga()
-            .AddOrderFulfillmentSaga()
-            .AddRefundSaga();
+            .WithOrderFulfillmentSaga()
+            .WithRefundSaga();
         var sp = services.BuildServiceProvider();
 
         var ledger = new CommandLedger();

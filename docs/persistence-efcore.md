@@ -70,11 +70,11 @@ services.AddDbContext<AppDbContext>(opts => opts.UseSqlServer(connStr));
 
 services.AddSaga()
     .WithEfCoreStore<AppDbContext>()
-    .AddOrderFulfillmentSaga(); // generator-emitted per-saga registration
+    .WithOrderFulfillmentSaga(); // generator-emitted per-saga registration
 ```
 
 > **Order matters.** `WithEfCoreStore<TContext>()` MUST be called
-> BEFORE per-saga `AddXxxSaga()` registrations. Calling it after a
+> BEFORE per-saga `WithXxxSaga()` registrations. Calling it after a
 > saga is added throws `InvalidOperationException` with a reorder
 > hint — the per-saga registration captures `SagaRetryOptions` at
 > registration time, so rebinding it later would silently change
@@ -145,7 +145,7 @@ services.AddSaga()
         opts.RetryBaseDelay = TimeSpan.FromMilliseconds(50); // default 10 ms
         opts.UseExponentialBackoff = true;               // default true
     })
-    .AddOrderFulfillmentSaga();
+    .WithOrderFulfillmentSaga();
 ```
 
 | Option | Default | Effect |

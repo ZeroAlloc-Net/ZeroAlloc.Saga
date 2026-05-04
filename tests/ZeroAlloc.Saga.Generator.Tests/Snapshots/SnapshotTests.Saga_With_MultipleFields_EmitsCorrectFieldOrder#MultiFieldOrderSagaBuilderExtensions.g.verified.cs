@@ -13,7 +13,11 @@ namespace Sample;
 
 public static class MultiFieldOrderSagaBuilderExtensions
 {
-    public static ISagaBuilder AddMultiFieldOrderSaga(this ISagaBuilder builder)
+    /// <summary>
+    /// Registers <see cref="MultiFieldOrderSaga"/>'s store, lock manager,
+    /// saga manager, compensation dispatcher, and notification handlers.
+    /// </summary>
+    public static ISagaBuilder WithMultiFieldOrderSaga(this ISagaBuilder builder)
     {
         builder.Services.AddMediator();
         builder.Services.TryAddSingleton<ISagaStore<MultiFieldOrderSaga, int>, InMemorySagaStore<MultiFieldOrderSaga, int>>();
@@ -29,6 +33,14 @@ public static class MultiFieldOrderSagaBuilderExtensions
         builder.Services.AddTransient<INotificationHandler<global::Sample.Started>, MultiFieldOrderSaga_Started_Handler>();
         return builder;
     }
+
+    /// <summary>
+    /// Legacy alias for <see cref="WithMultiFieldOrderSaga"/>.
+    /// Will be removed in v2; use the <c>With</c>-prefixed name to align with the rest of the builder API.
+    /// </summary>
+    [System.Obsolete("Use WithMultiFieldOrderSaga() instead. Will be removed in the next major.", DiagnosticId = "ZASAGA018")]
+    public static ISagaBuilder AddMultiFieldOrderSaga(this ISagaBuilder builder)
+        => builder.WithMultiFieldOrderSaga();
 }
 
 internal sealed class MultiFieldOrderSagaCompensationDispatcher : ISagaCompensationDispatcher<MultiFieldOrderSaga>

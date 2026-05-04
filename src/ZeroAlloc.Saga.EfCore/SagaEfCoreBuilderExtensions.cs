@@ -15,7 +15,7 @@ public static class SagaEfCoreBuilderExtensions
     /// Configures the saga framework to persist instances via the supplied
     /// <typeparamref name="TContext"/>. Flips
     /// <see cref="ISagaBuilder.IsEfCoreBackend"/> so generator-emitted
-    /// <c>AddXxxSaga()</c> registrations select <see cref="EfCoreSagaStore{TSaga,TKey}"/>
+    /// <c>WithXxxSaga()</c> registrations select <see cref="EfCoreSagaStore{TSaga,TKey}"/>
     /// instead of the in-memory default.
     /// </summary>
     /// <typeparam name="TContext">The user's <see cref="DbContext"/> type.</typeparam>
@@ -24,7 +24,7 @@ public static class SagaEfCoreBuilderExtensions
     /// <returns>The same builder for chaining.</returns>
     /// <remarks>
     /// <para>
-    /// MUST be called BEFORE per-saga <c>AddXxxSaga()</c> registrations.
+    /// MUST be called BEFORE per-saga <c>WithXxxSaga()</c> registrations.
     /// Order-sensitive because per-saga registrations capture
     /// <see cref="SagaRetryOptions"/> at registration time; calling
     /// <see cref="WithEfCoreStore{TContext}"/> after a saga is added would
@@ -35,7 +35,7 @@ public static class SagaEfCoreBuilderExtensions
     /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when a per-saga <c>AddXxxSaga()</c> registration has already
+    /// Thrown when a per-saga <c>WithXxxSaga()</c> registration has already
     /// happened on this builder. Reorder the fluent chain so
     /// <see cref="WithEfCoreStore{TContext}"/> is called first.
     /// </exception>
@@ -46,16 +46,16 @@ public static class SagaEfCoreBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        // Order violation guard: a per-saga AddXxxSaga() registers
+        // Order violation guard: a per-saga WithXxxSaga() registers
         // ISagaCompensationDispatcher<TSaga>. If we see ANY descriptor whose
         // ServiceType is closed-generic ISagaCompensationDispatcher<>, we
         // know a per-saga registration has already happened.
         if (HasAnySagaRegistrations(builder.Services))
         {
             throw new InvalidOperationException(
-                "WithEfCoreStore<TContext>() must be called BEFORE per-saga AddXxxSaga() registrations. " +
+                "WithEfCoreStore<TContext>() must be called BEFORE per-saga WithXxxSaga() registrations. " +
                 "Reorder your fluent chain so the EF Core backend is configured first " +
-                "(e.g. services.AddSaga().WithEfCoreStore<TContext>().AddOrderFulfillmentSaga()).");
+                "(e.g. services.AddSaga().WithEfCoreStore<TContext>().WithOrderFulfillmentSaga()).");
         }
 
         builder.SetEfCoreBackend();
@@ -97,7 +97,7 @@ public static class SagaEfCoreBuilderExtensions
     private static bool HasAnySagaRegistrations(IServiceCollection services)
     {
         // ISagaCompensationDispatcher<TSaga> is registered per-saga by the
-        // generator-emitted AddXxxSaga() extension. A closed-generic
+        // generator-emitted WithXxxSaga() extension. A closed-generic
         // descriptor of that interface is an unambiguous "a saga has been
         // added" marker, regardless of which saga or which key type.
         for (int i = 0; i < services.Count; i++)

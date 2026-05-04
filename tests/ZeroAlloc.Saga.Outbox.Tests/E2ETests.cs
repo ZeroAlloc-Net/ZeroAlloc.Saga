@@ -49,7 +49,7 @@ public sealed class E2ETests
                 opts.UseExponentialBackoff = false;
             })
             .WithOutbox()
-            .AddOrderFulfillmentSaga();
+            .WithOrderFulfillmentSaga();
         // Apply test-supplied overrides AFTER per-saga registrations so
         // decorators replacing ISagaStore<> see the full registration in place.
         extra?.Invoke(services);

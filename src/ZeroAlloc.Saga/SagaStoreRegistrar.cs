@@ -6,7 +6,7 @@ namespace ZeroAlloc.Saga;
 /// <summary>
 /// Indirection point that lets backend packages (Saga.EfCore, Saga.Redis, …)
 /// install their concrete <see cref="ISagaStore{TSaga,TKey}"/> registration
-/// without forcing the generator-emitted <c>AddXxxSaga()</c> code to reference
+/// without forcing the generator-emitted <c>WithXxxSaga()</c> code to reference
 /// backend-specific types.
 /// </summary>
 /// <remarks>
@@ -47,7 +47,7 @@ public static class SagaStoreRegistrar
     /// Installs a typed registrar that participates in per-saga
     /// closed-generic registration. Backend packages call this from
     /// inside their <c>WithEfCoreStore&lt;TContext&gt;</c> (etc.) extensions
-    /// so that generator-emitted <c>AddXxxSaga()</c> can dispatch to a
+    /// so that generator-emitted <c>WithXxxSaga()</c> can dispatch to a
     /// strongly-typed <see cref="ISagaStoreRegistrar.Register{TSaga,TKey}"/>
     /// hook with full type information.
     /// </summary>
@@ -75,7 +75,7 @@ public static class SagaStoreRegistrar
     }
 
     /// <summary>
-    /// Invoked by generator-emitted <c>AddXxxSaga()</c> when a durable backend
+    /// Invoked by generator-emitted <c>WithXxxSaga()</c> when a durable backend
     /// is wired. Forwards to the registrar so the backend can swap the
     /// default <c>InMemorySagaStore</c> registration for its concrete
     /// implementation.
@@ -97,7 +97,7 @@ public static class SagaStoreRegistrar
         throw new System.InvalidOperationException(
             "ISagaBuilder.IsEfCoreBackend was set, but no SagaStoreRegistrar has been installed. " +
             "Ensure the corresponding backend package (e.g. ZeroAlloc.Saga.EfCore) is referenced and " +
-            "WithEfCoreStore<TContext>() is called before any AddXxxSaga() registrations.");
+            "WithEfCoreStore<TContext>() is called before any WithXxxSaga() registrations.");
     }
 
     /// <summary>

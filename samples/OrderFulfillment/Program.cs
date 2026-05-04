@@ -43,7 +43,7 @@ internal static class Program
             services.AddDbContext<DemoContext>(opts => opts.UseSqlite($"Data Source={DemoDbPath}"));
             sagaBuilder.WithEfCoreStore<DemoContext>();
         }
-        sagaBuilder.AddOrderFulfillmentSaga();
+        sagaBuilder.WithOrderFulfillmentSaga();
 
         var sp = services.BuildServiceProvider();
 
