@@ -107,6 +107,12 @@ public sealed class ResilientSagaCommandDispatcher : ISagaCommandDispatcher
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
+                // The filter checks ct (the retry-loop's effective token, which
+                // may itself be a linked timeout token), NOT the per-attempt
+                // linked token created inside DispatchSingleAttemptAsync. A
+                // per-attempt timeout firing leaves ct uncancelled, so the
+                // filter is false and the OCE is caught as a transient retry
+                // trigger by the catch below — exactly what we want.
                 throw;
             }
             catch (Exception ex)

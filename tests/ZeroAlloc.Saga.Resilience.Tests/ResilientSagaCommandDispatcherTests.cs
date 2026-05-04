@@ -175,6 +175,51 @@ public class ResilientSagaCommandDispatcherTests
     }
 
     [Fact]
+    public async Task Composition_TrippedBreaker_DoesNotConsumeRateLimitToken()
+    {
+        // I-3: outermost-first composition contract — a tripped breaker must
+        // short-circuit BEFORE the rate-limit layer touches its bucket. Verify
+        // by tripping the breaker, then checking the rate-limit bucket still
+        // has its initial budget.
+        var inner = new CountingDispatcher((_, _) => Task.FromException(new InvalidOperationException("always")));
+        using var breaker = new CircuitBreakerPolicy(maxFailures: 1, resetMs: 60_000, halfOpenProbes: 1);
+        var limiter = new RateLimiter(maxPerSecond: 1_000, burstSize: 5, scope: RateLimitScope.Instance);
+        var sut = new ResilientSagaCommandDispatcher(inner, new SagaResilienceOptions
+        {
+            CircuitBreaker = breaker,
+            RateLimiter = limiter,
+        });
+
+        // First call: inner throws, breaker trips. The rate limiter consumed a token.
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await sut.DispatchAsync(new Cmd(1), CancellationToken.None));
+        Assert.Equal(CircuitBreakerState.Open, breaker.State);
+
+        // Drain the bucket to 0 to make the next assertion crisp.
+        for (var i = 0; i < 4; i++) Assert.True(limiter.TryAcquire());
+        // Bucket is now empty; if any subsequent breaker-short-circuited call
+        // consumed a token, TryAcquire would already have failed earlier.
+        Assert.False(limiter.TryAcquire());
+
+        // Refill enough to put exactly one token back. We use the public API: the
+        // bucket refills by maxPerSecond per second, so wait briefly. To stay
+        // deterministic we instead build a fresh limiter for the next phase.
+        var freshLimiter = new RateLimiter(maxPerSecond: 1_000, burstSize: 1, scope: RateLimitScope.Instance);
+        var sut2 = new ResilientSagaCommandDispatcher(inner, new SagaResilienceOptions
+        {
+            CircuitBreaker = breaker,   // Already-Open breaker.
+            RateLimiter = freshLimiter, // 1 token in the bucket.
+        });
+
+        // Breaker is Open → short-circuits. The rate limiter must NOT have its token consumed.
+        await Assert.ThrowsAsync<ResilienceException>(
+            async () => await sut2.DispatchAsync(new Cmd(2), CancellationToken.None));
+
+        Assert.True(freshLimiter.TryAcquire(),
+            "Tripped breaker must short-circuit BEFORE rate limiter consumes a token.");
+    }
+
+    [Fact]
     public void Constructor_NullInner_Throws()
     {
         Assert.Throws<ArgumentNullException>(

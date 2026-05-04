@@ -148,7 +148,11 @@ The dispatcher distinguishes three failure shapes:
 
 1. **`OperationCanceledException`** — caller's `CancellationToken`
    was cancelled. Propagates unchanged. NOT retried, NOT counted as
-   a circuit-breaker failure.
+   a circuit-breaker failure. Total-timeout firings ARE distinguished
+   from caller cancellation: the dispatcher checks the caller's CT
+   first and surfaces a cancel as `OperationCanceledException`,
+   reserving `ResilienceException(Timeout)` for the case where only
+   the timeout token fired.
 2. **`ResilienceException`** — a policy itself denied or exhausted
    (retry budget, timeout, breaker open, rate-limit empty). Inspect
    `Policy` to disambiguate.
@@ -156,6 +160,30 @@ The dispatcher distinguishes three failure shapes:
    their say. Any exception observed by the inner is recorded by the
    circuit breaker; if the retry budget is configured, the exception
    may be re-thrown after `MaxAttempts` as a `ResilienceException`.
+
+### Timeout-vs-breaker semantics
+
+A total-timeout firing while the inner is still running surfaces as
+`ResilienceException(Timeout)`. The breaker is **NOT** informed of the
+timeout — it sees only inner exceptions. If you want timeouts to count
+toward the breaker's failure budget, prefer
+`RetryPolicy.PerAttemptTimeoutMs` over `TimeoutPolicy.TotalMs`: a
+per-attempt timeout fires inside the inner's `Task.Delay` /
+`HttpClient.SendAsync` etc. as an `OperationCanceledException`, which
+the inner typically wraps or rethrows in a way the breaker observes.
+The total `TimeoutPolicy` is the right tool when the retry budget is
+also configured and you want a single wall-clock deadline across all
+retries — the breaker correctly stays out of the way then.
+
+### Retry exhaustion and breaker accounting
+
+Each inner failure during retry is reported to the breaker via
+`OnFailure` BEFORE the next attempt's backoff. So a 3-attempt retry
+that always fails contributes 3 failures to the breaker's count,
+not 1. This is intentional: the breaker measures real failure rate,
+not "did the dispatcher eventually give up." If your breaker
+threshold is calibrated for a single attempt, divide it by your
+typical retry count, or use a separate breaker per call site.
 
 ## Limitations
 
