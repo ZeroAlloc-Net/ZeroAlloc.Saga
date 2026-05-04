@@ -33,8 +33,8 @@ public static class TypedIdFieldSagaBuilderExtensions
 
 internal sealed class TypedIdFieldSagaCompensationDispatcher : ISagaCompensationDispatcher<TypedIdFieldSaga>
 {
-    private readonly IMediator _mediator;
-    public TypedIdFieldSagaCompensationDispatcher(IMediator mediator) => _mediator = mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
+    public TypedIdFieldSagaCompensationDispatcher(ISagaCommandDispatcher dispatcher) => _dispatcher = dispatcher;
 
     public async ValueTask CompensateAsync(TypedIdFieldSaga saga, CancellationToken ct)
     {

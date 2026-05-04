@@ -33,8 +33,8 @@ public static class FulfillmentSagaBuilderExtensions
 
 internal sealed class FulfillmentSagaCompensationDispatcher : ISagaCompensationDispatcher<FulfillmentSaga>
 {
-    private readonly IMediator _mediator;
-    public FulfillmentSagaCompensationDispatcher(IMediator mediator) => _mediator = mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
+    public FulfillmentSagaCompensationDispatcher(ISagaCommandDispatcher dispatcher) => _dispatcher = dispatcher;
 
     public async ValueTask CompensateAsync(FulfillmentSaga saga, CancellationToken ct)
     {

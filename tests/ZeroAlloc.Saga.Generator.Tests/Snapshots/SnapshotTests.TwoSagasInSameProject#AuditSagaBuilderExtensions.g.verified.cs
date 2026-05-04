@@ -33,8 +33,8 @@ public static class AuditSagaBuilderExtensions
 
 internal sealed class AuditSagaCompensationDispatcher : ISagaCompensationDispatcher<AuditSaga>
 {
-    private readonly IMediator _mediator;
-    public AuditSagaCompensationDispatcher(IMediator mediator) => _mediator = mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
+    public AuditSagaCompensationDispatcher(ISagaCommandDispatcher dispatcher) => _dispatcher = dispatcher;
 
     public async ValueTask CompensateAsync(AuditSaga saga, CancellationToken ct)
     {

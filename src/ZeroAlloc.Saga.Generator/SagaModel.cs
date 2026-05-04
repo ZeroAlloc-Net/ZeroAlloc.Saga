@@ -190,7 +190,7 @@ internal sealed record SagaModel(
 
                 var eventTypeFqn = StripGlobalPrefix(member.Parameters[0].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
                 var commandTypeFqn = StripGlobalPrefix(member.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
-                steps.Add(new StepInfo(order, member.Name, eventTypeFqn, commandTypeFqn, compensateName, compensateOnFqn, memberLoc));
+                steps.Add(new StepInfo(order, member.Name, eventTypeFqn, commandTypeFqn, compensateName, compensateOnFqn, Location: memberLoc));
             }
         }
 
@@ -225,8 +225,9 @@ internal sealed record SagaModel(
 
         // ── ZASAGA009 / ZASAGA010 / ZASAGA012 ───────────────────────────────
         var allMembers = classSymbol.GetMembers().OfType<IMethodSymbol>().ToList();
-        foreach (var step in steps)
+        for (int idx = 0; idx < steps.Count; idx++)
         {
+            var step = steps[idx];
             // ZASAGA009: Compensate target must exist and be parameterless, non-void.
             if (step.CompensateMethodName is not null)
             {
@@ -241,6 +242,14 @@ internal sealed record SagaModel(
                         step.Location,
                         step.MethodName,
                         step.CompensateMethodName));
+                }
+                else
+                {
+                    // Capture the compensation command's return type so the
+                    // per-compilation MediatorSagaCommandDispatcher emits a
+                    // dispatch arm for it.
+                    var compCmdFqn = StripGlobalPrefix(target!.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+                    steps[idx] = step with { CompensateCommandTypeFqn = compCmdFqn };
                 }
             }
 
@@ -583,6 +592,7 @@ internal sealed record StepInfo(
     string CommandTypeFqn,
     string? CompensateMethodName,
     string? CompensateOnEventTypeFqn,
+    string? CompensateCommandTypeFqn = null,
     Location? Location = null);
 
 /// <summary>

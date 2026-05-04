@@ -34,8 +34,8 @@ public static class TwoStepSagaBuilderExtensions
 
 internal sealed class TwoStepSagaCompensationDispatcher : ISagaCompensationDispatcher<TwoStepSaga>
 {
-    private readonly IMediator _mediator;
-    public TwoStepSagaCompensationDispatcher(IMediator mediator) => _mediator = mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
+    public TwoStepSagaCompensationDispatcher(ISagaCommandDispatcher dispatcher) => _dispatcher = dispatcher;
 
     public async ValueTask CompensateAsync(TwoStepSaga saga, CancellationToken ct)
     {

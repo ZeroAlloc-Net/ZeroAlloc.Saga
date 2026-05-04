@@ -37,8 +37,8 @@ public static class MultiFailureSagaBuilderExtensions
 
 internal sealed class MultiFailureSagaCompensationDispatcher : ISagaCompensationDispatcher<MultiFailureSaga>
 {
-    private readonly IMediator _mediator;
-    public MultiFailureSagaCompensationDispatcher(IMediator mediator) => _mediator = mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
+    public MultiFailureSagaCompensationDispatcher(ISagaCommandDispatcher dispatcher) => _dispatcher = dispatcher;
 
     public async ValueTask CompensateAsync(MultiFailureSaga saga, CancellationToken ct)
     {
@@ -46,15 +46,15 @@ internal sealed class MultiFailureSagaCompensationDispatcher : ISagaCompensation
         switch (stateAtFailure)
         {
             case MultiFailureSagaFsm.State.Step3:
-                await _mediator.Send(saga.Refund(), ct).ConfigureAwait(false);
-                await _mediator.Send(saga.CancelReserve(), ct).ConfigureAwait(false);
+                await _dispatcher.DispatchAsync(saga.Refund(), ct).ConfigureAwait(false);
+                await _dispatcher.DispatchAsync(saga.CancelReserve(), ct).ConfigureAwait(false);
                 break;
             case MultiFailureSagaFsm.State.Step2:
-                await _mediator.Send(saga.Refund(), ct).ConfigureAwait(false);
-                await _mediator.Send(saga.CancelReserve(), ct).ConfigureAwait(false);
+                await _dispatcher.DispatchAsync(saga.Refund(), ct).ConfigureAwait(false);
+                await _dispatcher.DispatchAsync(saga.CancelReserve(), ct).ConfigureAwait(false);
                 break;
             case MultiFailureSagaFsm.State.Step1:
-                await _mediator.Send(saga.CancelReserve(), ct).ConfigureAwait(false);
+                await _dispatcher.DispatchAsync(saga.CancelReserve(), ct).ConfigureAwait(false);
                 break;
             default: break;
         }

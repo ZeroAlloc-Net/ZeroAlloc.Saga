@@ -33,8 +33,8 @@ public static class EnumFieldSagaBuilderExtensions
 
 internal sealed class EnumFieldSagaCompensationDispatcher : ISagaCompensationDispatcher<EnumFieldSaga>
 {
-    private readonly IMediator _mediator;
-    public EnumFieldSagaCompensationDispatcher(IMediator mediator) => _mediator = mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
+    public EnumFieldSagaCompensationDispatcher(ISagaCommandDispatcher dispatcher) => _dispatcher = dispatcher;
 
     public async ValueTask CompensateAsync(EnumFieldSaga saga, CancellationToken ct)
     {

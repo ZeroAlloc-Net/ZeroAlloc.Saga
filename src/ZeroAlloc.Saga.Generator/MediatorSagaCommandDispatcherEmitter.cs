@@ -29,7 +29,15 @@ internal static class MediatorSagaCommandDispatcherEmitter
         var commandTypes = sagaResults
             .Select(r => r.Model)
             .Where(m => m is not null)
-            .SelectMany(m => m!.Steps.Select(st => st.CommandTypeFqn))
+            .SelectMany(m => m!.Steps.SelectMany(st =>
+            {
+                // Forward step command + (optional) compensation command both need
+                // a dispatch arm because saga handlers route compensations through
+                // the same ISagaCommandDispatcher abstraction.
+                if (st.CompensateCommandTypeFqn is not null)
+                    return new[] { st.CommandTypeFqn, st.CompensateCommandTypeFqn };
+                return new[] { st.CommandTypeFqn };
+            }))
             .Distinct(StringComparer.Ordinal)
             .OrderBy(x => x, StringComparer.Ordinal)
             .ToList();

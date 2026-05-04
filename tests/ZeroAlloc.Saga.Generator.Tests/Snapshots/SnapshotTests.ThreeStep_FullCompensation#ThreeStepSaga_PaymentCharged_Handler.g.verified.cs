@@ -14,15 +14,15 @@ internal sealed class ThreeStepSaga_PaymentCharged_Handler : INotificationHandle
 {
     private readonly ISagaStore<ThreeStepSaga, global::Sample.OrderId> _store;
     private readonly SagaLockManager<global::Sample.OrderId> _locks;
-    private readonly IMediator _mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
     private readonly SagaRetryOptions _retry;
     private readonly ILogger<ThreeStepSaga_PaymentCharged_Handler> _log;
 
-    public ThreeStepSaga_PaymentCharged_Handler(ISagaStore<ThreeStepSaga, global::Sample.OrderId> store, SagaLockManager<global::Sample.OrderId> locks, IMediator mediator, SagaRetryOptions retry, ILogger<ThreeStepSaga_PaymentCharged_Handler> log)
+    public ThreeStepSaga_PaymentCharged_Handler(ISagaStore<ThreeStepSaga, global::Sample.OrderId> store, SagaLockManager<global::Sample.OrderId> locks, ISagaCommandDispatcher dispatcher, SagaRetryOptions retry, ILogger<ThreeStepSaga_PaymentCharged_Handler> log)
     {
         _store = store;
         _locks = locks;
-        _mediator = mediator;
+        _dispatcher = dispatcher;
         _retry = retry;
         _log = log;
     }
@@ -45,7 +45,7 @@ internal sealed class ThreeStepSaga_PaymentCharged_Handler : INotificationHandle
                 }
 
                 var cmd = saga.Ship(@event);
-                await _mediator.Send(cmd, ct).ConfigureAwait(false);
+                await _dispatcher.DispatchAsync(cmd, ct).ConfigureAwait(false);
 
                 saga.Fsm.TryFire(ThreeStepSagaFsm.Trigger.Complete);
                 await _store.RemoveAsync(key, ct).ConfigureAwait(false);

@@ -33,8 +33,8 @@ public static class SingleStepSagaBuilderExtensions
 
 internal sealed class SingleStepSagaCompensationDispatcher : ISagaCompensationDispatcher<SingleStepSaga>
 {
-    private readonly IMediator _mediator;
-    public SingleStepSagaCompensationDispatcher(IMediator mediator) => _mediator = mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
+    public SingleStepSagaCompensationDispatcher(ISagaCommandDispatcher dispatcher) => _dispatcher = dispatcher;
 
     public async ValueTask CompensateAsync(SingleStepSaga saga, CancellationToken ct)
     {

@@ -33,8 +33,8 @@ public static class PrimitiveFieldsSagaBuilderExtensions
 
 internal sealed class PrimitiveFieldsSagaCompensationDispatcher : ISagaCompensationDispatcher<PrimitiveFieldsSaga>
 {
-    private readonly IMediator _mediator;
-    public PrimitiveFieldsSagaCompensationDispatcher(IMediator mediator) => _mediator = mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
+    public PrimitiveFieldsSagaCompensationDispatcher(ISagaCommandDispatcher dispatcher) => _dispatcher = dispatcher;
 
     public async ValueTask CompensateAsync(PrimitiveFieldsSaga saga, CancellationToken ct)
     {

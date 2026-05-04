@@ -33,8 +33,8 @@ public static class ExcludedFieldSagaBuilderExtensions
 
 internal sealed class ExcludedFieldSagaCompensationDispatcher : ISagaCompensationDispatcher<ExcludedFieldSaga>
 {
-    private readonly IMediator _mediator;
-    public ExcludedFieldSagaCompensationDispatcher(IMediator mediator) => _mediator = mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
+    public ExcludedFieldSagaCompensationDispatcher(ISagaCommandDispatcher dispatcher) => _dispatcher = dispatcher;
 
     public async ValueTask CompensateAsync(ExcludedFieldSaga saga, CancellationToken ct)
     {

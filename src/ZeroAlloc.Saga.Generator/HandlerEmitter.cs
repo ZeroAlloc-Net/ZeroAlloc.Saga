@@ -78,17 +78,17 @@ internal static class HandlerEmitter
         sb.AppendLine("{");
         sb.Append("    private readonly ISagaStore<").Append(model.ClassName).Append(", ").Append(keyType).AppendLine("> _store;");
         sb.Append("    private readonly SagaLockManager<").Append(keyType).AppendLine("> _locks;");
-        sb.AppendLine("    private readonly IMediator _mediator;");
+        sb.AppendLine("    private readonly ISagaCommandDispatcher _dispatcher;");
         sb.AppendLine("    private readonly SagaRetryOptions _retry;");
         sb.Append("    private readonly ILogger<").Append(handlerName).AppendLine("> _log;");
         sb.AppendLine();
         sb.Append("    public ").Append(handlerName).Append("(ISagaStore<").Append(model.ClassName)
           .Append(", ").Append(keyType).Append("> store, SagaLockManager<").Append(keyType)
-          .Append("> locks, IMediator mediator, SagaRetryOptions retry, ILogger<").Append(handlerName).AppendLine("> log)");
+          .Append("> locks, ISagaCommandDispatcher dispatcher, SagaRetryOptions retry, ILogger<").Append(handlerName).AppendLine("> log)");
         sb.AppendLine("    {");
         sb.AppendLine("        _store = store;");
         sb.AppendLine("        _locks = locks;");
-        sb.AppendLine("        _mediator = mediator;");
+        sb.AppendLine("        _dispatcher = dispatcher;");
         sb.AppendLine("        _retry = retry;");
         sb.AppendLine("        _log = log;");
         sb.AppendLine("    }");
@@ -111,7 +111,7 @@ internal static class HandlerEmitter
         sb.AppendLine("                }");
         sb.AppendLine();
         sb.Append("                var cmd = saga.").Append(step.MethodName).AppendLine("(@event);");
-        sb.AppendLine("                await _mediator.Send(cmd, ct).ConfigureAwait(false);");
+        sb.AppendLine("                await _dispatcher.DispatchAsync(cmd, ct).ConfigureAwait(false);");
         sb.AppendLine();
         if (isLastStep)
         {
@@ -187,17 +187,17 @@ internal static class HandlerEmitter
         sb.AppendLine("{");
         sb.Append("    private readonly ISagaStore<").Append(model.ClassName).Append(", ").Append(keyType).AppendLine("> _store;");
         sb.Append("    private readonly SagaLockManager<").Append(keyType).AppendLine("> _locks;");
-        sb.AppendLine("    private readonly IMediator _mediator;");
+        sb.AppendLine("    private readonly ISagaCommandDispatcher _dispatcher;");
         sb.AppendLine("    private readonly SagaRetryOptions _retry;");
         sb.Append("    private readonly ILogger<").Append(handlerName).AppendLine("> _log;");
         sb.AppendLine();
         sb.Append("    public ").Append(handlerName).Append("(ISagaStore<").Append(model.ClassName)
           .Append(", ").Append(keyType).Append("> store, SagaLockManager<").Append(keyType)
-          .Append("> locks, IMediator mediator, SagaRetryOptions retry, ILogger<").Append(handlerName).AppendLine("> log)");
+          .Append("> locks, ISagaCommandDispatcher dispatcher, SagaRetryOptions retry, ILogger<").Append(handlerName).AppendLine("> log)");
         sb.AppendLine("    {");
         sb.AppendLine("        _store = store;");
         sb.AppendLine("        _locks = locks;");
-        sb.AppendLine("        _mediator = mediator;");
+        sb.AppendLine("        _dispatcher = dispatcher;");
         sb.AppendLine("        _retry = retry;");
         sb.AppendLine("        _log = log;");
         sb.AppendLine("    }");
@@ -246,7 +246,7 @@ internal static class HandlerEmitter
             {
                 var s = model.Steps[j];
                 if (s.CompensateMethodName is null) continue;
-                sb.Append("                        await _mediator.Send(saga.").Append(s.CompensateMethodName).AppendLine("(), ct).ConfigureAwait(false);");
+                sb.Append("                        await _dispatcher.DispatchAsync(saga.").Append(s.CompensateMethodName).AppendLine("(), ct).ConfigureAwait(false);");
             }
             sb.AppendLine("                        break;");
         }

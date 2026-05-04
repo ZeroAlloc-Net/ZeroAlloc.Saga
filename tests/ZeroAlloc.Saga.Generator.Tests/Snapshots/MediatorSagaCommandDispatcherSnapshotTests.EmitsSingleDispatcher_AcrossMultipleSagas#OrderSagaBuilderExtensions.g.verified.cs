@@ -33,8 +33,8 @@ public static class OrderSagaBuilderExtensions
 
 internal sealed class OrderSagaCompensationDispatcher : ISagaCompensationDispatcher<OrderSaga>
 {
-    private readonly IMediator _mediator;
-    public OrderSagaCompensationDispatcher(IMediator mediator) => _mediator = mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
+    public OrderSagaCompensationDispatcher(ISagaCommandDispatcher dispatcher) => _dispatcher = dispatcher;
 
     public async ValueTask CompensateAsync(OrderSaga saga, CancellationToken ct)
     {

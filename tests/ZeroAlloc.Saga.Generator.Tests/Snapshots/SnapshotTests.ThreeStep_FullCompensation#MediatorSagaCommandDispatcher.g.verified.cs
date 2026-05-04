@@ -24,7 +24,9 @@ internal sealed class MediatorSagaCommandDispatcher : ISagaCommandDispatcher
     {
         return cmd switch
         {
+            global::Sample.CancelReservationCommand c => Forward(_mediator.Send(c, ct)),
             global::Sample.ChargeCommand c => Forward(_mediator.Send(c, ct)),
+            global::Sample.RefundCommand c => Forward(_mediator.Send(c, ct)),
             global::Sample.ReserveCommand c => Forward(_mediator.Send(c, ct)),
             global::Sample.ShipCommand c => Forward(_mediator.Send(c, ct)),
             _ => throw new InvalidOperationException(

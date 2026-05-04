@@ -33,8 +33,8 @@ public static class NullableFieldSagaBuilderExtensions
 
 internal sealed class NullableFieldSagaCompensationDispatcher : ISagaCompensationDispatcher<NullableFieldSaga>
 {
-    private readonly IMediator _mediator;
-    public NullableFieldSagaCompensationDispatcher(IMediator mediator) => _mediator = mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
+    public NullableFieldSagaCompensationDispatcher(ISagaCommandDispatcher dispatcher) => _dispatcher = dispatcher;
 
     public async ValueTask CompensateAsync(NullableFieldSaga saga, CancellationToken ct)
     {

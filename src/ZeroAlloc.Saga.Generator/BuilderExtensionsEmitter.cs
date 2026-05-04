@@ -83,8 +83,8 @@ internal static class BuilderExtensionsEmitter
         // Compensation dispatcher — used by ISagaManager.CompensateAsync.
         sb.Append("internal sealed class ").Append(model.ClassName).Append("CompensationDispatcher : ISagaCompensationDispatcher<").Append(model.ClassName).AppendLine(">");
         sb.AppendLine("{");
-        sb.AppendLine("    private readonly IMediator _mediator;");
-        sb.Append("    public ").Append(model.ClassName).AppendLine("CompensationDispatcher(IMediator mediator) => _mediator = mediator;");
+        sb.AppendLine("    private readonly ISagaCommandDispatcher _dispatcher;");
+        sb.Append("    public ").Append(model.ClassName).AppendLine("CompensationDispatcher(ISagaCommandDispatcher dispatcher) => _dispatcher = dispatcher;");
         sb.AppendLine();
         sb.Append("    public async ValueTask CompensateAsync(").Append(model.ClassName).AppendLine(" saga, CancellationToken ct)");
         sb.AppendLine("    {");
@@ -107,7 +107,7 @@ internal static class BuilderExtensionsEmitter
             {
                 var s = model.Steps[j];
                 if (s.CompensateMethodName is null) continue;
-                sb.Append("                await _mediator.Send(saga.").Append(s.CompensateMethodName).AppendLine("(), ct).ConfigureAwait(false);");
+                sb.Append("                await _dispatcher.DispatchAsync(saga.").Append(s.CompensateMethodName).AppendLine("(), ct).ConfigureAwait(false);");
             }
             sb.AppendLine("                break;");
         }

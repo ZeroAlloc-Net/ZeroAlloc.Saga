@@ -33,8 +33,8 @@ public static class MultiFieldOrderSagaBuilderExtensions
 
 internal sealed class MultiFieldOrderSagaCompensationDispatcher : ISagaCompensationDispatcher<MultiFieldOrderSaga>
 {
-    private readonly IMediator _mediator;
-    public MultiFieldOrderSagaCompensationDispatcher(IMediator mediator) => _mediator = mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
+    public MultiFieldOrderSagaCompensationDispatcher(ISagaCommandDispatcher dispatcher) => _dispatcher = dispatcher;
 
     public async ValueTask CompensateAsync(MultiFieldOrderSaga saga, CancellationToken ct)
     {

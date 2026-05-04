@@ -33,8 +33,8 @@ public static class ShipSagaBuilderExtensions
 
 internal sealed class ShipSagaCompensationDispatcher : ISagaCompensationDispatcher<ShipSaga>
 {
-    private readonly IMediator _mediator;
-    public ShipSagaCompensationDispatcher(IMediator mediator) => _mediator = mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
+    public ShipSagaCompensationDispatcher(ISagaCommandDispatcher dispatcher) => _dispatcher = dispatcher;
 
     public async ValueTask CompensateAsync(ShipSaga saga, CancellationToken ct)
     {

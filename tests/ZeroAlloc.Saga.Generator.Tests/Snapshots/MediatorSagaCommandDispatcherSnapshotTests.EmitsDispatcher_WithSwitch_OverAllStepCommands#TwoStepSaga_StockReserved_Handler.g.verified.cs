@@ -14,15 +14,15 @@ internal sealed class TwoStepSaga_StockReserved_Handler : INotificationHandler<g
 {
     private readonly ISagaStore<TwoStepSaga, global::Sample.OrderId> _store;
     private readonly SagaLockManager<global::Sample.OrderId> _locks;
-    private readonly IMediator _mediator;
+    private readonly ISagaCommandDispatcher _dispatcher;
     private readonly SagaRetryOptions _retry;
     private readonly ILogger<TwoStepSaga_StockReserved_Handler> _log;
 
-    public TwoStepSaga_StockReserved_Handler(ISagaStore<TwoStepSaga, global::Sample.OrderId> store, SagaLockManager<global::Sample.OrderId> locks, IMediator mediator, SagaRetryOptions retry, ILogger<TwoStepSaga_StockReserved_Handler> log)
+    public TwoStepSaga_StockReserved_Handler(ISagaStore<TwoStepSaga, global::Sample.OrderId> store, SagaLockManager<global::Sample.OrderId> locks, ISagaCommandDispatcher dispatcher, SagaRetryOptions retry, ILogger<TwoStepSaga_StockReserved_Handler> log)
     {
         _store = store;
         _locks = locks;
-        _mediator = mediator;
+        _dispatcher = dispatcher;
         _retry = retry;
         _log = log;
     }
@@ -45,7 +45,7 @@ internal sealed class TwoStepSaga_StockReserved_Handler : INotificationHandler<g
                 }
 
                 var cmd = saga.Charge(@event);
-                await _mediator.Send(cmd, ct).ConfigureAwait(false);
+                await _dispatcher.DispatchAsync(cmd, ct).ConfigureAwait(false);
 
                 saga.Fsm.TryFire(TwoStepSagaFsm.Trigger.Complete);
                 await _store.RemoveAsync(key, ct).ConfigureAwait(false);
