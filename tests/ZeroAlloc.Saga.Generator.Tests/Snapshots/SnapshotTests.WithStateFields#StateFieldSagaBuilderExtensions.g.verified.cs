@@ -21,10 +21,7 @@ public static class StateFieldSagaBuilderExtensions
     {
         builder.Services.AddMediator();
         builder.Services.TryAddSingleton<ISagaStore<StateFieldSaga, global::Sample.OrderId>, InMemorySagaStore<StateFieldSaga, global::Sample.OrderId>>();
-        if (builder.IsEfCoreBackend)
-        {
-            global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<StateFieldSaga, global::Sample.OrderId>(builder);
-        }
+        global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<StateFieldSaga, global::Sample.OrderId>(builder);
         builder.Services.TryAddSingleton<SagaLockManager<global::Sample.OrderId>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<StateFieldSaga>, StateFieldSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<StateFieldSaga, global::Sample.OrderId>, SagaManager<StateFieldSaga, global::Sample.OrderId>>();

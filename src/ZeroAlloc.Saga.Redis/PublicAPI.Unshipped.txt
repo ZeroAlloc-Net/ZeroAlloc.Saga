@@ -1,4 +1,6 @@
 #nullable enable
+ZeroAlloc.Saga.Redis.IRedisSagaTransactionContributor
+ZeroAlloc.Saga.Redis.IRedisSagaTransactionContributor.Contribute(StackExchange.Redis.ITransaction! transaction) -> void
 ZeroAlloc.Saga.Redis.RedisSagaConcurrencyException
 ZeroAlloc.Saga.Redis.RedisSagaConcurrencyException.Key.get -> string!
 ZeroAlloc.Saga.Redis.RedisSagaConcurrencyException.RedisSagaConcurrencyException(string! key) -> void
@@ -6,6 +8,7 @@ ZeroAlloc.Saga.Redis.RedisSagaConcurrencyException.RedisSagaConcurrencyException
 ZeroAlloc.Saga.Redis.RedisSagaStore<TSaga, TKey>
 ZeroAlloc.Saga.Redis.RedisSagaStore<TSaga, TKey>.LoadOrCreateAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<TSaga!>
 ZeroAlloc.Saga.Redis.RedisSagaStore<TSaga, TKey>.RedisSagaStore(StackExchange.Redis.IDatabase! db, ZeroAlloc.Saga.Redis.RedisSagaStoreOptions! options, Microsoft.Extensions.Logging.ILogger<ZeroAlloc.Saga.Redis.RedisSagaStore<TSaga!, TKey>!>! log) -> void
+ZeroAlloc.Saga.Redis.RedisSagaStore<TSaga, TKey>.RedisSagaStore(StackExchange.Redis.IDatabase! db, ZeroAlloc.Saga.Redis.RedisSagaStoreOptions! options, Microsoft.Extensions.Logging.ILogger<ZeroAlloc.Saga.Redis.RedisSagaStore<TSaga!, TKey>!>! log, System.Collections.Generic.IEnumerable<ZeroAlloc.Saga.Redis.IRedisSagaTransactionContributor!>! contributors) -> void
 ZeroAlloc.Saga.Redis.RedisSagaStore<TSaga, TKey>.RemoveAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
 ZeroAlloc.Saga.Redis.RedisSagaStore<TSaga, TKey>.SaveAsync(TKey key, TSaga! saga, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
 ZeroAlloc.Saga.Redis.RedisSagaStore<TSaga, TKey>.TryLoadAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<TSaga?>

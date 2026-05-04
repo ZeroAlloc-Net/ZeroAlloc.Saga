@@ -58,10 +58,10 @@ internal static class BuilderExtensionsEmitter
         // users without the Saga.EfCore package compile cleanly.
         sb.Append("        builder.Services.TryAddSingleton<ISagaStore<").Append(model.ClassName).Append(", ").Append(keyType)
           .Append(">, InMemorySagaStore<").Append(model.ClassName).Append(", ").Append(keyType).AppendLine(">>();");
-        sb.AppendLine("        if (builder.IsEfCoreBackend)");
-        sb.AppendLine("        {");
-        sb.Append("            global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<").Append(model.ClassName).Append(", ").Append(keyType).AppendLine(">(builder);");
-        sb.AppendLine("        }");
+        // Always call Apply — backend registrars (EfCore / Redis / future) swap the
+        // InMemory default when installed; no-op otherwise. This decouples the
+        // generator emit from the set of available backends.
+        sb.Append("        global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<").Append(model.ClassName).Append(", ").Append(keyType).AppendLine(">(builder);");
         sb.Append("        builder.Services.TryAddSingleton<SagaLockManager<").Append(keyType).AppendLine(">>();");
         sb.Append("        builder.Services.TryAddTransient<ISagaCompensationDispatcher<").Append(model.ClassName).Append(">, ").Append(model.ClassName).AppendLine("CompensationDispatcher>();");
         sb.Append("        builder.Services.TryAddTransient<ISagaManager<").Append(model.ClassName).Append(", ").Append(keyType)

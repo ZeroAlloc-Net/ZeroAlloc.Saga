@@ -21,10 +21,7 @@ public static class OrderSagaBuilderExtensions
     {
         builder.Services.AddMediator();
         builder.Services.TryAddSingleton<ISagaStore<OrderSaga, global::Sample.OrderId>, InMemorySagaStore<OrderSaga, global::Sample.OrderId>>();
-        if (builder.IsEfCoreBackend)
-        {
-            global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<OrderSaga, global::Sample.OrderId>(builder);
-        }
+        global::ZeroAlloc.Saga.SagaStoreRegistrar.Apply<OrderSaga, global::Sample.OrderId>(builder);
         builder.Services.TryAddSingleton<SagaLockManager<global::Sample.OrderId>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<OrderSaga>, OrderSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<OrderSaga, global::Sample.OrderId>, SagaManager<OrderSaga, global::Sample.OrderId>>();
