@@ -122,6 +122,15 @@ that tolerate at-least-once delivery. Typical patterns:
 - Make handlers naturally idempotent (e.g. `INSERT OR IGNORE` on a
   unique key, conditional updates).
 
+For the **cross-process** duplicate-dispatch race (a process crashes
+after dispatch but before save, or a losing OCC scope's state save
+rolls back without rolling back the dispatch), the optional
+`ZeroAlloc.Saga.Outbox` bridge wraps dispatch in the same transaction
+as the state save — the dispatch row commits or rolls back atomically
+with the saga update. See [`docs/outbox.md`](outbox.md). It does
+**not** eliminate the same-process retry quirk above, which remains
+ZASAGA015's territory.
+
 ## `EfCoreSagaStoreOptions`
 
 Pass a configuration delegate to `WithEfCoreStore<TContext>()`:

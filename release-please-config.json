@@ -12,6 +12,11 @@
       "package-name": "ZeroAlloc.Saga.EfCore",
       "release-type": "simple",
       "changelog-path": "CHANGELOG.md"
+    },
+    "src/ZeroAlloc.Saga.Outbox": {
+      "package-name": "ZeroAlloc.Saga.Outbox",
+      "release-type": "simple",
+      "changelog-path": "CHANGELOG.md"
     }
   },
   "changelog-sections": [

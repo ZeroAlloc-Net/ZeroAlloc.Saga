@@ -2,11 +2,16 @@
 
 Source-generated long-running process orchestration for the ZeroAlloc ecosystem.
 
-> **Status:** v1.1 — AOT compatible. v1.1 ships durable persistence via
-> `ZeroAlloc.Saga.EfCore` 1.0.0 (single shared `SagaInstance` table,
-> row-version OCC, retry-on-conflict). InMemory remains the default
-> backend; switch to EfCore with one fluent call. See
-> [`docs/persistence-efcore.md`](docs/persistence-efcore.md).
+> **Status:** AOT compatible. The `ZeroAlloc.Saga.Outbox` bridge
+> (this release) commits every step command atomically with the saga
+> state save, eliminating the cross-process "OCC retry can dispatch
+> twice" race. Durable persistence via `ZeroAlloc.Saga.EfCore` (single
+> shared `SagaInstance` table, row-version OCC, retry-on-conflict) is
+> unchanged. InMemory remains the default backend; switch to EfCore
+> with one fluent call, and opt into the outbox bridge with
+> `.WithOutbox()`. See
+> [`docs/persistence-efcore.md`](docs/persistence-efcore.md) and
+> [`docs/outbox.md`](docs/outbox.md).
 
 [![NuGet](https://img.shields.io/nuget/v/ZeroAlloc.Saga.svg)](https://www.nuget.org/packages/ZeroAlloc.Saga)
 [![Build](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/actions/workflows/build.yml/badge.svg)](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/actions/workflows/build.yml)
@@ -67,6 +72,46 @@ itself: each `[Step]` runs in correlation-key order, returned commands flow
 through `IMediator.Send`, downstream events advance the FSM, and a terminal
 `Completed` (or `Compensated`) state removes the saga from the store
 automatically.
+
+## What's new
+
+### `ZeroAlloc.Saga.Outbox` (new package)
+
+Optional bridge that routes every saga step command through
+`ZeroAlloc.Outbox` so dispatch is committed in the same database
+transaction as the saga state save. Eliminates the cross-process race
+where a state update can succeed without the corresponding command being
+delivered.
+
+```csharp
+services.AddSaga()
+    .WithEfCoreStore<AppDbContext>(opts => opts.MaxRetryAttempts = 3)
+    .WithOutbox()                        // <-- one fluent call
+    .AddOrderFulfillmentSaga();
+```
+
+Requires `ZeroAlloc.Outbox` 2.4.0+ (introduces
+`IOutboxStore.EnqueueDeferredAsync`) and `ZeroAlloc.Serialisation` 2.1.0+.
+See [`docs/outbox.md`](docs/outbox.md) for the full setup, marker
+diagnostics (`ZASAGA016`/`ZASAGA017`), poller knobs, and the residual
+same-process retry caveat.
+
+### `ZeroAlloc.Saga` runtime
+
+- **`ISagaCommandDispatcher`** indirection: step handlers no longer
+  depend on `IMediator` directly. Default impl (generator-emitted)
+  forwards to `IMediator.Send`; `Saga.Outbox`'s `WithOutbox()` swaps
+  it in for transactional dispatch.
+- **`SagaCommandRegistry`** generator-emitted in consumer assemblies —
+  central deserialise+dispatch lookup keyed by `typeof(T).FullName`,
+  resolves `ISerializer<T>` from DI.
+- **`ZASAGA016` / `ZASAGA017`** new diagnostics (with code-fix for the
+  former) nudge step command types toward the `partial` /
+  same-assembly shape the auto-`[ZeroAllocSerializable]` extension
+  needs.
+- **Auto-`[ZeroAllocSerializable]`** — when `ZeroAlloc.Serialisation`
+  is referenced, the generator applies the attribute to step command
+  types via a partial extension so consumers don't have to remember.
 
 ## What's new in v1.1
 
@@ -176,8 +221,17 @@ Hard dependencies pulled in transitively:
 Every diagnostic links to [`docs/diagnostics.md`](docs/diagnostics.md) with a
 worked example.
 
-## v1.1 known limitations
+## Known limitations
 
+- **Same-process OCC retry retains at-least-once command dispatch.** The
+  `Saga.Outbox` bridge eliminates the cross-process duplicate-dispatch
+  race (the dispatch row commits atomically with the saga state save), but
+  the generator-emitted handler reuses the same scoped `DbContext` across
+  retry attempts within one process. EF Core does not clear the
+  `ChangeTracker` on `DbUpdateConcurrencyException`, so a retried
+  in-process attempt that eventually succeeds will commit *both* outbox
+  rows. Step command handlers must remain idempotent (`ZASAGA015`). See
+  [`docs/outbox.md`](docs/outbox.md) for the full discussion.
 - **InMemory persistence is not durable.** Process crash loses all in-flight
   sagas. Switch to `ZeroAlloc.Saga.EfCore` for durability.
 - **`ZeroAlloc.Saga.EfCore` Native AOT publish** — the runtime library
@@ -199,9 +253,9 @@ worked example.
 | Phase | Package | Adds |
 |---|---|---|
 | v1.0 | `ZeroAlloc.Saga` 1.0 | runtime + generator + InMemory + diagnostics + AOT |
-| **v1.1** (this release) | `ZeroAlloc.Saga` 1.2, `ZeroAlloc.Saga.EfCore` 1.0 | durable persistence (EfCore), retry-on-OCC-conflict, snapshot/rehydrate via `ISagaPersistableState` |
-| v1.2 | `ZeroAlloc.Saga.Redis` | second durable backend |
-| v1.3 | `ZeroAlloc.Saga.Outbox`, `ZeroAlloc.Saga.Resilience` | transactional outbox, retry policies |
+| v1.1 | `ZeroAlloc.Saga` 1.1, `ZeroAlloc.Saga.EfCore` 1.0 | durable persistence (EfCore), retry-on-OCC-conflict, snapshot/rehydrate via `ISagaPersistableState` |
+| **this release** | `ZeroAlloc.Saga`, `ZeroAlloc.Saga.Outbox` (new) | atomic command dispatch via transactional outbox (`.WithOutbox()`), `ISagaCommandDispatcher` indirection |
+| v1.3 | `ZeroAlloc.Saga.Resilience`, `ZeroAlloc.Saga.Redis` | retry/circuit-breaker policies, second durable backend |
 | v1.4 | (Scheduling integration) | per-step timeouts, deadlines |
 | v1.5 | `ZeroAlloc.Saga.Telemetry`, `ZeroAlloc.Saga.Dashboard` | OTel spans/metrics, ops dashboard |
 | v1.6 stretch | `ZeroAlloc.Saga.EventSourcing` | ES-backed store, choreography mode |
