@@ -1,0 +1,56 @@
+name: Publish from manifest
+
+# Manually-triggered rescue workflow that packs and pushes each package to NuGet
+# at the version recorded in .release-please-manifest.json. Useful when the
+# Release Please workflow's tag-and-publish race fails partway through (e.g. a
+# missing version.txt block) leaving GitHub releases tagged but NuGet
+# unpublished. --skip-duplicate makes re-runs safe.
+#
+# Usage:  gh workflow run publish-from-manifest.yml --repo ZeroAlloc-Net/ZeroAlloc.Saga
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Restore
+        run: dotnet restore ZeroAlloc.Saga.slnx
+
+      - name: Build
+        run: dotnet build ZeroAlloc.Saga.slnx -c Release --no-restore
+
+      - name: Test
+        run: dotnet test ZeroAlloc.Saga.slnx -c Release --no-build
+
+      - name: Pack each package at manifest version
+        run: |
+          mkdir -p ./nupkg
+          # Walk every path in the release-please manifest and pack at the recorded version.
+          # Falls back to version.txt if the manifest entry is somehow stale.
+          jq -r 'to_entries[] | "\(.key) \(.value)"' .release-please-manifest.json | \
+            while read path version; do
+              csproj=$(ls "$path"/*.csproj | head -1)
+              echo "Packing $csproj at version $version"
+              dotnet pack "$csproj" -c Release --no-build \
+                -p:PackageVersion="$version" -o ./nupkg
+            done
+          ls -la ./nupkg
+
+      - name: Push to NuGet
+        run: |
+          dotnet nuget push ./nupkg/*.nupkg \
+            --api-key ${{ secrets.NUGET_API_KEY }} \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
