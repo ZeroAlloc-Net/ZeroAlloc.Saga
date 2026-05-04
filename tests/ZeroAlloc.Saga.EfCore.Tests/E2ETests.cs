@@ -30,7 +30,7 @@ public sealed class E2ETests
             ServiceLifetime.Scoped);
         services.AddSaga()
             .WithEfCoreStore<TestDbContext>(opts => { opts.MaxRetryAttempts = 3; opts.RetryBaseDelay = TimeSpan.FromMilliseconds(1); opts.UseExponentialBackoff = false; })
-            .AddOrderFulfillmentSaga();
+            .WithOrderFulfillmentSaga();
         return services.BuildServiceProvider();
     }
 

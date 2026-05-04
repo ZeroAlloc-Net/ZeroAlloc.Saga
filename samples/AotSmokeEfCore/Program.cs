@@ -83,7 +83,7 @@ internal static class Program
                 opts.RetryBaseDelay = TimeSpan.FromMilliseconds(1);
                 opts.UseExponentialBackoff = false;
             })
-            .AddOrderFulfillmentSaga();
+            .WithOrderFulfillmentSaga();
         var sp = services.BuildServiceProvider();
 
         // Materialise the SagaInstance schema before publishing any events.

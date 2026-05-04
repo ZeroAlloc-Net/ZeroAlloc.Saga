@@ -1,8 +1,8 @@
 # Diagnostics
 
-`ZeroAlloc.Saga` ships 13 source-generator diagnostics (`ZASAGA001`-`ZASAGA013`)
-that catch authoring mistakes at compile time. Three of them ship with code-fix
-providers so the IDE can apply the fix in-place.
+`ZeroAlloc.Saga` ships source-generator diagnostics that catch authoring
+mistakes at compile time. Code-fix providers ship with several so the IDE
+can apply the fix in-place.
 
 The IDE help-link button on each squiggle takes you to the corresponding
 section below. Range `ZASAGA001`-`ZASAGA099` is reserved for Saga core; future
@@ -244,6 +244,31 @@ composite key types or a shared key alias to make the intent explicit.
     [CorrelationKey] public Guid Correlation(OrderPlaced e) => e.AuditId;
 }
 ```
+
+## ZASAGA018
+
+**`Add{Saga}Saga() is renamed; use With{Saga}Saga() instead`** (warning, suppressible)
+
+The generator-emitted per-saga registration method now lives under the
+`With`-prefixed name to align with the rest of the builder API
+(`WithEfCoreStore`, `WithOutbox`, `WithResilience`). The legacy
+`Add{Saga}Saga()` shim still compiles but emits this diagnostic. The
+shim will be removed in v2.
+
+```csharp
+// ⚠ ZASAGA018
+services.AddSaga()
+    .WithEfCoreStore<AppDbContext>()
+    .AddOrderFulfillmentSaga();   // <-- replace with WithOrderFulfillmentSaga()
+
+// ✓ migrated
+services.AddSaga()
+    .WithEfCoreStore<AppDbContext>()
+    .WithOrderFulfillmentSaga();
+```
+
+To suppress during migration: add `ZASAGA018` to your csproj's
+`<NoWarn>` or use `#pragma warning disable ZASAGA018` at the call site.
 
 ## See also
 

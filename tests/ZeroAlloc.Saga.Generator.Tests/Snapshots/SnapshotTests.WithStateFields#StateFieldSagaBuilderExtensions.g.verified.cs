@@ -13,7 +13,11 @@ namespace Sample;
 
 public static class StateFieldSagaBuilderExtensions
 {
-    public static ISagaBuilder AddStateFieldSaga(this ISagaBuilder builder)
+    /// <summary>
+    /// Registers <see cref="StateFieldSaga"/>'s store, lock manager,
+    /// saga manager, compensation dispatcher, and notification handlers.
+    /// </summary>
+    public static ISagaBuilder WithStateFieldSaga(this ISagaBuilder builder)
     {
         builder.Services.AddMediator();
         builder.Services.TryAddSingleton<ISagaStore<StateFieldSaga, global::Sample.OrderId>, InMemorySagaStore<StateFieldSaga, global::Sample.OrderId>>();
@@ -29,6 +33,14 @@ public static class StateFieldSagaBuilderExtensions
         builder.Services.AddTransient<INotificationHandler<global::Sample.OrderPlaced>, StateFieldSaga_OrderPlaced_Handler>();
         return builder;
     }
+
+    /// <summary>
+    /// Legacy alias for <see cref="WithStateFieldSaga"/>.
+    /// Will be removed in v2; use the <c>With</c>-prefixed name to align with the rest of the builder API.
+    /// </summary>
+    [System.Obsolete("Use WithStateFieldSaga() instead. Will be removed in the next major.", DiagnosticId = "ZASAGA018")]
+    public static ISagaBuilder AddStateFieldSaga(this ISagaBuilder builder)
+        => builder.WithStateFieldSaga();
 }
 
 internal sealed class StateFieldSagaCompensationDispatcher : ISagaCompensationDispatcher<StateFieldSaga>

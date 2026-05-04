@@ -86,7 +86,7 @@ public sealed class OccTests
             ServiceLifetime.Scoped);
         services.AddSaga()
             .WithEfCoreStore<TestDbContext>(opts => { opts.MaxRetryAttempts = 3; opts.RetryBaseDelay = TimeSpan.FromMilliseconds(1); opts.UseExponentialBackoff = false; })
-            .AddOrderFulfillmentSaga();
+            .WithOrderFulfillmentSaga();
 
         // Replace the saga store with a wrapper that throws DbUpdateException
         // exactly once on the first SaveAsync (simulating a unique-constraint
@@ -169,7 +169,7 @@ public sealed class OccTests
             ServiceLifetime.Scoped);
         services.AddSaga()
             .WithEfCoreStore<TestDbContext>(opts => { opts.MaxRetryAttempts = 3; opts.RetryBaseDelay = TimeSpan.FromMilliseconds(1); opts.UseExponentialBackoff = false; })
-            .AddOrderFulfillmentSaga();
+            .WithOrderFulfillmentSaga();
 
         // Decorate the EfCoreSagaStore with a one-shot conflict wrapper.
         for (int i = services.Count - 1; i >= 0; i--)
@@ -260,7 +260,7 @@ public sealed class OccTests
             ServiceLifetime.Scoped);
         services.AddSaga()
             .WithEfCoreStore<TestDbContext>(opts => { opts.MaxRetryAttempts = 2; opts.RetryBaseDelay = TimeSpan.FromMilliseconds(1); opts.UseExponentialBackoff = false; })
-            .AddOrderFulfillmentSaga();
+            .WithOrderFulfillmentSaga();
 
         // Replace the store with one that always throws.
         for (int i = services.Count - 1; i >= 0; i--)

@@ -90,7 +90,7 @@ services.AddMediator();
 services.AddSaga()
     .WithEfCoreStore<AppDbContext>(opts => opts.MaxRetryAttempts = 3)
     .WithOutbox()                        // <-- replaces dispatcher + adds poller
-    .AddOrderFulfillmentSaga();
+    .WithOrderFulfillmentSaga();
 
 // 3. Per-command serialiser registration.
 //    The bridge resolves ISerializer<TCommand> from DI for each step command.

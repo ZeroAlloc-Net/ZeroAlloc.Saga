@@ -122,7 +122,7 @@ internal static class Program
         services.AddMediator();
 
         services.AddSaga()
-            .AddOrderFulfillmentSaga();
+            .WithOrderFulfillmentSaga();
         var sp = services.BuildServiceProvider();
 
         var orderId = new OrderId(42);

@@ -13,7 +13,11 @@ namespace Sample;
 
 public static class FulfillmentSagaBuilderExtensions
 {
-    public static ISagaBuilder AddFulfillmentSaga(this ISagaBuilder builder)
+    /// <summary>
+    /// Registers <see cref="FulfillmentSaga"/>'s store, lock manager,
+    /// saga manager, compensation dispatcher, and notification handlers.
+    /// </summary>
+    public static ISagaBuilder WithFulfillmentSaga(this ISagaBuilder builder)
     {
         builder.Services.AddMediator();
         builder.Services.TryAddSingleton<ISagaStore<FulfillmentSaga, global::Sample.OrderId>, InMemorySagaStore<FulfillmentSaga, global::Sample.OrderId>>();
@@ -29,6 +33,14 @@ public static class FulfillmentSagaBuilderExtensions
         builder.Services.AddTransient<INotificationHandler<global::Sample.OrderPlaced>, FulfillmentSaga_OrderPlaced_Handler>();
         return builder;
     }
+
+    /// <summary>
+    /// Legacy alias for <see cref="WithFulfillmentSaga"/>.
+    /// Will be removed in v2; use the <c>With</c>-prefixed name to align with the rest of the builder API.
+    /// </summary>
+    [System.Obsolete("Use WithFulfillmentSaga() instead. Will be removed in the next major.", DiagnosticId = "ZASAGA018")]
+    public static ISagaBuilder AddFulfillmentSaga(this ISagaBuilder builder)
+        => builder.WithFulfillmentSaga();
 }
 
 internal sealed class FulfillmentSagaCompensationDispatcher : ISagaCompensationDispatcher<FulfillmentSaga>

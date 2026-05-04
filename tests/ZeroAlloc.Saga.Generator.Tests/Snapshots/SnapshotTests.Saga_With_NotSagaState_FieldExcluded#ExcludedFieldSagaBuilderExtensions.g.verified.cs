@@ -13,7 +13,11 @@ namespace Sample;
 
 public static class ExcludedFieldSagaBuilderExtensions
 {
-    public static ISagaBuilder AddExcludedFieldSaga(this ISagaBuilder builder)
+    /// <summary>
+    /// Registers <see cref="ExcludedFieldSaga"/>'s store, lock manager,
+    /// saga manager, compensation dispatcher, and notification handlers.
+    /// </summary>
+    public static ISagaBuilder WithExcludedFieldSaga(this ISagaBuilder builder)
     {
         builder.Services.AddMediator();
         builder.Services.TryAddSingleton<ISagaStore<ExcludedFieldSaga, int>, InMemorySagaStore<ExcludedFieldSaga, int>>();
@@ -29,6 +33,14 @@ public static class ExcludedFieldSagaBuilderExtensions
         builder.Services.AddTransient<INotificationHandler<global::Sample.Started>, ExcludedFieldSaga_Started_Handler>();
         return builder;
     }
+
+    /// <summary>
+    /// Legacy alias for <see cref="WithExcludedFieldSaga"/>.
+    /// Will be removed in v2; use the <c>With</c>-prefixed name to align with the rest of the builder API.
+    /// </summary>
+    [System.Obsolete("Use WithExcludedFieldSaga() instead. Will be removed in the next major.", DiagnosticId = "ZASAGA018")]
+    public static ISagaBuilder AddExcludedFieldSaga(this ISagaBuilder builder)
+        => builder.WithExcludedFieldSaga();
 }
 
 internal sealed class ExcludedFieldSagaCompensationDispatcher : ISagaCompensationDispatcher<ExcludedFieldSaga>

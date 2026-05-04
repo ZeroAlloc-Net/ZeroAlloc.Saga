@@ -59,7 +59,7 @@ Wiring:
 ```csharp
 services.AddMediator();              // ZeroAlloc.Mediator
 services.AddSaga()
-    .AddOrderFulfillmentSaga();      // generator-emitted extension
+    .WithOrderFulfillmentSaga();      // generator-emitted extension
 ```
 
 ## What the source generator emits

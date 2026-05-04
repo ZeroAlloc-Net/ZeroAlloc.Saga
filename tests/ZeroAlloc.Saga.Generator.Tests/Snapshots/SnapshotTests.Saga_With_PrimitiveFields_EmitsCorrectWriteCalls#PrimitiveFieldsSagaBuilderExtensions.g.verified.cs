@@ -13,7 +13,11 @@ namespace Sample;
 
 public static class PrimitiveFieldsSagaBuilderExtensions
 {
-    public static ISagaBuilder AddPrimitiveFieldsSaga(this ISagaBuilder builder)
+    /// <summary>
+    /// Registers <see cref="PrimitiveFieldsSaga"/>'s store, lock manager,
+    /// saga manager, compensation dispatcher, and notification handlers.
+    /// </summary>
+    public static ISagaBuilder WithPrimitiveFieldsSaga(this ISagaBuilder builder)
     {
         builder.Services.AddMediator();
         builder.Services.TryAddSingleton<ISagaStore<PrimitiveFieldsSaga, int>, InMemorySagaStore<PrimitiveFieldsSaga, int>>();
@@ -29,6 +33,14 @@ public static class PrimitiveFieldsSagaBuilderExtensions
         builder.Services.AddTransient<INotificationHandler<global::Sample.Started>, PrimitiveFieldsSaga_Started_Handler>();
         return builder;
     }
+
+    /// <summary>
+    /// Legacy alias for <see cref="WithPrimitiveFieldsSaga"/>.
+    /// Will be removed in v2; use the <c>With</c>-prefixed name to align with the rest of the builder API.
+    /// </summary>
+    [System.Obsolete("Use WithPrimitiveFieldsSaga() instead. Will be removed in the next major.", DiagnosticId = "ZASAGA018")]
+    public static ISagaBuilder AddPrimitiveFieldsSaga(this ISagaBuilder builder)
+        => builder.WithPrimitiveFieldsSaga();
 }
 
 internal sealed class PrimitiveFieldsSagaCompensationDispatcher : ISagaCompensationDispatcher<PrimitiveFieldsSaga>

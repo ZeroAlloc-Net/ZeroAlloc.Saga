@@ -13,7 +13,11 @@ namespace Sample;
 
 public static class ShipSagaBuilderExtensions
 {
-    public static ISagaBuilder AddShipSaga(this ISagaBuilder builder)
+    /// <summary>
+    /// Registers <see cref="ShipSaga"/>'s store, lock manager,
+    /// saga manager, compensation dispatcher, and notification handlers.
+    /// </summary>
+    public static ISagaBuilder WithShipSaga(this ISagaBuilder builder)
     {
         builder.Services.AddMediator();
         builder.Services.TryAddSingleton<ISagaStore<ShipSaga, global::Sample.ShipId>, InMemorySagaStore<ShipSaga, global::Sample.ShipId>>();
@@ -29,6 +33,14 @@ public static class ShipSagaBuilderExtensions
         builder.Services.AddTransient<INotificationHandler<global::Sample.ShipQueued>, ShipSaga_ShipQueued_Handler>();
         return builder;
     }
+
+    /// <summary>
+    /// Legacy alias for <see cref="WithShipSaga"/>.
+    /// Will be removed in v2; use the <c>With</c>-prefixed name to align with the rest of the builder API.
+    /// </summary>
+    [System.Obsolete("Use WithShipSaga() instead. Will be removed in the next major.", DiagnosticId = "ZASAGA018")]
+    public static ISagaBuilder AddShipSaga(this ISagaBuilder builder)
+        => builder.WithShipSaga();
 }
 
 internal sealed class ShipSagaCompensationDispatcher : ISagaCompensationDispatcher<ShipSaga>

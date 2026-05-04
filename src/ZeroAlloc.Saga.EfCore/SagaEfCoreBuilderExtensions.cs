@@ -55,7 +55,7 @@ public static class SagaEfCoreBuilderExtensions
             throw new InvalidOperationException(
                 "WithEfCoreStore<TContext>() must be called BEFORE per-saga AddXxxSaga() registrations. " +
                 "Reorder your fluent chain so the EF Core backend is configured first " +
-                "(e.g. services.AddSaga().WithEfCoreStore<TContext>().AddOrderFulfillmentSaga()).");
+                "(e.g. services.AddSaga().WithEfCoreStore<TContext>().WithOrderFulfillmentSaga()).");
         }
 
         builder.SetEfCoreBackend();

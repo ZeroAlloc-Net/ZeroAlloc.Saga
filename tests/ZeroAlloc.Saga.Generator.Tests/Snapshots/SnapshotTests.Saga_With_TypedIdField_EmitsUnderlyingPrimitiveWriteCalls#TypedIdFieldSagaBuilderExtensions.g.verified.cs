@@ -13,7 +13,11 @@ namespace Sample;
 
 public static class TypedIdFieldSagaBuilderExtensions
 {
-    public static ISagaBuilder AddTypedIdFieldSaga(this ISagaBuilder builder)
+    /// <summary>
+    /// Registers <see cref="TypedIdFieldSaga"/>'s store, lock manager,
+    /// saga manager, compensation dispatcher, and notification handlers.
+    /// </summary>
+    public static ISagaBuilder WithTypedIdFieldSaga(this ISagaBuilder builder)
     {
         builder.Services.AddMediator();
         builder.Services.TryAddSingleton<ISagaStore<TypedIdFieldSaga, global::Sample.CustomerId>, InMemorySagaStore<TypedIdFieldSaga, global::Sample.CustomerId>>();
@@ -29,6 +33,14 @@ public static class TypedIdFieldSagaBuilderExtensions
         builder.Services.AddTransient<INotificationHandler<global::Sample.Activated>, TypedIdFieldSaga_Activated_Handler>();
         return builder;
     }
+
+    /// <summary>
+    /// Legacy alias for <see cref="WithTypedIdFieldSaga"/>.
+    /// Will be removed in v2; use the <c>With</c>-prefixed name to align with the rest of the builder API.
+    /// </summary>
+    [System.Obsolete("Use WithTypedIdFieldSaga() instead. Will be removed in the next major.", DiagnosticId = "ZASAGA018")]
+    public static ISagaBuilder AddTypedIdFieldSaga(this ISagaBuilder builder)
+        => builder.WithTypedIdFieldSaga();
 }
 
 internal sealed class TypedIdFieldSagaCompensationDispatcher : ISagaCompensationDispatcher<TypedIdFieldSaga>

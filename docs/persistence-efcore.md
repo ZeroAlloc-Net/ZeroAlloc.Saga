@@ -70,7 +70,7 @@ services.AddDbContext<AppDbContext>(opts => opts.UseSqlServer(connStr));
 
 services.AddSaga()
     .WithEfCoreStore<AppDbContext>()
-    .AddOrderFulfillmentSaga(); // generator-emitted per-saga registration
+    .WithOrderFulfillmentSaga(); // generator-emitted per-saga registration
 ```
 
 > **Order matters.** `WithEfCoreStore<TContext>()` MUST be called
@@ -145,7 +145,7 @@ services.AddSaga()
         opts.RetryBaseDelay = TimeSpan.FromMilliseconds(50); // default 10 ms
         opts.UseExponentialBackoff = true;               // default true
     })
-    .AddOrderFulfillmentSaga();
+    .WithOrderFulfillmentSaga();
 ```
 
 | Option | Default | Effect |

@@ -110,8 +110,8 @@ them. They run sequentially — order is the DI registration order.
 
 ```csharp
 services.AddSaga()
-    .AddOrderFulfillmentSaga()    // also subscribes to OrderPlaced
-    .AddRefundSaga();             // also subscribes to OrderPlaced
+    .WithOrderFulfillmentSaga()    // also subscribes to OrderPlaced
+    .WithRefundSaga();             // also subscribes to OrderPlaced
 ```
 
 If two sagas correlate on the same event with **different** correlation
