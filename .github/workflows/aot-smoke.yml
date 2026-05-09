@@ -8,7 +8,7 @@ jobs:
     name: publish + run AotSmoke (linux-x64)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: |
@@ -36,7 +36,7 @@ jobs:
     name: build + run AotSmokeEfCore (linux-x64, EfCore backend)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: |
@@ -69,7 +69,7 @@ jobs:
     name: publish + run AotSmokeOutbox (linux-x64, outbox bridge)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: |
@@ -97,7 +97,7 @@ jobs:
     name: build + run ResilienceSample (linux-x64, JIT)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: |
