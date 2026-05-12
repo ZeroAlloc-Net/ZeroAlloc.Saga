@@ -12,8 +12,8 @@ Source-generated long-running process orchestration for the ZeroAlloc ecosystem.
 > row-version OCC, retry-on-conflict) is unchanged. InMemory remains
 > the default backend; switch to EfCore with one fluent call, and opt
 > into the outbox bridge with `.WithOutbox()`. See
-> [`docs/persistence-efcore.md`](docs/persistence-efcore.md) and
-> [`docs/outbox.md`](docs/outbox.md).
+> [`docs/persistence-efcore.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/persistence-efcore.md) and
+> [`docs/outbox.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox.md).
 
 [![NuGet](https://img.shields.io/nuget/v/ZeroAlloc.Saga.svg)](https://www.nuget.org/packages/ZeroAlloc.Saga)
 [![Build](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/actions/workflows/build.yml/badge.svg)](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/actions/workflows/build.yml)
@@ -93,7 +93,7 @@ services.AddSaga()
     .WithOrderFulfillmentSaga();
 ```
 
-See [`docs/outbox-redis.md`](docs/outbox-redis.md) for the full atomicity
+See [`docs/outbox-redis.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox-redis.md) for the full atomicity
 contract, the `IRedisSagaTransactionContributor` extension point, and the
 poller integration.
 
@@ -115,7 +115,7 @@ services.AddSaga()
 Mutually exclusive with `WithEfCoreStore<TContext>()`. Composition with
 `WithOutbox()` works for the dispatch path but full atomic-commit
 guarantees await Stage 3 (`ZeroAlloc.Saga.Outbox.Redis`). Requires
-`StackExchange.Redis` 2.8+. See [`docs/persistence-redis.md`](docs/persistence-redis.md).
+`StackExchange.Redis` 2.8+. See [`docs/persistence-redis.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/persistence-redis.md).
 
 ### `ISagaUnitOfWork` abstraction (Phase 3a-2 stage 1)
 
@@ -166,7 +166,7 @@ Composition order is outermost-first: `circuit-breaker → rate-limit →
 timeout → retry → inner.DispatchAsync`. Caller cancellation propagates
 as `OperationCanceledException`; policy denials surface as
 `ResilienceException(Policy: ...)` so consumers can disambiguate.
-Requires `ZeroAlloc.Resilience` 1.0+. See [`docs/resilience.md`](docs/resilience.md).
+Requires `ZeroAlloc.Resilience` 1.0+. See [`docs/resilience.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/resilience.md).
 
 ### `ZeroAlloc.Saga.Outbox` (new package)
 
@@ -185,7 +185,7 @@ services.AddSaga()
 
 Requires `ZeroAlloc.Outbox` 2.4.0+ (introduces
 `IOutboxStore.EnqueueDeferredAsync`) and `ZeroAlloc.Serialisation` 2.1.0+.
-See [`docs/outbox.md`](docs/outbox.md) for the full setup, marker
+See [`docs/outbox.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox.md) for the full setup, marker
 diagnostics (`ZASAGA016`/`ZASAGA017`), and poller knobs.
 
 ### `ZeroAlloc.Saga` runtime
@@ -240,7 +240,7 @@ First durable backend for `ZeroAlloc.Saga`. Single shared `SagaInstance`
 table keyed by `(SagaType, CorrelationKey)`; provider-agnostic row-version
 optimistic concurrency; automatic retry-on-conflict driven by
 `EfCoreSagaStoreOptions`. See
-[`docs/persistence-efcore.md`](docs/persistence-efcore.md) for the full
+[`docs/persistence-efcore.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/persistence-efcore.md) for the full
 guide.
 
 ```csharp
@@ -259,17 +259,17 @@ protected override void OnModelCreating(ModelBuilder mb) => mb.AddSagas();
 
 ## Documentation
 
-- [`docs/concepts.md`](docs/concepts.md) — saga lifecycle, generator output, AOT story
-- [`docs/correlation.md`](docs/correlation.md) — `[CorrelationKey]` rules, multi-saga subscription, composite keys
-- [`docs/compensation.md`](docs/compensation.md) — `Compensate` / `CompensateOn`, reverse cascade, `ISagaManager.CompensateAsync`
-- [`docs/persistence-efcore.md`](docs/persistence-efcore.md) — durable persistence with `ZeroAlloc.Saga.EfCore`: setup, migrations, OCC, idempotency, AOT story
-- [`docs/diagnostics.md`](docs/diagnostics.md) — every `ZASAGA0XX` diagnostic with examples and fixes
+- [`docs/concepts.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/concepts.md) — saga lifecycle, generator output, AOT story
+- [`docs/correlation.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/correlation.md) — `[CorrelationKey]` rules, multi-saga subscription, composite keys
+- [`docs/compensation.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/compensation.md) — `Compensate` / `CompensateOn`, reverse cascade, `ISagaManager.CompensateAsync`
+- [`docs/persistence-efcore.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/persistence-efcore.md) — durable persistence with `ZeroAlloc.Saga.EfCore`: setup, migrations, OCC, idempotency, AOT story
+- [`docs/diagnostics.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/diagnostics.md) — every `ZASAGA0XX` diagnostic with examples and fixes
 
 ## Samples
 
-- [`samples/OrderFulfillment/`](samples/OrderFulfillment/) — full demo with happy path, compensation, orphan-event handling, and operator-initiated compensation. `dotnet run --project samples/OrderFulfillment/` (InMemory) or `dotnet run --project samples/OrderFulfillment/ -- --efcore` (EfCore + SQLite).
-- [`samples/AotSmoke/`](samples/AotSmoke/) — minimal saga end-to-end published with `PublishAot=true`. Run by the `aot-smoke` CI job on every push.
-- [`samples/AotSmokeEfCore/`](samples/AotSmokeEfCore/) — EfCore variant of the smoke. Builds under the same AOT/trim analyzer set; runs end-to-end with SQLite in-memory verifying RowVersion rotation and Completed-state row removal.
+- [`samples/OrderFulfillment/`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/tree/main/samples/OrderFulfillment/) — full demo with happy path, compensation, orphan-event handling, and operator-initiated compensation. `dotnet run --project samples/OrderFulfillment/` (InMemory) or `dotnet run --project samples/OrderFulfillment/ -- --efcore` (EfCore + SQLite).
+- [`samples/AotSmoke/`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/tree/main/samples/AotSmoke/) — minimal saga end-to-end published with `PublishAot=true`. Run by the `aot-smoke` CI job on every push.
+- [`samples/AotSmokeEfCore/`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/tree/main/samples/AotSmokeEfCore/) — EfCore variant of the smoke. Builds under the same AOT/trim analyzer set; runs end-to-end with SQLite in-memory verifying RowVersion rotation and Completed-state row removal.
 
 ## Install
 
@@ -311,7 +311,7 @@ Hard dependencies pulled in transitively:
 | ZASAGA013 | Two sagas correlate on same event with different key types | warning |
 | ZASAGA018 | `Add{Saga}Saga()` is renamed to `With{Saga}Saga()` — legacy shim deprecated | warning (suppressible) |
 
-Every diagnostic links to [`docs/diagnostics.md`](docs/diagnostics.md) with a
+Every diagnostic links to [`docs/diagnostics.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/diagnostics.md) with a
 worked example.
 
 ## Known limitations
@@ -323,7 +323,7 @@ worked example.
   upstream by EF Core 9.0's experimental AOT story (precompiled queries
   don't yet cover the store's tracked `Set<>().AsTracking()...` shape).
   Use the EfCore backend on JITted hosts; stay on InMemory for AOT-published
-  hosts. See [`docs/persistence-efcore.md`](docs/persistence-efcore.md).
+  hosts. See [`docs/persistence-efcore.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/persistence-efcore.md).
 - **`SagaLockManager` grows monotonically** — one `SemaphoreSlim` per unique
   correlation key seen, never evicted. Bounded by process lifetime; ~80 bytes
   each. Eviction lands in v1.x for high-cardinality workloads.
