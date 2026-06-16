@@ -19,9 +19,9 @@ public sealed record StockReserved(OrderId OrderId) : INotification;
 public sealed record PaymentCharged(OrderId OrderId) : INotification;
 public sealed record PaymentDeclined(OrderId OrderId) : INotification;
 
-public sealed record ReserveStockCommand(OrderId OrderId, decimal Total) : IRequest;
-public sealed record ChargeCustomerCommand(OrderId OrderId, decimal Total) : IRequest;
-public sealed record ShipOrderCommand(OrderId OrderId) : IRequest;
+public sealed partial record ReserveStockCommand(OrderId OrderId, decimal Total) : IRequest;
+public sealed partial record ChargeCustomerCommand(OrderId OrderId, decimal Total) : IRequest;
+public sealed partial record ShipOrderCommand(OrderId OrderId) : IRequest;
 public sealed record CancelReservationCommand(OrderId OrderId) : IRequest;
 public sealed record RefundPaymentCommand(OrderId OrderId) : IRequest;
 
