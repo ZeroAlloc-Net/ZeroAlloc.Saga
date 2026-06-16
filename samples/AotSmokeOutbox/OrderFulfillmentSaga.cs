@@ -21,9 +21,9 @@ public sealed record PaymentDeclined(OrderId OrderId) : INotification;
 // Step commands are deliberately NOT partial. ZASAGA016 (warning) is suppressed
 // at the csproj level — we hand-roll AOT-safe byte ISerializer<T> impls below
 // rather than route through ZeroAlloc.Serialisation's source-gen path.
-public sealed record ReserveStockCommand(OrderId OrderId, decimal Total) : IRequest;
-public sealed record ChargeCustomerCommand(OrderId OrderId, decimal Total) : IRequest;
-public sealed record ShipOrderCommand(OrderId OrderId) : IRequest;
+public sealed partial record ReserveStockCommand(OrderId OrderId, decimal Total) : IRequest;
+public sealed partial record ChargeCustomerCommand(OrderId OrderId, decimal Total) : IRequest;
+public sealed partial record ShipOrderCommand(OrderId OrderId) : IRequest;
 public sealed record CancelReservationCommand(OrderId OrderId) : IRequest;
 public sealed record RefundPaymentCommand(OrderId OrderId) : IRequest;
 
