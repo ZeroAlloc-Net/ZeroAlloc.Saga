@@ -8,6 +8,7 @@ using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Formatting;
 
 namespace ZeroAlloc.Saga.Generator.CodeFixes;
 
@@ -112,7 +113,7 @@ public sealed class AddMissingCompensationMethodCodeFixProvider : CodeFixProvide
                     SyntaxKind.SuppressNullableWarningExpression,
                     SyntaxFactory.LiteralExpression(SyntaxKind.DefaultLiteralExpression, SyntaxFactory.Token(SyntaxKind.DefaultKeyword)))))
             .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken))
-            .NormalizeWhitespace();
+            .WithAdditionalAnnotations(Formatter.Annotation);
 
         var newClass = classDecl.AddMembers(stubMethod);
         var newRoot = root.ReplaceNode(classDecl, newClass);
