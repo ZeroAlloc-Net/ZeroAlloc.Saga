@@ -12,7 +12,7 @@ public sealed class RedisFixture : IAsyncDisposable
 
     public RedisFixture()
     {
-        _container = new RedisBuilder().WithImage("redis:7.4-alpine").Build();
+        _container = new RedisBuilder("redis:7.4-alpine").Build();
     }
 
     public async Task InitializeAsync()
