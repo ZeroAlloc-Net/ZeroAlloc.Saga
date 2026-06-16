@@ -7,6 +7,12 @@
     <IsPackable>false</IsPackable>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
+    <!-- RS1038 forbids analyzer assemblies from referencing Workspaces, but this
+         assembly also ships CodeFix providers (CodeFixes/*.cs) which legitimately
+         need Workspaces types (Document, CodeFixContext, Formatter). Splitting
+         analyzers and code fixes into separate assemblies is the upstream-blessed
+         alternative; revisit if/when that refactor lands. -->
+    <NoWarn>$(NoWarn);RS1038</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
