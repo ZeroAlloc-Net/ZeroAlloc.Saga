@@ -42,7 +42,7 @@
 
     <!-- Redis backend deps -->
     <PackageVersion Include="StackExchange.Redis" Version="3.0.*" />
-    <PackageVersion Include="Testcontainers.Redis" Version="4.6.*" />
+    <PackageVersion Include="Testcontainers.Redis" Version="4.12.*" />
 
     <!-- Generator deps -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.*" />

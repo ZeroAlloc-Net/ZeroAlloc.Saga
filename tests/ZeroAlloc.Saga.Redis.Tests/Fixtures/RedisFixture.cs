@@ -21,8 +21,7 @@ public sealed class RedisFixture : IAsyncDisposable
 
     public RedisFixture()
     {
-        _container = new RedisBuilder()
-            .WithImage("redis:7.4-alpine")
+        _container = new RedisBuilder("redis:7.4-alpine")
             .Build();
     }
 
