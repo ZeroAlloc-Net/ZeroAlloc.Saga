@@ -8,9 +8,9 @@
     <PackageVersion Include="ZeroAlloc.Mediator" Version="4.1.*" />
     <PackageVersion Include="ZeroAlloc.Pipeline" Version="1.2.*" />
     <PackageVersion Include="ZeroAlloc.Mediator.Generator" Version="4.1.*" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.8" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.8" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.9" />
 
     <!-- EfCore backend deps -->
     <PackageVersion Include="ZeroAlloc.Saga" Version="1.6.*" />
@@ -20,12 +20,12 @@
   <!-- EFCore 10 dropped net8.0 support, so we pin per-TFM:
        net8.0 consumers stay on EFCore 9; net10.0 gets EFCore 10. -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.16" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.16" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.17" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.17" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.8" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.8" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.9" />
   </ItemGroup>
 
   <ItemGroup>
@@ -34,8 +34,8 @@
     <PackageVersion Include="ZeroAlloc.Outbox" Version="2.5.0" />
     <PackageVersion Include="ZeroAlloc.Outbox.EfCore" Version="2.5.0" />
     <PackageVersion Include="ZeroAlloc.Serialisation" Version="2.4.0" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.8" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.8" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.9" />
 
     <!-- Resilience bridge deps -->
     <PackageVersion Include="ZeroAlloc.Resilience" Version="1.3.*" />
@@ -45,8 +45,8 @@
     <PackageVersion Include="Testcontainers.Redis" Version="4.12.*" />
 
     <!-- Generator deps -->
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.*" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.11.*" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.*" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.14.*" />
 
     <!-- Test deps -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.*" />
