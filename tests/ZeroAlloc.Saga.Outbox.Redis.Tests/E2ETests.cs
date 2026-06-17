@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using StackExchange.Redis;
 using ZeroAlloc.Mediator;
@@ -32,6 +33,12 @@ public sealed class E2ETests : IAsyncLifetime
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddMediator();
+        // Mediator 4.x: explicit handler registration (no reflection).
+        services.TryAddTransient<ReserveStockHandler>();
+        services.TryAddTransient<ChargeCustomerHandler>();
+        services.TryAddTransient<ShipOrderHandler>();
+        services.TryAddTransient<CancelReservationHandler>();
+        services.TryAddTransient<RefundPaymentHandler>();
         services.AddSingleton(_fx.Multiplexer);
         services.AddTestSerializers();
         services.AddSaga()

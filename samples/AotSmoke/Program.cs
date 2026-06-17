@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using ZeroAlloc.Mediator;
@@ -118,8 +119,16 @@ internal static class Program
         var services = new ServiceCollection();
         services.AddLogging(b => b.AddProvider(NullLoggerProvider.Instance));
 
-        // Real IMediator wired by the Mediator source generator.
+        // Real IMediator wired by the Mediator source generator. Mediator 4.x no
+        // longer auto-discovers handlers — register each one explicitly so the
+        // AOT publish stays trim/reflection-free (RegisterHandlersFromAssembly
+        // is [RequiresUnreferencedCode]).
         services.AddMediator();
+        services.TryAddTransient<ReserveStockHandler>();
+        services.TryAddTransient<ChargeCustomerHandler>();
+        services.TryAddTransient<ShipOrderHandler>();
+        services.TryAddTransient<CancelReservationHandler>();
+        services.TryAddTransient<RefundPaymentHandler>();
 
         services.AddSaga()
             .WithOrderFulfillmentSaga();

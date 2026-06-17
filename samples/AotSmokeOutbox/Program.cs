@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -51,6 +52,12 @@ internal static class Program
         var services = new ServiceCollection();
         services.AddLogging(b => b.AddProvider(NullLoggerProvider.Instance));
         services.AddMediator();
+        // Mediator 4.x: explicit handler registration (AOT-safe; no reflection).
+        services.TryAddTransient<ReserveStockHandler>();
+        services.TryAddTransient<ChargeCustomerHandler>();
+        services.TryAddTransient<ShipOrderHandler>();
+        services.TryAddTransient<CancelReservationHandler>();
+        services.TryAddTransient<RefundPaymentHandler>();
 
         // Single-instance in-process IOutboxStore — registered as Singleton so
         // the OutboxSagaCommandDispatcher (Scoped) and the poller (also resolves

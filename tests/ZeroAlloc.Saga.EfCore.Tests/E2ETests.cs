@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Abstractions;
 using ZeroAlloc.Mediator;
 using ZeroAlloc.Saga.EfCore.Tests.Fixtures;
@@ -26,6 +27,12 @@ public sealed class E2ETests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddMediator();
+        // Mediator 4.x: explicit handler registration (no reflection).
+        services.TryAddTransient<ReserveStockHandler>();
+        services.TryAddTransient<ChargeCustomerHandler>();
+        services.TryAddTransient<ShipOrderHandler>();
+        services.TryAddTransient<CancelReservationHandler>();
+        services.TryAddTransient<RefundPaymentHandler>();
         services.AddDbContext<TestDbContext>(opts => opts.UseSqlite(fx.Connection),
             ServiceLifetime.Scoped);
         services.AddSaga()

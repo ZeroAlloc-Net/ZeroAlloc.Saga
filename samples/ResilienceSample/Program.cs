@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using ZeroAlloc.Mediator;
 using ZeroAlloc.Resilience;
@@ -34,6 +35,14 @@ internal static class Program
 
         var services = new ServiceCollection();
         services.AddLogging(b => b.SetMinimumLevel(LogLevel.Warning));
+
+        // Mediator 4.x: explicit handler registration (AOT-safe; no reflection).
+        // The Saga generator's WithXxxSaga() emits services.AddMediator() implicitly.
+        services.TryAddTransient<ReserveStockHandler>();
+        services.TryAddTransient<ChargeCustomerHandler>();
+        services.TryAddTransient<ShipOrderHandler>();
+        services.TryAddTransient<CancelReservationHandler>();
+        services.TryAddTransient<RefundPaymentHandler>();
 
         // Order: WithXxxSaga() registers the default ISagaCommandDispatcher; WithResilience()
         // decorates whatever is currently registered, so call it AFTER WithXxxSaga().

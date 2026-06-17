@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using OrderFulfillment.Saga;
 using ZeroAlloc.Mediator;
 
@@ -206,6 +207,12 @@ public static class FakeMediatorRegistration
     public static IServiceCollection AddFakeMediator(this IServiceCollection services)
     {
         services.AddMediator();
+        // Mediator 4.x: explicit handler registration.
+        services.TryAddTransient<ReserveStockCommandHandler>();
+        services.TryAddTransient<ChargeCustomerCommandHandler>();
+        services.TryAddTransient<ShipOrderCommandHandler>();
+        services.TryAddTransient<CancelReservationCommandHandler>();
+        services.TryAddTransient<RefundPaymentCommandHandler>();
 
         services.AddSingleton<INotificationPublisher, ServiceProviderPublisher>();
         services.AddSingleton<ChargeReactionPolicy>();
