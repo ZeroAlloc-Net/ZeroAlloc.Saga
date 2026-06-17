@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using ZeroAlloc.Mediator;
@@ -32,6 +33,13 @@ public class RuntimeTests
 
         // Real IMediator wired by the Mediator source generator.
         services.AddMediator();
+        // Mediator 4.x: explicit handler registration (no reflection).
+        services.TryAddTransient<ReserveStockHandler>();
+        services.TryAddTransient<ChargeCustomerHandler>();
+        services.TryAddTransient<ShipOrderHandler>();
+        services.TryAddTransient<CancelReservationHandler>();
+        services.TryAddTransient<RefundPaymentHandler>();
+        services.TryAddTransient<AuditOrderHandler>();
 
         services.AddSaga()
             .WithOrderFulfillmentSaga();
@@ -259,6 +267,13 @@ public class RuntimeTests
         var services = new ServiceCollection();
         services.AddLogging(b => b.AddProvider(NullLoggerProvider.Instance));
         services.AddMediator();
+        // Mediator 4.x: explicit handler registration (no reflection).
+        services.TryAddTransient<ReserveStockHandler>();
+        services.TryAddTransient<ChargeCustomerHandler>();
+        services.TryAddTransient<ShipOrderHandler>();
+        services.TryAddTransient<CancelReservationHandler>();
+        services.TryAddTransient<RefundPaymentHandler>();
+        services.TryAddTransient<AuditOrderHandler>();
 
         services.AddSaga()
             .WithOrderFulfillmentSaga()
