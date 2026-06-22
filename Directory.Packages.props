@@ -2,6 +2,9 @@
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageFloatingVersionsEnabled>true</CentralPackageFloatingVersionsEnabled>
+    <!-- Allow pinning transitively-resolved package versions (used below to
+         override the vulnerable native SQLite binary pulled in by EF Core Sqlite). -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup>
     <!-- Runtime deps -->
@@ -11,6 +14,13 @@
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.9" />
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.9" />
+
+    <!-- CVE-2025-6965 / GHSA-2m69-gcr7-jv3q: EF Core Sqlite pulls
+         SQLitePCLRaw.lib.e_sqlite3 2.1.11 (bundles SQLite < 3.50.2). Pin the native
+         binary to 3.50.3 (SQLite 3.50.3) via transitive pinning; satisfies both the
+         net8.0/EFCore9 and net10.0/EFCore10 graphs. core/provider stay on 2.x
+         (the sqlite3 C ABI is stable). Drop once EF Core ships a bumped SQLitePCLRaw. -->
+    <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.50.3" />
 
     <!-- EfCore backend deps -->
     <PackageVersion Include="ZeroAlloc.Saga" Version="1.6.*" />
