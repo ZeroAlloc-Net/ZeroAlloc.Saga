@@ -82,7 +82,7 @@ internal static class GeneratorVerifier
 
         foreach (var expected in diagnosticIds)
         {
-            Assert.Contains(expected, actual);
+            Assert.Contains(expected, actual, StringComparer.Ordinal);
         }
     }
 
