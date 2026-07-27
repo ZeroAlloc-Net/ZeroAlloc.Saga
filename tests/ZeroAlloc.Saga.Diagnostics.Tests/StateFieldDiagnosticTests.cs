@@ -87,7 +87,7 @@ public class StateFieldDiagnosticTests
         var run = await GeneratorVerifier.RunAsync(src);
         var ids = new System.Collections.Generic.List<string>();
         foreach (var d in run.Diagnostics) ids.Add(d.Id);
-        Assert.DoesNotContain("ZASAGA014", ids);
+        Assert.DoesNotContain("ZASAGA014", ids, StringComparer.Ordinal);
     }
 
     [Fact]
@@ -132,6 +132,6 @@ public class StateFieldDiagnosticTests
         var run = await GeneratorVerifier.RunAsync(src);
         var ids = new System.Collections.Generic.List<string>();
         foreach (var d in run.Diagnostics) ids.Add(d.Id);
-        Assert.DoesNotContain("ZASAGA015", ids);
+        Assert.DoesNotContain("ZASAGA015", ids, StringComparer.Ordinal);
     }
 }

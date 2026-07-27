@@ -148,7 +148,7 @@ public sealed class E2ETests : IAsyncLifetime
         var sagaKey = $"{sagaPrefix}:OrderFulfillmentSaga:{orderId}";
         var version = (string?)await db.HashGetAsync(sagaKey, "version");
         Assert.NotNull(version);
-        Assert.NotEqual("watch-conflict-injected", version);
+        Assert.NotEqual("watch-conflict-injected", version, StringComparer.Ordinal);
 
         // 4. Driving the poller dispatches exactly once.
         var poller = sp.GetServices<IHostedService>().OfType<OutboxSagaCommandPoller>().Single();

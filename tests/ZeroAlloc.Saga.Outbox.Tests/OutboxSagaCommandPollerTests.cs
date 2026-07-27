@@ -109,7 +109,7 @@ public class OutboxSagaCommandPollerTests
 
         await poller.PollOnceAsync(CancellationToken.None);
 
-        Assert.Equal(new[] { "Sample.Cmd" }, dispatchedTypes);
+        Assert.Equal(new[] { "Sample.Cmd" }, dispatchedTypes, StringComparer.Ordinal);
         Assert.Single(store.Succeeded);
         Assert.Equal(entry.Id, store.Succeeded[0]);
         Assert.Empty(store.Failed);
