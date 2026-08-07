@@ -24,7 +24,7 @@
 
     <!-- EfCore backend deps -->
     <PackageVersion Include="ZeroAlloc.Saga" Version="1.6.*" />
-    <PackageVersion Include="ZeroAlloc.ValueObjects.EfCore" Version="1.7.*" />
+    <PackageVersion Include="ZeroAlloc.ValueObjects.EfCore" Version="2.0.*" />
   </ItemGroup>
 
   <!-- EFCore 10 dropped net8.0 support, so we pin per-TFM:
