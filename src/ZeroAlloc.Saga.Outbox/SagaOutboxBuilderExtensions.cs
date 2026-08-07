@@ -52,11 +52,11 @@ public static class SagaOutboxBuilderExtensions
     [UnconditionalSuppressMessage(
         "Trimming",
         "IL2026:RequiresUnreferencedCode",
-        Justification = "SagaCommandRegistry is rooted by [DynamicDependency(PublicMethods, typeof(SagaCommandRegistry))] emitted on the saga generator's MediatorSagaCommandDispatcher. That dispatcher is rooted by the generator-emitted With{Saga}Saga DI registration, transitively keeping the registry's DispatchAsync alive under PublishAot=true.")]
+        Justification = "SagaCommandRegistry is rooted by [DynamicDependency(NonPublicMethods, typeof(SagaCommandRegistry))] emitted on the saga generator's MediatorSagaCommandDispatcher. That dispatcher is rooted by the generator-emitted With{Saga}Saga DI registration, transitively keeping the registry's DispatchAsync alive under PublishAot=true.")]
     [UnconditionalSuppressMessage(
         "Trimming",
         "IL2075:RequiresUnreferencedCode",
-        Justification = "Same: SagaCommandRegistry's public methods are kept by the [DynamicDependency] on MediatorSagaCommandDispatcher; the GetMethod lookup will find DispatchAsync after trimming.")]
+        Justification = "Same: SagaCommandRegistry's non-public methods are kept by the [DynamicDependency] on MediatorSagaCommandDispatcher; the GetMethod lookup will find DispatchAsync after trimming.")]
     [UnconditionalSuppressMessage(
         "AOT",
         "IL3050:RequiresDynamicCode",
@@ -79,9 +79,12 @@ public static class SagaOutboxBuilderExtensions
                 ?? FindIMediatorType();
             if (mediatorType is null) continue;
 
+            // NonPublic as well as Public: the registry's DispatchAsync is internal, because
+            // it takes the generator-emitted IMediator, which is internal from Mediator v5.
+            // Public is kept so a consumer still on v4 — whose registry is public — resolves.
             var method = registryType.GetMethod(
                 "DispatchAsync",
-                BindingFlags.Public | BindingFlags.Static,
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static,
                 binder: null,
                 types: new[]
                 {

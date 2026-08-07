@@ -13,11 +13,12 @@ namespace ZeroAlloc.Saga.Generated;
 /// <summary>
 /// Per-compilation switch table that maps an outbox entry's <c>typeName</c> to a typed
 /// deserialize-via-<see cref="ISerializer{T}"/> and dispatch-via-<see cref="IMediator.Send"/> path.
-/// Consumed by <c>ZeroAlloc.Saga.Outbox.OutboxSagaCommandPoller</c>.
+/// Consumed by <c>ZeroAlloc.Saga.Outbox.OutboxSagaCommandPoller</c>, which reaches it
+/// reflectively through <c>SagaCommandRegistryDispatcher</c> rather than by reference.
 /// </summary>
-public static class SagaCommandRegistry
+internal static class SagaCommandRegistry
 {
-    public static async ValueTask DispatchAsync(
+    internal static async ValueTask DispatchAsync(
         string typeName,
         ReadOnlyMemory<byte> bytes,
         IServiceProvider services,
