@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga.Outbox-v1.5.0...ZeroAlloc.Saga.Outbox-v2.0.0) (2026-08-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* **generator:** emit SagaCommandRegistry as internal for Mediator v5 ([#95](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/95))
+
+### Bug Fixes
+
+* **generator:** emit SagaCommandRegistry as internal for Mediator v5 ([#95](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/95)) ([dd8c63a](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/dd8c63aee31bf3f7327346593dbd058e5745f0d4))
+
 ## [1.5.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga.Outbox-v1.4.0...ZeroAlloc.Saga.Outbox-v1.5.0) (2026-05-04)
 
 
