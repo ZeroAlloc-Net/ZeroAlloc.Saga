@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v1.6.0...ZeroAlloc.Saga-v2.0.0) (2026-08-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* **saga:** release the generator fix from #95 ([#97](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/97))
+
+### Bug Fixes
+
+* **saga:** release the generator fix from [#95](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/95) ([#97](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/97)) ([058e209](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/058e209275c9a211b42133950d1b11c32116efb7))
+
 ## [1.6.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v1.5.0...ZeroAlloc.Saga-v1.6.0) (2026-05-04)
 
 
