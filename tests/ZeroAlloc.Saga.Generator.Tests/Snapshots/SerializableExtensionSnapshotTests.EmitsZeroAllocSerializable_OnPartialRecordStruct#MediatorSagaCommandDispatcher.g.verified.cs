@@ -18,7 +18,7 @@ namespace ZeroAlloc.Saga.Generated;
 internal sealed class MediatorSagaCommandDispatcher : ISagaCommandDispatcher
 {
     private readonly IMediator _mediator;
-    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods, typeof(SagaCommandRegistry))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.NonPublicMethods, typeof(SagaCommandRegistry))]
     public MediatorSagaCommandDispatcher(IMediator mediator) => _mediator = mediator;
 
     public ValueTask DispatchAsync<TCommand>(TCommand cmd, CancellationToken ct)

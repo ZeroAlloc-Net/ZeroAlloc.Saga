@@ -57,11 +57,18 @@ internal static class SagaCommandRegistryEmitter
         sb.AppendLine("/// <summary>");
         sb.AppendLine("/// Per-compilation switch table that maps an outbox entry's <c>typeName</c> to a typed");
         sb.AppendLine("/// deserialize-via-<see cref=\"ISerializer{T}\"/> and dispatch-via-<see cref=\"IMediator.Send\"/> path.");
-        sb.AppendLine("/// Consumed by <c>ZeroAlloc.Saga.Outbox.OutboxSagaCommandPoller</c>.");
+        sb.AppendLine("/// Consumed by <c>ZeroAlloc.Saga.Outbox.OutboxSagaCommandPoller</c>, which reaches it");
+        sb.AppendLine("/// reflectively through <c>SagaCommandRegistryDispatcher</c> rather than by reference.");
         sb.AppendLine("/// </summary>");
-        sb.AppendLine("public static class SagaCommandRegistry");
+        // internal, not public: DispatchAsync takes IMediator, which ZeroAlloc.Mediator's
+        // generator emits as an internal interface per consumer compilation from v5 onward.
+        // A public method cannot expose an internal parameter type — CS0051. Nothing outside
+        // this compilation references the registry by name anyway; ZeroAlloc.Saga.Outbox
+        // finds it by reflection, and its delegate is deliberately IMediator-free precisely
+        // because the type does not exist outside the consumer's assembly.
+        sb.AppendLine("internal static class SagaCommandRegistry");
         sb.AppendLine("{");
-        sb.AppendLine("    public static async ValueTask DispatchAsync(");
+        sb.AppendLine("    internal static async ValueTask DispatchAsync(");
         sb.AppendLine("        string typeName,");
         sb.AppendLine("        ReadOnlyMemory<byte> bytes,");
         sb.AppendLine("        IServiceProvider services,");

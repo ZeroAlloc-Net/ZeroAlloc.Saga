@@ -73,7 +73,12 @@ internal static class MediatorSagaCommandDispatcherEmitter
             // generator-emitted With{Saga}Saga DI registration, so attaching the
             // dependency on its constructor keeps the registry alive whenever
             // a saga consumer also references ZeroAlloc.Serialisation.
-            sb.AppendLine("    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods, typeof(SagaCommandRegistry))]");
+            //
+            // NonPublicMethods, not PublicMethods: DispatchAsync is internal because it
+            // takes IMediator, which the Mediator generator emits as internal from v5.
+            // Rooting the public methods would keep nothing and the trimmer would strip
+            // the one method WithOutbox() looks up.
+            sb.AppendLine("    [DynamicDependency(DynamicallyAccessedMemberTypes.NonPublicMethods, typeof(SagaCommandRegistry))]");
         }
         sb.AppendLine("    public MediatorSagaCommandDispatcher(IMediator mediator) => _mediator = mediator;");
         sb.AppendLine();
