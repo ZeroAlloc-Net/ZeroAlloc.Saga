@@ -29,6 +29,18 @@
 
   <!-- Bundle the source generator into this nupkg as an analyzer asset. -->
   <!-- Mirrors ZeroAlloc.Resilience's IncludeGeneratorInPackage MSBuild target. -->
+
+  <!--
+    RELEASE COUPLING: the generator ships inside THIS package, but its source lives at
+    src/ZeroAlloc.Saga.Generator, which is not a release-please component (see
+    release-please-config.json). A commit touching only the generator therefore maps to
+    no package and bumps nothing, so the fix never reaches consumers even though it is
+    on main. #95 hit exactly that, and #71 before it.
+
+    Until the generator moves under this component's path, a generator-only change must
+    either touch a file here or carry a Release-As footer, so that ZeroAlloc.Saga cuts a
+    release carrying the rebuilt analyzer DLL.
+  -->
   <ItemGroup>
     <ProjectReference Include="..\ZeroAlloc.Saga.Generator\ZeroAlloc.Saga.Generator.csproj"
                       OutputItemType="Analyzer"
