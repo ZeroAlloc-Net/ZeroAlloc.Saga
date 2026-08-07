@@ -8,7 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- Runtime deps -->
-    <PackageVersion Include="ZeroAlloc.Mediator" Version="4.1.*" />
+    <PackageVersion Include="ZeroAlloc.Mediator" Version="5.0.*" />
     <PackageVersion Include="ZeroAlloc.Pipeline" Version="1.2.*" />
     <PackageVersion Include="ZeroAlloc.Mediator.Generator" Version="4.1.*" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
