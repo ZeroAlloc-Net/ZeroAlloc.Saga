@@ -23,7 +23,7 @@
     <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.50.3" />
 
     <!-- EfCore backend deps -->
-    <PackageVersion Include="ZeroAlloc.Saga" Version="1.6.*" />
+    <PackageVersion Include="ZeroAlloc.Saga" Version="2.0.*" />
     <PackageVersion Include="ZeroAlloc.ValueObjects.EfCore" Version="1.7.*" />
   </ItemGroup>
 
