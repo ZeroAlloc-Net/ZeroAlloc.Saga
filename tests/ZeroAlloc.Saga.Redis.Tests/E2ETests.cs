@@ -49,11 +49,31 @@ public sealed class E2ETests : IAsyncLifetime
         return services.BuildServiceProvider();
     }
 
-    private static async Task PublishAsync<T>(IServiceProvider sp, T evt) where T : INotification
+    // Goes through the real IMediator.Publish rather than resolving INotificationHandler<T>
+    // directly — see the note in ZeroAlloc.Saga.EfCore.Tests.E2ETests. Publish overloads are
+    // generated per notification type, so a generic helper cannot bind to them (#127).
+    private static async Task PublishAsync(IServiceProvider sp, OrderPlaced evt)
     {
         using var scope = sp.CreateScope();
-        foreach (var h in scope.ServiceProvider.GetServices<INotificationHandler<T>>())
-            await h.Handle(evt, default).ConfigureAwait(false);
+        await scope.ServiceProvider.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
+    }
+
+    private static async Task PublishAsync(IServiceProvider sp, StockReserved evt)
+    {
+        using var scope = sp.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
+    }
+
+    private static async Task PublishAsync(IServiceProvider sp, PaymentCharged evt)
+    {
+        using var scope = sp.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
+    }
+
+    private static async Task PublishAsync(IServiceProvider sp, PaymentDeclined evt)
+    {
+        using var scope = sp.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
     }
 
     [Fact]

@@ -54,17 +54,20 @@ public class RuntimeTests
         return (sp, ledger);
     }
 
-    private static Task PublishAsync<T>(IServiceProvider sp, T evt) where T : INotification
-    {
-        var handlers = sp.GetServices<INotificationHandler<T>>();
-        var task = Task.CompletedTask;
-        foreach (var h in handlers)
-        {
-            var current = h.Handle(evt, default);
-            task = task.ContinueWith(_ => current.AsTask(), TaskScheduler.Default).Unwrap();
-        }
-        return task;
-    }
+    // Goes through the real IMediator.Publish rather than resolving INotificationHandler<T>
+    // directly. Publish overloads are generated per notification type, so a generic helper
+    // cannot bind to them (#127).
+    private static async Task PublishAsync(IServiceProvider sp, OrderPlaced evt)
+        => await sp.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
+
+    private static async Task PublishAsync(IServiceProvider sp, StockReserved evt)
+        => await sp.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
+
+    private static async Task PublishAsync(IServiceProvider sp, PaymentCharged evt)
+        => await sp.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
+
+    private static async Task PublishAsync(IServiceProvider sp, PaymentDeclined evt)
+        => await sp.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
 
     [Fact]
     public async Task Forward_HappyPath()
