@@ -1,5 +1,7 @@
 using System.Threading.Tasks;
 
+using ZeroAlloc.TestHelpers;
+
 namespace ZeroAlloc.Saga.Generator.Tests;
 
 public class SnapshotTests
@@ -11,7 +13,7 @@ public class SnapshotTests
         """;
 
     [Fact]
-    public Task Minimal_SingleStep_NoCompensation()
+    public void Minimal_SingleStep_NoCompensation()
     {
         var src = Header + """
 
@@ -29,11 +31,11 @@ public class SnapshotTests
                 [Step(Order = 1)] public ReserveStockCommand Reserve(OrderPlaced e) => new(e.OrderId);
             }
             """;
-        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+        GeneratorSnapshot.Verify(GeneratorTestHost.Run(src));
     }
 
     [Fact]
-    public Task TwoStep_NoCompensation()
+    public void TwoStep_NoCompensation()
     {
         var src = Header + """
 
@@ -57,11 +59,11 @@ public class SnapshotTests
                 [Step(Order = 2)] public ChargeCommand Charge(StockReserved e) => new(e.OrderId);
             }
             """;
-        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+        GeneratorSnapshot.Verify(GeneratorTestHost.Run(src));
     }
 
     [Fact]
-    public Task ThreeStep_FullCompensation()
+    public void ThreeStep_FullCompensation()
     {
         var src = Header + """
 
@@ -101,11 +103,11 @@ public class SnapshotTests
                 public RefundCommand Refund() => new(default);
             }
             """;
-        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+        GeneratorSnapshot.Verify(GeneratorTestHost.Run(src));
     }
 
     [Fact]
-    public Task WithStateFields()
+    public void WithStateFields()
     {
         var src = Header + """
 
@@ -133,11 +135,11 @@ public class SnapshotTests
                 }
             }
             """;
-        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+        GeneratorSnapshot.Verify(GeneratorTestHost.Run(src));
     }
 
     [Fact]
-    public Task MultipleFailurePaths()
+    public void MultipleFailurePaths()
     {
         var src = Header + """
 
@@ -179,11 +181,11 @@ public class SnapshotTests
                 public RefundCommand Refund() => new(default);
             }
             """;
-        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+        GeneratorSnapshot.Verify(GeneratorTestHost.Run(src));
     }
 
     [Fact]
-    public Task Saga_With_PrimitiveFields_EmitsCorrectWriteCalls()
+    public void Saga_With_PrimitiveFields_EmitsCorrectWriteCalls()
     {
         var src = Header + """
 
@@ -204,11 +206,11 @@ public class SnapshotTests
                 [Step(Order = 1)] public DoIt Step1(Started e) => new(e.Id);
             }
             """;
-        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+        GeneratorSnapshot.Verify(GeneratorTestHost.Run(src));
     }
 
     [Fact]
-    public Task Saga_With_TypedIdField_EmitsUnderlyingPrimitiveWriteCalls()
+    public void Saga_With_TypedIdField_EmitsUnderlyingPrimitiveWriteCalls()
     {
         var src = Header + """
 
@@ -228,11 +230,11 @@ public class SnapshotTests
                 [Step(Order = 1)] public GreetCommand Greet(Activated e) => new(e.Id);
             }
             """;
-        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+        GeneratorSnapshot.Verify(GeneratorTestHost.Run(src));
     }
 
     [Fact]
-    public Task Saga_With_NullableField_EmitsFlagBytePrefix()
+    public void Saga_With_NullableField_EmitsFlagBytePrefix()
     {
         var src = Header + """
 
@@ -251,11 +253,11 @@ public class SnapshotTests
                 [Step(Order = 1)] public DoIt Step1(Started e) => new(e.Id);
             }
             """;
-        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+        GeneratorSnapshot.Verify(GeneratorTestHost.Run(src));
     }
 
     [Fact]
-    public Task Saga_With_EnumField_EmitsUnderlyingType()
+    public void Saga_With_EnumField_EmitsUnderlyingType()
     {
         var src = Header + """
 
@@ -275,11 +277,11 @@ public class SnapshotTests
                 [Step(Order = 1)] public DoIt Step1(Started e) => new(e.Id);
             }
             """;
-        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+        GeneratorSnapshot.Verify(GeneratorTestHost.Run(src));
     }
 
     [Fact]
-    public Task Saga_With_NotSagaState_FieldExcluded()
+    public void Saga_With_NotSagaState_FieldExcluded()
     {
         var src = Header + """
 
@@ -301,11 +303,11 @@ public class SnapshotTests
                 [Step(Order = 1)] public DoIt Step1(Started e) => new(e.Id);
             }
             """;
-        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+        GeneratorSnapshot.Verify(GeneratorTestHost.Run(src));
     }
 
     [Fact]
-    public Task Saga_With_MultipleFields_EmitsCorrectFieldOrder()
+    public void Saga_With_MultipleFields_EmitsCorrectFieldOrder()
     {
         var src = Header + """
 
@@ -327,11 +329,11 @@ public class SnapshotTests
                 [Step(Order = 1)] public DoIt Step1(Started e) => new(e.Id);
             }
             """;
-        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+        GeneratorSnapshot.Verify(GeneratorTestHost.Run(src));
     }
 
     [Fact]
-    public Task TwoSagasInSameProject()
+    public void TwoSagasInSameProject()
     {
         var src = Header + """
 
@@ -359,6 +361,6 @@ public class SnapshotTests
                 [Step(Order = 1)] public AuditCommand Audit(OrderShipped e) => new(e.OrderId);
             }
             """;
-        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+        GeneratorSnapshot.Verify(GeneratorTestHost.Run(src));
     }
 }

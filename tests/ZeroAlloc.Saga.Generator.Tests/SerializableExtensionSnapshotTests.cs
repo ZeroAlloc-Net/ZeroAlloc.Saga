@@ -1,5 +1,7 @@
 using System.Threading.Tasks;
 
+using ZeroAlloc.TestHelpers;
+
 namespace ZeroAlloc.Saga.Generator.Tests;
 
 /// <summary>
@@ -16,7 +18,7 @@ namespace ZeroAlloc.Saga.Generator.Tests;
 public class SerializableExtensionSnapshotTests
 {
     [Fact]
-    public Task EmitsZeroAllocSerializable_OnPartialRecordStruct()
+    public void EmitsZeroAllocSerializable_OnPartialRecordStruct()
     {
         var src = """
             using System;
@@ -49,11 +51,11 @@ public class SerializableExtensionSnapshotTests
                 [Step(Order = 1)] public ReserveCmd Reserve(OrderPlaced e) => new(e.OrderId);
             }
             """;
-        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+        GeneratorSnapshot.Verify(GeneratorTestHost.Run(src));
     }
 
     [Fact]
-    public Task SkipsEmission_WhenUserAlreadyAppliedAttribute()
+    public void SkipsEmission_WhenUserAlreadyAppliedAttribute()
     {
         var src = """
             using System;
@@ -89,11 +91,11 @@ public class SerializableExtensionSnapshotTests
                 [Step(Order = 1)] public ReserveCmd Reserve(OrderPlaced e) => new(e.OrderId);
             }
             """;
-        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+        GeneratorSnapshot.Verify(GeneratorTestHost.Run(src));
     }
 
     [Fact]
-    public Task SkipsEmission_WhenSerialisationNotReferenced()
+    public void SkipsEmission_WhenSerialisationNotReferenced()
     {
         var src = """
             using System;
@@ -113,6 +115,6 @@ public class SerializableExtensionSnapshotTests
                 [Step(Order = 1)] public ReserveCmd Reserve(OrderPlaced e) => new(e.OrderId);
             }
             """;
-        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+        GeneratorSnapshot.Verify(GeneratorTestHost.Run(src));
     }
 }
