@@ -1,49 +1,55 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
-  "release-type": "simple",
-  "include-component-in-tag": true,
   "packages": {
-    "src/ZeroAlloc.Saga": {
+    ".": {
+      "release-type": "simple",
       "package-name": "ZeroAlloc.Saga",
-      "release-type": "simple",
-      "changelog-path": "CHANGELOG.md"
-    },
-    "src/ZeroAlloc.Saga.EfCore": {
-      "package-name": "ZeroAlloc.Saga.EfCore",
-      "release-type": "simple",
-      "changelog-path": "CHANGELOG.md"
-    },
-    "src/ZeroAlloc.Saga.Outbox": {
-      "package-name": "ZeroAlloc.Saga.Outbox",
-      "release-type": "simple",
-      "changelog-path": "CHANGELOG.md"
-    },
-    "src/ZeroAlloc.Saga.Outbox.Redis": {
-      "package-name": "ZeroAlloc.Saga.Outbox.Redis",
-      "release-type": "simple",
-      "changelog-path": "CHANGELOG.md"
-    },
-    "src/ZeroAlloc.Saga.Redis": {
-      "package-name": "ZeroAlloc.Saga.Redis",
-      "release-type": "simple",
-      "changelog-path": "CHANGELOG.md"
-    },
-    "src/ZeroAlloc.Saga.Resilience": {
-      "package-name": "ZeroAlloc.Saga.Resilience",
-      "release-type": "simple",
-      "changelog-path": "CHANGELOG.md"
+      "include-component-in-tag": true
     }
   },
   "changelog-sections": [
-    { "type": "feat", "section": "Features" },
-    { "type": "fix", "section": "Bug Fixes" },
-    { "type": "perf", "section": "Performance Improvements" },
-    { "type": "refactor", "section": "Code Refactoring" },
-    { "type": "docs", "section": "Documentation" },
-    { "type": "test", "section": "Tests" },
-    { "type": "deps", "section": "Dependencies" },
-    { "type": "build", "section": "Build System", "hidden": true },
-    { "type": "ci", "section": "Continuous Integration", "hidden": true },
-    { "type": "chore", "section": "Miscellaneous", "hidden": true }
+    {
+      "type": "feat",
+      "section": "Features"
+    },
+    {
+      "type": "fix",
+      "section": "Bug Fixes"
+    },
+    {
+      "type": "perf",
+      "section": "Performance Improvements"
+    },
+    {
+      "type": "refactor",
+      "section": "Code Refactoring"
+    },
+    {
+      "type": "docs",
+      "section": "Documentation"
+    },
+    {
+      "type": "test",
+      "section": "Tests"
+    },
+    {
+      "type": "deps",
+      "section": "Dependencies"
+    },
+    {
+      "type": "build",
+      "section": "Build System",
+      "hidden": true
+    },
+    {
+      "type": "ci",
+      "section": "Continuous Integration",
+      "hidden": true
+    },
+    {
+      "type": "chore",
+      "section": "Miscellaneous",
+      "hidden": true
+    }
   ]
 }

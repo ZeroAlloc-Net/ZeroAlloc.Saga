@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       releases_created: ${{ steps.release.outputs.releases_created }}
-      paths_released: ${{ steps.release.outputs.paths_released }}
+      version: ${{ steps.release.outputs.version }}
     steps:
       - name: Release Please
         uses: googleapis/release-please-action@v5
@@ -48,21 +48,34 @@ jobs:
       - name: Test
         run: dotnet test ZeroAlloc.Saga.slnx -c Release --no-build
 
-      - name: Pack each package at its release version
+      # One version covers every package, so ProjectReference dependencies between them stamp
+      # correctly: Saga.EfCore at X depends on ZeroAlloc.Saga X. Under the old per-package
+      # versions, -p:PackageVersion applied globally and each sibling stamped its OWN number
+      # onto that dependency -- EfCore 1.3.0 shipped "depends on ZeroAlloc.Saga 1.3.0". See #98.
+      - name: Pack all packages at the release version
         env:
-          PATHS_RELEASED: ${{ needs.release-please.outputs.paths_released }}
+          VERSION: ${{ needs.release-please.outputs.version }}
         run: |
+          set -euo pipefail
+          if [ -z "$VERSION" ]; then
+            echo "::error::release-please reported a release but produced no version"
+            exit 1
+          fi
           mkdir -p ./nupkg
-          # paths_released is a JSON array of paths that got bumped this run.
-          # For each path, read its version.txt (release-please updated it) and pack at that version.
-          for path in $(echo "$PATHS_RELEASED" | jq -r '.[]'); do
-            version=$(cat "$path/version.txt")
-            csproj=$(ls "$path"/*.csproj | head -1)
-            echo "Packing $csproj at version $version"
-            dotnet pack "$csproj" -c Release --no-build \
-              -p:PackageVersion="$version" -o ./nupkg
+          for csproj in src/*/*.csproj; do
+            if ! grep -q "<IsPackable>true</IsPackable>" "$csproj"; then
+              echo "Skipping $csproj (not packable)"
+              continue
+            fi
+            echo "Packing $csproj at $VERSION"
+            dotnet pack "$csproj" -c Release --no-build -p:PackageVersion="$VERSION" -o ./nupkg
           done
           ls -la ./nupkg
+          # Releasing nothing while reporting success is the failure mode #98 is about.
+          if ! ls ./nupkg/*.nupkg >/dev/null 2>&1; then
+            echo "::error::no packages were produced"
+            exit 1
+          fi
 
       - name: Push to NuGet
         run: |
