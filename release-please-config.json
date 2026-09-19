@@ -4,7 +4,11 @@
     ".": {
       "release-type": "simple",
       "package-name": "ZeroAlloc.Saga",
-      "include-component-in-tag": true
+      "include-component-in-tag": true,
+      "exclude-paths": [
+        "tests",
+        "samples"
+      ]
     }
   },
   "changelog-sections": [
