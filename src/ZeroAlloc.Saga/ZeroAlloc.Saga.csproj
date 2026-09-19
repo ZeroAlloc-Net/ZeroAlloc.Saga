@@ -10,6 +10,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- ZeroAlloc.Mediator 5.1.0 is the floor, not a preference: before it, generated
+         Publish dispatched only to handlers discovered by concrete type in its own
+         compilation, so it never reached the INotificationHandler<T> registrations
+         With{Saga}Saga() emits and a saga never received its trigger event. See #127.
+         The version itself is central, in Directory.Packages.props. -->
     <PackageReference Include="ZeroAlloc.Mediator" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
