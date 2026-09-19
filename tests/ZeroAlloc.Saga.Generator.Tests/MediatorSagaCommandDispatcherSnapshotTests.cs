@@ -1,11 +1,13 @@
 using System.Threading.Tasks;
 
+using ZeroAlloc.TestHelpers;
+
 namespace ZeroAlloc.Saga.Generator.Tests;
 
 public class MediatorSagaCommandDispatcherSnapshotTests
 {
     [Fact]
-    public Task EmitsDispatcher_WithSwitch_OverAllStepCommands()
+    public void EmitsDispatcher_WithSwitch_OverAllStepCommands()
     {
         var src = """
             using System;
@@ -30,11 +32,11 @@ public class MediatorSagaCommandDispatcherSnapshotTests
                 [Step(Order = 2)] public ChargeCardCommand Charge(StockReserved e) => new(e.OrderId);
             }
             """;
-        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+        GeneratorSnapshot.Verify(GeneratorTestHost.Run(src));
     }
 
     [Fact]
-    public Task EmitsSingleDispatcher_AcrossMultipleSagas()
+    public void EmitsSingleDispatcher_AcrossMultipleSagas()
     {
         var src = """
             using System;
@@ -65,6 +67,6 @@ public class MediatorSagaCommandDispatcherSnapshotTests
                 [Step(Order = 1)] public LabelCmd Label(ShipQueued e) => new(e.ShipId);
             }
             """;
-        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+        GeneratorSnapshot.Verify(GeneratorTestHost.Run(src));
     }
 }

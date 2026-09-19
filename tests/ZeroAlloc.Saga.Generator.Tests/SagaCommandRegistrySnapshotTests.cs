@@ -1,5 +1,7 @@
 using System.Threading.Tasks;
 
+using ZeroAlloc.TestHelpers;
+
 namespace ZeroAlloc.Saga.Generator.Tests;
 
 /// <summary>
@@ -19,7 +21,7 @@ namespace ZeroAlloc.Saga.Generator.Tests;
 public class SagaCommandRegistrySnapshotTests
 {
     [Fact]
-    public Task EmitsRegistry_WhenSerialisationReferenced()
+    public void EmitsRegistry_WhenSerialisationReferenced()
     {
         var src = """
             using System;
@@ -52,11 +54,11 @@ public class SagaCommandRegistrySnapshotTests
                 [Step(Order = 2)] public ChargeCmd Charge(StockReserved e) => new(e.OrderId);
             }
             """;
-        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+        GeneratorSnapshot.Verify(GeneratorTestHost.Run(src));
     }
 
     [Fact]
-    public Task DoesNotEmitRegistry_WhenSerialisationNotReferenced()
+    public void DoesNotEmitRegistry_WhenSerialisationNotReferenced()
     {
         var src = """
             using System;
@@ -77,6 +79,6 @@ public class SagaCommandRegistrySnapshotTests
                 [Step(Order = 1)] public ReserveCmd Reserve(OrderPlaced e) => new(e.OrderId);
             }
             """;
-        return Verifier.Verify(GeneratorTestHost.Run(src)).UseDirectory("Snapshots");
+        GeneratorSnapshot.Verify(GeneratorTestHost.Run(src));
     }
 }
