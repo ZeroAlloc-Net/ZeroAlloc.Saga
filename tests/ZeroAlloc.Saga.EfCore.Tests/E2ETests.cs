@@ -41,14 +41,35 @@ public sealed class E2ETests
         return services.BuildServiceProvider();
     }
 
-    private static async Task PublishAsync<T>(IServiceProvider sp, T evt) where T : INotification
+    // Publishes through the real IMediator.Publish — the journey the README documents.
+    //
+    // These used to be one generic helper that resolved INotificationHandler<T> from DI and
+    // invoked it directly, bypassing the mediator entirely. That workaround is why #127 went
+    // unnoticed: IMediator.Publish could never reach a saga, but no test ever called it.
+    // IMediator's Publish overloads are generated per notification type, so a generic helper
+    // cannot bind to them — hence one overload per event.
+    private static async Task PublishAsync(IServiceProvider sp, OrderPlaced evt)
     {
         using var scope = sp.CreateScope();
-        var handlers = scope.ServiceProvider.GetServices<INotificationHandler<T>>();
-        foreach (var h in handlers)
-        {
-            await h.Handle(evt, default).ConfigureAwait(false);
-        }
+        await scope.ServiceProvider.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
+    }
+
+    private static async Task PublishAsync(IServiceProvider sp, StockReserved evt)
+    {
+        using var scope = sp.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
+    }
+
+    private static async Task PublishAsync(IServiceProvider sp, PaymentCharged evt)
+    {
+        using var scope = sp.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
+    }
+
+    private static async Task PublishAsync(IServiceProvider sp, PaymentDeclined evt)
+    {
+        using var scope = sp.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
     }
 
     [Fact]

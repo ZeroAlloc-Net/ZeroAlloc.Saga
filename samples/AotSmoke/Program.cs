@@ -100,14 +100,22 @@ internal sealed class RefundPaymentHandler : IRequestHandler<RefundPaymentComman
 
 internal static class Program
 {
-    // Small helper that resolves the saga's generated INotificationHandler<T>
-    // from DI and invokes Handle directly. This is the same pattern the
-    // runtime test suite uses (see tests/.../RuntimeTests.cs PublishAsync).
-    private static async Task PublishAsync<T>(IServiceProvider sp, T evt) where T : INotification
-    {
-        foreach (var h in sp.GetServices<INotificationHandler<T>>())
-            await h.Handle(evt, default).ConfigureAwait(false);
-    }
+    // Publishes through the real IMediator, which is the whole point of this smoke test:
+    // it proves the documented journey works under Native AOT, not just that the generated
+    // handler can be invoked by hand.
+    //
+    // This used to resolve INotificationHandler<T> from DI and call Handle directly. That
+    // bypassed IMediator entirely and masked #127 — IMediator.Publish could not reach a saga
+    // at all. IMediator's Publish overloads are generated per notification type, so a generic
+    // helper cannot bind to them; hence one overload per event.
+    private static async Task PublishAsync(IServiceProvider sp, OrderPlaced evt)
+        => await sp.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
+
+    private static async Task PublishAsync(IServiceProvider sp, StockReserved evt)
+        => await sp.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
+
+    private static async Task PublishAsync(IServiceProvider sp, PaymentCharged evt)
+        => await sp.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
 
     private static async Task<int> Main()
     {

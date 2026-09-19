@@ -302,14 +302,13 @@ public sealed class OccTests
         Assert.Equal(2, ex.Attempts);
     }
 
-    private static async Task PublishAsync<T>(IServiceProvider sp, T evt) where T : INotification
+    // Goes through the real IMediator.Publish rather than resolving INotificationHandler<T>
+    // directly — see the note in E2ETests. Retry and concurrency behaviour must hold on the
+    // path consumers actually use (#127).
+    private static async Task PublishAsync(IServiceProvider sp, OrderPlaced evt)
     {
         using var scope = sp.CreateScope();
-        var handlers = scope.ServiceProvider.GetServices<INotificationHandler<T>>();
-        foreach (var h in handlers)
-        {
-            await h.Handle(evt, default).ConfigureAwait(false);
-        }
+        await scope.ServiceProvider.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
     }
 
     private sealed class AlwaysConflictingStore : ISagaStore<OrderFulfillmentSaga, OrderId>
