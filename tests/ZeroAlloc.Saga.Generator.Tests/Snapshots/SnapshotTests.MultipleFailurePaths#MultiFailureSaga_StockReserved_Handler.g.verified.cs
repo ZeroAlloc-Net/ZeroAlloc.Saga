@@ -79,9 +79,8 @@ internal sealed class MultiFailureSaga_StockReserved_Handler : INotificationHand
 
     private static bool IsBackendConflict(Exception ex)
     {
-        var typeName = ex.GetType().FullName;
-        return typeName == "Microsoft.EntityFrameworkCore.DbUpdateException"
-            || typeName == "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException"
-            || typeName == "ZeroAlloc.Saga.Redis.RedisSagaConcurrencyException";
+        // Any store signals a retryable conflict by implementing
+        // ISagaConcurrencyConflict, so no backend type names appear here.
+        return ex is global::ZeroAlloc.Saga.ISagaConcurrencyConflict;
     }
 }

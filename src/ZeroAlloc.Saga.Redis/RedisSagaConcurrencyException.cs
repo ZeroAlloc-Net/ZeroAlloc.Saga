@@ -8,16 +8,15 @@ namespace ZeroAlloc.Saga.Redis;
 /// or an INSERT raced with another writer creating the same correlation key.
 /// </summary>
 /// <remarks>
-/// The generator-emitted saga handler's retry loop matches this type by
-/// fully-qualified name (<c>ZeroAlloc.Saga.Redis.RedisSagaConcurrencyException</c>)
-/// alongside the EfCore conflict exceptions, so a Redis OCC clash drives the
-/// same scope-per-attempt retry path as an EfCore <c>DbUpdateConcurrencyException</c>.
+/// Implements <see cref="ZeroAlloc.Saga.ISagaConcurrencyConflict"/>, so the
+/// generator-emitted retry loop drives a Redis OCC clash down the same
+/// scope-per-attempt path as any other backend conflict.
 /// </remarks>
 // Auxiliary ctors (parameterless / message / message+inner) are intentionally
 // omitted — the framework-convention ctors would produce misleading instances
 // without the load-bearing Key context.
 #pragma warning disable RCS1194
-public sealed class RedisSagaConcurrencyException : Exception
+public sealed class RedisSagaConcurrencyException : Exception, ZeroAlloc.Saga.ISagaConcurrencyConflict
 #pragma warning restore RCS1194
 {
     /// <summary>The Redis key that was being modified when the conflict was detected.</summary>

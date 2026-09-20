@@ -268,7 +268,9 @@ public sealed class E2ETests
                 // outbox row with it. The retry loop creates a fresh inner scope
                 // and the test's SharedAttemptCounter ensures the second save
                 // succeeds.
-                throw new DbUpdateConcurrencyException("Transient conflict (test).");
+                throw new EfCoreSagaConcurrencyException(
+                    "OrderFulfillmentSaga", key.ToString() ?? string.Empty,
+                    new DbUpdateConcurrencyException("Transient conflict (test)."));
             }
             return _inner.SaveAsync(key, saga, ct);
         }

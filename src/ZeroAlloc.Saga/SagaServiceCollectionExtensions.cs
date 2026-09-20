@@ -16,7 +16,7 @@ public static class SagaServiceCollectionExtensions
     /// v1.0 registered no per-saga types here — generator-emitted
     /// <c>WithXxxSaga()</c> extensions handle the AOT-safe closed-generic
     /// registrations. v1.1 keeps that contract; the only addition is the
-    /// <see cref="ISagaBuilder.IsEfCoreBackend"/> flag, which backend packages
+    /// <see cref="ISagaBuilder.HasDurableStore"/> flag, which backend packages
     /// flip via <see cref="ISagaBuilderMutable"/>. Mediator wiring is added
     /// implicitly by the generator-emitted <c>WithXxxSaga()</c> registration
     /// (<c>services.AddMediator()</c>) — users no longer need a separate
@@ -34,8 +34,7 @@ public static class SagaServiceCollectionExtensions
     private sealed class SagaBuilder : ISagaBuilder, ISagaBuilderMutable
     {
         public IServiceCollection Services { get; }
-        public bool IsEfCoreBackend { get; set; }
-        public bool IsRedisBackend { get; set; }
+        public bool HasDurableStore { get; set; }
         public SagaBuilder(IServiceCollection services) => Services = services;
     }
 }
