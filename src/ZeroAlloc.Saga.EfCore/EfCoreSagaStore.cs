@@ -127,9 +127,19 @@ public sealed class EfCoreSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
             _log.LogDebug("Updating saga row {SagaType}/{Key}", s_sagaTypeKey, key);
         }
 
-        await _context.SaveChangesAsync(ct).ConfigureAwait(false);
-        // DbUpdateConcurrencyException propagates — caller (generator-emitted
-        // handler) catches and retries inside its OCC loop.
+        try
+        {
+            await _context.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex) when (ex is not EfCoreSagaConcurrencyException)
+        {
+            // Re-thrown as a type implementing ISagaConcurrencyConflict so the
+            // generator-emitted retry loop recognises it without EF Core's type
+            // names being compiled into the generator. The wrapper derives from
+            // DbUpdateConcurrencyException, so callers already catching that — or
+            // DbUpdateException — are unaffected.
+            throw new EfCoreSagaConcurrencyException(s_sagaTypeKey, key.ToString() ?? string.Empty, ex);
+        }
     }
 
     /// <inheritdoc />

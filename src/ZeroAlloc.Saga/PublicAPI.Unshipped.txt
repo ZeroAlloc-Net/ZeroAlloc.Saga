@@ -129,3 +129,5 @@ static ZeroAlloc.Saga.SagaStoreRegistrar.OverrideStore<TSaga, TKey, TStore>(Zero
 static ZeroAlloc.Saga.SagaStoreRegistrar.Reset() -> void
 static ZeroAlloc.Saga.SagaStoreRegistrar.SetRegistrar(System.Action<ZeroAlloc.Saga.ISagaBuilder!>! registrar) -> void
 static ZeroAlloc.Saga.SagaStoreRegistrar.SetTypedRegistrar(ZeroAlloc.Saga.ISagaStoreRegistrar! registrar) -> void
+
+ZeroAlloc.Saga.ISagaConcurrencyConflict

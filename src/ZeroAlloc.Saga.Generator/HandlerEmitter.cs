@@ -32,9 +32,6 @@ namespace ZeroAlloc.Saga.Generator;
 /// </remarks>
 internal static class HandlerEmitter
 {
-    private const string DbUpdateConcurrencyExceptionFullName = "Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException";
-    private const string DbUpdateExceptionFullName = "Microsoft.EntityFrameworkCore.DbUpdateException";
-    private const string RedisSagaConcurrencyExceptionFullName = "ZeroAlloc.Saga.Redis.RedisSagaConcurrencyException";
 
     public static void Emit(SourceProductionContext spc, SagaModel model)
     {
@@ -160,10 +157,9 @@ internal static class HandlerEmitter
         sb.AppendLine();
         sb.AppendLine("    private static bool IsBackendConflict(Exception ex)");
         sb.AppendLine("    {");
-        sb.AppendLine("        var typeName = ex.GetType().FullName;");
-        sb.Append("        return typeName == \"").Append(DbUpdateExceptionFullName).AppendLine("\"");
-        sb.Append("            || typeName == \"").Append(DbUpdateConcurrencyExceptionFullName).AppendLine("\"");
-        sb.Append("            || typeName == \"").Append(RedisSagaConcurrencyExceptionFullName).AppendLine("\";");
+        sb.AppendLine("        // Any store signals a retryable conflict by implementing");
+        sb.AppendLine("        // ISagaConcurrencyConflict, so no backend type names appear here.");
+        sb.AppendLine("        return ex is global::ZeroAlloc.Saga.ISagaConcurrencyConflict;");
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
@@ -297,10 +293,9 @@ internal static class HandlerEmitter
         sb.AppendLine();
         sb.AppendLine("    private static bool IsBackendConflict(Exception ex)");
         sb.AppendLine("    {");
-        sb.AppendLine("        var typeName = ex.GetType().FullName;");
-        sb.Append("        return typeName == \"").Append(DbUpdateExceptionFullName).AppendLine("\"");
-        sb.Append("            || typeName == \"").Append(DbUpdateConcurrencyExceptionFullName).AppendLine("\"");
-        sb.Append("            || typeName == \"").Append(RedisSagaConcurrencyExceptionFullName).AppendLine("\";");
+        sb.AppendLine("        // Any store signals a retryable conflict by implementing");
+        sb.AppendLine("        // ISagaConcurrencyConflict, so no backend type names appear here.");
+        sb.AppendLine("        return ex is global::ZeroAlloc.Saga.ISagaConcurrencyConflict;");
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
