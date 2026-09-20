@@ -43,7 +43,7 @@ jobs:
         run: dotnet restore ZeroAlloc.Saga.slnx
 
       - name: Build
-        run: dotnet build ZeroAlloc.Saga.slnx -c Release --no-restore
+        run: dotnet build ZeroAlloc.Saga.slnx -c Release --no-restore -p:Version=${{ needs.release-please.outputs.version }}
 
       - name: Test
         run: dotnet test ZeroAlloc.Saga.slnx -c Release --no-build
