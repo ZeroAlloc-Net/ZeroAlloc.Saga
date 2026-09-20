@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v2.0.4...ZeroAlloc.Saga-v3.0.0) (2026-09-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* a custom ISagaStore that throws a raw DbUpdateConcurrencyException or DbUpdateException is no longer recognised as a conflict and will not be retried. The failure is silent, so it will not surface as an error. Implement ISagaConcurrencyConflict on the store's conflict exception, or throw EfCoreSagaConcurrencyException when wrapping an EF Core failure. The stores shipped here are unaffected.
+
+### Features
+
+* add ZeroAlloc.Saga.Orm durable store ([#148](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/148)) ([46286de](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/46286ded037d778eac212fe3254d6d1ecb895bda))
+* replace the core's closed backend sets with open contracts ([#145](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/145)) ([9a046a3](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/9a046a37bed189f57ab370cb07132bf568a983f1))
+
 ## [2.0.4](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v2.0.3...ZeroAlloc.Saga-v2.0.4) (2026-09-20)
 
 
