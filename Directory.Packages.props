@@ -8,7 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- Runtime deps -->
-    <PackageVersion Include="ZeroAlloc.TestHelpers" Version="1.1.*" />
+    <PackageVersion Include="ZeroAlloc.TestHelpers" Version="1.3.*" />
     <PackageVersion Include="ZeroAlloc.Mediator" Version="5.1.*" />
     <PackageVersion Include="ZeroAlloc.Pipeline" Version="1.2.*" />
     <PackageVersion Include="ZeroAlloc.Mediator.Generator" Version="5.1.*" />
