@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!--
+      net10.0 only, deliberately. Every other saga backend multi-targets
+      net8.0;net10.0, but ZeroAlloc.ORM itself ships net10.0 only, so there is
+      no net8.0 to build against. Widening this means widening the ORM first.
+    -->
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ZeroAlloc.Saga.Orm</PackageId>
+    <Description>ZeroAlloc.ORM durable persistence backend for ZeroAlloc.Saga. Single shared SagaInstance table, row-version OCC, retry-on-conflict, MigrationRunner-owned schema. Zero runtime reflection; Native AOT compatible.</Description>
+    <PackageTags>zeroalloc;saga;orm;persistence;nativeaot;trimming</PackageTags>
+    <IsAotCompatible>true</IsAotCompatible>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ZeroAlloc.Saga\ZeroAlloc.Saga.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ZeroAlloc.ORM" />
+    <!--
+      The ORM generator is build-time only for this assembly, but consumers do
+      not need it: the [Query]/[Command] partials live here and are already
+      emitted into this package's IL.
+    -->
+    <PackageReference Include="ZeroAlloc.ORM.Generator">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+</Project>

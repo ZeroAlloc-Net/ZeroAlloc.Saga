@@ -26,6 +26,9 @@
     <!-- EfCore backend deps -->
     <PackageVersion Include="ZeroAlloc.Saga" Version="2.0.*" />
     <PackageVersion Include="ZeroAlloc.ValueObjects.EfCore" Version="2.0.*" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.*" />
+    <PackageVersion Include="ZeroAlloc.ORM" Version="1.6.*" />
+    <PackageVersion Include="ZeroAlloc.ORM.Generator" Version="1.6.*" />
   </ItemGroup>
 
   <!-- EFCore 10 dropped net8.0 support, so we pin per-TFM:

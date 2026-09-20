@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <!-- Same set the EF Core backend's tests waive, for the same reasons. -->
+    <NoWarn>$(NoWarn);MA0048;MA0051;ZAM003;EPC12;EPS06</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="AdoNet.Async.Adapters" />
+    <PackageReference Include="ZeroAlloc.ORM" />
+    <PackageReference Include="ZeroAlloc.Mediator" />
+    <PackageReference Include="ZeroAlloc.Mediator.Generator" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ZeroAlloc.Saga\ZeroAlloc.Saga.csproj" />
+    <ProjectReference Include="..\..\src\ZeroAlloc.Saga.Orm\ZeroAlloc.Saga.Orm.csproj" />
+    <ProjectReference Include="..\..\src\ZeroAlloc.Saga.Generator\ZeroAlloc.Saga.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+  </ItemGroup>
+</Project>
