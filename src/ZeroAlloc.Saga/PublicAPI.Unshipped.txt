@@ -129,5 +129,16 @@ static ZeroAlloc.Saga.SagaStoreRegistrar.OverrideStore<TSaga, TKey, TStore>(Zero
 static ZeroAlloc.Saga.SagaStoreRegistrar.Reset() -> void
 static ZeroAlloc.Saga.SagaStoreRegistrar.SetRegistrar(System.Action<ZeroAlloc.Saga.ISagaBuilder!>! registrar) -> void
 static ZeroAlloc.Saga.SagaStoreRegistrar.SetTypedRegistrar(ZeroAlloc.Saga.ISagaStoreRegistrar! registrar) -> void
-
 ZeroAlloc.Saga.ISagaConcurrencyConflict
+ZeroAlloc.Saga.ISagaBuilder.HasDurableStore.get -> bool
+ZeroAlloc.Saga.ISagaBuilderMutable.HasDurableStore.get -> bool
+ZeroAlloc.Saga.ISagaBuilderMutable.HasDurableStore.set -> void
+static ZeroAlloc.Saga.SagaBuilderMutationExtensions.SetDurableStore(this ZeroAlloc.Saga.ISagaBuilder! builder, string! storeName) -> void
+*REMOVED*ZeroAlloc.Saga.ISagaBuilder.IsEfCoreBackend.get -> bool
+*REMOVED*ZeroAlloc.Saga.ISagaBuilder.IsRedisBackend.get -> bool
+*REMOVED*ZeroAlloc.Saga.ISagaBuilderMutable.IsEfCoreBackend.get -> bool
+*REMOVED*ZeroAlloc.Saga.ISagaBuilderMutable.IsEfCoreBackend.set -> void
+*REMOVED*ZeroAlloc.Saga.ISagaBuilderMutable.IsRedisBackend.get -> bool
+*REMOVED*ZeroAlloc.Saga.ISagaBuilderMutable.IsRedisBackend.set -> void
+*REMOVED*static ZeroAlloc.Saga.SagaBuilderMutationExtensions.SetEfCoreBackend(this ZeroAlloc.Saga.ISagaBuilder! builder) -> void
+*REMOVED*static ZeroAlloc.Saga.SagaBuilderMutationExtensions.SetRedisBackend(this ZeroAlloc.Saga.ISagaBuilder! builder) -> void

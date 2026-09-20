@@ -24,7 +24,7 @@ public static class SagaRedisBuilderExtensions
     /// <param name="configure">Optional configurator for <see cref="RedisSagaStoreOptions"/>.</param>
     /// <remarks>
     /// <para>Mutually exclusive with <c>WithEfCoreStore&lt;TContext&gt;()</c>: calling both
-    /// throws <see cref="InvalidOperationException"/> via <see cref="SagaBuilderMutationExtensions.SetRedisBackend"/>.</para>
+    /// throws <see cref="InvalidOperationException"/> via <see cref="SagaBuilderMutationExtensions.SetDurableStore"/>.</para>
     ///
     /// <para>Composition with <c>WithOutbox()</c>: <em>limited</em> in this release.
     /// <c>WithOutbox()</c> registers <c>OutboxStoreSagaUnitOfWork</c> as the default
@@ -39,7 +39,7 @@ public static class SagaRedisBuilderExtensions
     public static ISagaBuilder WithRedisStore(this ISagaBuilder builder, Action<RedisSagaStoreOptions>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
-        builder.SetRedisBackend();
+        builder.SetDurableStore("WithRedisStore()");
 
         var options = new RedisSagaStoreOptions();
         configure?.Invoke(options);

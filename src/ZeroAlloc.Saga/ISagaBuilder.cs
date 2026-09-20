@@ -14,32 +14,31 @@ public interface ISagaBuilder
     IServiceCollection Services { get; }
 
     /// <summary>
-    /// True when a durable backend (e.g. <c>WithEfCoreStore</c>) has been
-    /// configured on this builder. Read by generator-emitted
-    /// <c>WithXxxSaga()</c> at composition time to choose between
-    /// <c>InMemorySagaStore&lt;,&gt;</c> (default) and the durable backend's
-    /// concrete store type.
+    /// True once a durable store has been configured on this builder — by
+    /// <c>WithEfCoreStore</c>, <c>WithRedisStore</c>, <c>WithOrmStore</c> or any
+    /// other backend package. False means the in-memory default is in effect.
     /// </summary>
     /// <remarks>
-    /// Default <see langword="false"/>. Backend packages
-    /// (<c>ZeroAlloc.Saga.EfCore</c>) flip this via the
-    /// <see cref="ISagaBuilderMutable"/> contract.
+    /// <para>
+    /// Backend packages set this through <see cref="ISagaBuilderMutable"/>, via
+    /// the <see cref="SagaBuilderMutationExtensions.SetDurableStore"/> helper,
+    /// which also enforces that only one durable store is configured per
+    /// builder.
+    /// </para>
+    /// <para>
+    /// This replaced a boolean per backend — <c>IsEfCoreBackend</c> and
+    /// <c>IsRedisBackend</c>. Those enumerated the backends this package knew
+    /// about, so shipping a new store meant editing this interface. What the
+    /// composition path actually needs to know is whether a durable store is
+    /// present at all; <em>which</em> one is supplied by
+    /// <see cref="SagaStoreRegistrar"/>, which the backend installs itself.
+    /// </para>
+    /// <para>
+    /// A backend that genuinely needs to identify another backend — the Redis
+    /// outbox bridge enlists into the Redis store's MULTI/EXEC, so it must know
+    /// the store really is Redis — should look for that backend's own
+    /// registration in <see cref="Services"/> rather than expect a flag here.
+    /// </para>
     /// </remarks>
-    bool IsEfCoreBackend { get; }
-
-    /// <summary>
-    /// True when <c>ZeroAlloc.Saga.Redis</c>'s <c>WithRedisStore</c> has been
-    /// configured on this builder. Mutually exclusive with
-    /// <see cref="IsEfCoreBackend"/>: calling both throws.
-    /// </summary>
-    /// <remarks>
-    /// Default <see langword="false"/> via DIM so existing
-    /// <see cref="ISagaBuilder"/> implementations from before
-    /// <c>ZeroAlloc.Saga.Redis</c> shipped continue to compile and behave
-    /// correctly. <c>ZeroAlloc.Saga.Redis</c> flips this via the
-    /// <see cref="ISagaBuilderMutable"/> contract. The OCC retry path in the
-    /// generator-emitted handler covers <c>RedisSagaConcurrencyException</c>
-    /// alongside the EfCore exceptions.
-    /// </remarks>
-    bool IsRedisBackend => false;
+    bool HasDurableStore { get; }
 }

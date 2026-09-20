@@ -24,8 +24,7 @@ public class SagaResilienceBuilderExtensionsTests
     {
         public StubBuilder(IServiceCollection services) => Services = services;
         public IServiceCollection Services { get; }
-        public bool IsEfCoreBackend => false;
-        public bool IsRedisBackend => false;
+        public bool HasDurableStore => false;
     }
 
     private sealed class CountingDispatcher : ISagaCommandDispatcher

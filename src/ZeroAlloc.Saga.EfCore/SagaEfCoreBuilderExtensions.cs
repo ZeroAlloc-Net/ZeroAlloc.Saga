@@ -14,7 +14,7 @@ public static class SagaEfCoreBuilderExtensions
     /// <summary>
     /// Configures the saga framework to persist instances via the supplied
     /// <typeparamref name="TContext"/>. Flips
-    /// <see cref="ISagaBuilder.IsEfCoreBackend"/> so generator-emitted
+    /// <see cref="ISagaBuilder.HasDurableStore"/> so generator-emitted
     /// <c>WithXxxSaga()</c> registrations select <see cref="EfCoreSagaStore{TSaga,TKey}"/>
     /// instead of the in-memory default.
     /// </summary>
@@ -58,7 +58,7 @@ public static class SagaEfCoreBuilderExtensions
                 "(e.g. services.AddSaga().WithEfCoreStore<TContext>().WithOrderFulfillmentSaga()).");
         }
 
-        builder.SetEfCoreBackend();
+        builder.SetDurableStore("WithEfCoreStore<TContext>()");
 
         var options = new EfCoreSagaStoreOptions();
         configure?.Invoke(options);

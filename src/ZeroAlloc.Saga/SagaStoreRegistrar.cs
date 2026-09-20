@@ -11,10 +11,10 @@ namespace ZeroAlloc.Saga;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Generator-emitted code calls <see cref="Apply{TSaga,TKey}"/> when
-/// <see cref="ISagaBuilder.IsEfCoreBackend"/> is true. The default
+/// Generator-emitted code calls <see cref="Apply{TSaga,TKey}"/> unconditionally,
+/// right after registering the in-memory default. The default
 /// implementation throws — the backend package must call
-/// <see cref="SetRegistrar"/> from inside its <c>WithEfCoreStore&lt;TContext&gt;()</c>
+/// <see cref="SetRegistrar"/> from inside its its <c>WithXxxStore()</c>
 /// extension to install a closed-generic registration delegate. Both
 /// generator emit and backend install paths use closed-generic types only,
 /// so AOT is preserved.
