@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Abstractions;
 using ZeroAlloc.Mediator;
 using ZeroAlloc.Saga.EfCore.Tests.Fixtures;
+using ZeroAlloc.Saga.EfCore;
 
 namespace ZeroAlloc.Saga.EfCore.Tests;
 
@@ -63,8 +64,14 @@ public sealed class OccTests
 
             await storeA.SaveAsync(orderId, sagaA, default);
 
-            await Assert.ThrowsAsync<DbUpdateConcurrencyException>(
+            // The store wraps EF's failure so the retry loop can recognise it through
+            // ISagaConcurrencyConflict. The wrapper still derives from
+            // DbUpdateConcurrencyException, so existing catch blocks keep working -- the
+            // assignability check below is that guarantee, asserted rather than assumed.
+            var conflict = await Assert.ThrowsAsync<EfCoreSagaConcurrencyException>(
                 async () => await storeB.SaveAsync(orderId, sagaB, default).ConfigureAwait(false));
+            Assert.IsAssignableFrom<DbUpdateConcurrencyException>(conflict);
+            Assert.IsAssignableFrom<ISagaConcurrencyConflict>(conflict);
         }
     }
 
@@ -150,7 +157,9 @@ public sealed class OccTests
                 // Simulate a unique-constraint INSERT race: DbUpdateException,
                 // NOT a DbUpdateConcurrencyException. Pre-Fix-C1 the handler
                 // retry loop would have let this escape.
-                throw new DbUpdateException("Unique-constraint INSERT race (test).");
+                throw new EfCoreSagaConcurrencyException(
+                    "OrderFulfillmentSaga", key.ToString() ?? string.Empty,
+                    new DbUpdateException("Unique-constraint INSERT race (test)."));
             }
             return _inner.SaveAsync(key, saga, ct);
         }
@@ -249,7 +258,9 @@ public sealed class OccTests
         {
             if (_counter.TryConsumeFirstSave())
             {
-                throw new DbUpdateConcurrencyException("Transient conflict (test).");
+                throw new EfCoreSagaConcurrencyException(
+                    "OrderFulfillmentSaga", key.ToString() ?? string.Empty,
+                    new DbUpdateConcurrencyException("Transient conflict (test)."));
             }
             return _inner.SaveAsync(key, saga, ct);
         }
@@ -318,7 +329,9 @@ public sealed class OccTests
         public ValueTask<OrderFulfillmentSaga> LoadOrCreateAsync(OrderId key, CancellationToken ct)
             => new(new OrderFulfillmentSaga());
         public ValueTask SaveAsync(OrderId key, OrderFulfillmentSaga saga, CancellationToken ct)
-            => throw new DbUpdateConcurrencyException("Always conflict (test).");
+            => throw new EfCoreSagaConcurrencyException(
+                "OrderFulfillmentSaga", key.ToString() ?? string.Empty,
+                new DbUpdateConcurrencyException("Always conflict (test)."));
         public ValueTask RemoveAsync(OrderId key, CancellationToken ct)
             => ValueTask.CompletedTask;
     }

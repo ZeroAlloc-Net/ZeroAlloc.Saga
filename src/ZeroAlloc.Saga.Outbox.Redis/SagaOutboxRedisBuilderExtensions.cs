@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using StackExchange.Redis;
 using ZeroAlloc.Outbox;
 using ZeroAlloc.Saga.Redis;
+using System.Linq;
 
 namespace ZeroAlloc.Saga.Outbox.Redis;
 
@@ -29,7 +30,14 @@ public static class SagaOutboxRedisBuilderExtensions
     public static ISagaBuilder WithRedisOutbox(this ISagaBuilder builder, Action<RedisOutboxOptions>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
-        if (!builder.IsRedisBackend)
+        // This bridge enlists into the Redis store's MULTI/EXEC, so unlike the
+        // generator's composition path it genuinely needs to know the store is Redis
+        // -- not merely that some durable store exists. That identity is established
+        // by looking for the Redis package's own registration rather than a flag on
+        // ISagaBuilder, which would put knowledge of this backend back into the core.
+        var hasRedisStore = builder.Services.Any(
+            d => d.ServiceType == typeof(RedisSagaStoreOptions));
+        if (!hasRedisStore)
         {
             throw new InvalidOperationException(
                 "WithRedisOutbox() requires WithRedisStore() to be configured first. " +
