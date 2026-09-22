@@ -22,6 +22,3 @@ jobs:
 
   api-compat:
     uses: ZeroAlloc-Net/.github/.github/workflows/api-compat.yml@main
-    with:
-      package-id: ZeroAlloc.Saga
-      csproj-path: src/ZeroAlloc.Saga/ZeroAlloc.Saga.csproj
