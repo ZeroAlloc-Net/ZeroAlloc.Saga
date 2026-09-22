@@ -12,6 +12,10 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="Microsoft.Data.Sqlite" />
+    <!-- SQL Server integration fixture: the DDL and the store SQL are only
+         provably compatible against a real engine. -->
+    <PackageReference Include="Testcontainers.MsSql" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
     <PackageReference Include="AdoNet.Async.Adapters" />
     <PackageReference Include="ZeroAlloc.ORM" />
     <PackageReference Include="ZeroAlloc.Mediator" />
