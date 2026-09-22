@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v3.0.0...ZeroAlloc.Saga-v3.1.0) (2026-09-22)
+
+
+### Features
+
+* support SQL Server in ZeroAlloc.Saga.Orm ([#157](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/157)) ([f02be57](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/f02be57db03a04e6a23876981c64ee49859e9d47))
+
 ## [3.0.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v2.0.4...ZeroAlloc.Saga-v3.0.0) (2026-09-20)
 
 
