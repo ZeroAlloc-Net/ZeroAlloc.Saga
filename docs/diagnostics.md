@@ -12,6 +12,7 @@ backend bridges (EfCore, Redis, etc.) get `ZASAGA1xx`, `ZASAGA2xx`, …
 
 - `error` — generator output won't compile if not fixed.
 - `warning` — generator output compiles but the design is suspicious.
+- `info` — nothing is wrong; the diagnostic points at something to be aware of.
 
 | ID | Severity | Code-fix |
 |---|---|---|
@@ -28,6 +29,10 @@ backend bridges (EfCore, Redis, etc.) get `ZASAGA1xx`, `ZASAGA2xx`, …
 | [ZASAGA011](#zasaga011) | warning | — |
 | [ZASAGA012](#zasaga012) | warning | — |
 | [ZASAGA013](#zasaga013) | warning | — |
+| [ZASAGA014](#zasaga014) | error | — |
+| [ZASAGA015](#zasaga015) | info | — |
+| [ZASAGA016](#zasaga016) | warning | — |
+| [ZASAGA017](#zasaga017) | info | — |
 | [ZASAGA018](#zasaga018) | warning (suppressible) | — |
 
 ---
@@ -245,6 +250,45 @@ composite key types or a shared key alias to make the intent explicit.
     [CorrelationKey] public Guid Correlation(OrderPlaced e) => e.AuditId;
 }
 ```
+
+## ZASAGA014
+
+**`Saga state field has an unsupported type`** (error)
+
+The saga byte serializer persists primitives, enums, `string`,
+`DateTime`/`DateTimeOffset`/`TimeSpan`/`Guid`, `[TypedId]` types, `byte[]`,
+and `Nullable<T>` of those. A state field of any other type, such as a
+collection, a custom record or a polymorphic type, can't be persisted. Mark
+the field `[NotSagaState]` to keep it out of persistence.
+
+## ZASAGA015
+
+**`Saga commands should be idempotent under durable backends`** (info)
+
+Durable backends (`WithEfCoreStore`, `WithRedisStore`) use optimistic
+concurrency control. When two updates conflict, the whole notification
+handler is retried, including the `[Step]` method and the command it emits,
+so a step's command can be dispatched twice. Make commands idempotent, or use
+the Saga.Outbox bridge for at-least-once delivery without double dispatch.
+Suppress with `#pragma warning disable ZASAGA015` if that is intended.
+
+## ZASAGA016
+
+**`Step command type must be partial when ZeroAlloc.Serialisation is referenced`** (warning)
+
+With ZeroAlloc.Serialisation referenced, the generator adds
+`[ZeroAllocSerializable]` to each step's command type through a partial
+declaration. Declare the command type `partial` so that declaration can
+attach.
+
+## ZASAGA017
+
+**`Step command type is in a referenced assembly`** (info)
+
+A partial declaration can only extend a type in the same compilation, so the
+generator can't add `[ZeroAllocSerializable]` to a command type declared in a
+referenced assembly. Apply `[ZeroAllocSerializable]` on the type's own
+declaration.
 
 ## ZASAGA018
 
