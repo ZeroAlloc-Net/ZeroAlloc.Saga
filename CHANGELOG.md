@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.1](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v3.1.0...ZeroAlloc.Saga-v3.1.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* mark released analyzer rules and public api as shipped and automate the move ([#169](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/169)) ([5b9dfa4](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/5b9dfa49007bc06bf2bda36131b840d0054f7cc3))
+
 ## [3.1.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v3.0.0...ZeroAlloc.Saga-v3.1.0) (2026-09-22)
 
 
