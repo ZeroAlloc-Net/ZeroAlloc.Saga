@@ -78,7 +78,7 @@
     -->
 
     <!-- Analyzer deps (transitive via Directory.Build.props) -->
-    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.26*" />
+    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.27*" />
     <PackageVersion Include="Roslynator.Analyzers" Version="5.0.*" />
     <PackageVersion Include="ErrorProne.NET.CoreAnalyzers" Version="0.1.*" />
     <PackageVersion Include="ErrorProne.NET.Structs" Version="0.1.*" />
