@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data.Common;
 using System.Threading;
@@ -9,80 +8,151 @@ using ZeroAlloc.Outbox;
 namespace AotSmokeOutbox;
 
 /// <summary>
-/// Tiny in-process <see cref="IOutboxStore"/> for the AOT smoke. Auto-commits
-/// each enqueue (we don't need the deferred-EfCore semantics here — the load-bearing
-/// AOT contract is that the saga generator's MediatorSagaCommandDispatcher roots
-/// SagaCommandRegistry so the poller's reflective lookup works after trimming).
+/// Tiny in-process <see cref="IOutboxStore"/> on the ZeroAlloc.Outbox 3.0 lease contract, for the
+/// AOT smoke. Auto-commits each enqueue; the deferred-EfCore semantics don't matter here. The
+/// load-bearing AOT contract is that the saga generator's MediatorSagaCommandDispatcher roots
+/// SagaCommandRegistry, so WithOutbox()'s reflective lookup works after trimming. One lock guards
+/// everything, which is all a single-process smoke needs.
 /// </summary>
 internal sealed class InProcessOutboxStore : IOutboxStore
 {
-    private readonly ConcurrentDictionary<OutboxMessageId, Entry> _entries = new();
+    private readonly Lock _gate = new();
+    private readonly List<Entry> _entries = new();
 
     public ValueTask EnqueueAsync(string typeName, ReadOnlyMemory<byte> payload, DbTransaction? transaction, CancellationToken ct)
     {
-        var entry = new Entry(OutboxMessageId.New(), typeName, payload.ToArray());
-        _entries[entry.Id] = entry;
+        var now = DateTimeOffset.UtcNow;
+        lock (_gate)
+            _entries.Add(new Entry(OutboxMessageId.New(), typeName, payload.ToArray(), now));
         return ValueTask.CompletedTask;
     }
 
-    public ValueTask<IReadOnlyList<OutboxEntry>> FetchPendingAsync(int batchSize, CancellationToken ct)
+    public ValueTask<IReadOnlyList<OutboxEntry>> ClaimPendingAsync(int batchSize, OutboxLease lease, CancellationToken ct)
     {
-        var results = new List<OutboxEntry>();
-        foreach (var kv in _entries)
+        var now = DateTimeOffset.UtcNow;
+        var claimed = new List<OutboxEntry>();
+        lock (_gate)
         {
-            if (!kv.Value.Succeeded)
+            foreach (var e in _entries)
             {
-                results.Add(new OutboxEntry
+                if (claimed.Count >= batchSize) break;
+                if (e.State != EntryState.Pending || e.NextRetryAt > now) continue;
+                if (e.LockedUntil is { } until && until >= now) continue;
+                e.LockedBy = lease.HostId;
+                e.LockedUntil = now + lease.Duration;
+                claimed.Add(new OutboxEntry
                 {
-                    Id = kv.Value.Id,
-                    TypeName = kv.Value.TypeName,
-                    RawPayload = kv.Value.Payload,
-                    RetryCount = kv.Value.RetryCount,
-                    CreatedAt = DateTimeOffset.UtcNow,
+                    Id = e.Id,
+                    TypeName = e.TypeName,
+                    RawPayload = e.Payload,
+                    RetryCount = e.RetryCount,
+                    CreatedAt = e.CreatedAt,
                 });
-                if (results.Count >= batchSize) break;
             }
         }
-        return ValueTask.FromResult<IReadOnlyList<OutboxEntry>>(results);
+        return ValueTask.FromResult<IReadOnlyList<OutboxEntry>>(claimed);
     }
 
-    public ValueTask MarkSucceededAsync(OutboxMessageId id, CancellationToken ct)
+    public ValueTask<bool> RenewLeaseAsync(OutboxMessageId id, OutboxLease lease, CancellationToken ct)
     {
-        if (_entries.TryGetValue(id, out var entry)) entry.Succeeded = true;
-        return ValueTask.CompletedTask;
+        var now = DateTimeOffset.UtcNow;
+        lock (_gate)
+        {
+            var e = Find(id);
+            if (e is null || !IsHeldBy(e, lease) || e.LockedUntil is not { } until || until < now)
+                return ValueTask.FromResult(false);
+            e.LockedUntil = now + lease.Duration;
+            return ValueTask.FromResult(true);
+        }
     }
 
-    public ValueTask MarkFailedAsync(OutboxMessageId id, int retryCount, DateTimeOffset nextRetryAt, CancellationToken ct)
+    public ValueTask<int> ReleaseLeasesAsync(IReadOnlyList<OutboxMessageId> ids, OutboxLease lease, CancellationToken ct)
     {
-        if (_entries.TryGetValue(id, out var entry)) entry.RetryCount = retryCount;
-        return ValueTask.CompletedTask;
+        var released = 0;
+        lock (_gate)
+        {
+            foreach (var id in ids)
+            {
+                var e = Find(id);
+                if (e is null || !IsHeldBy(e, lease)) continue;
+                e.LockedBy = null;
+                e.LockedUntil = null;
+                released++;
+            }
+        }
+        return ValueTask.FromResult(released);
     }
 
-    public ValueTask DeadLetterAsync(OutboxMessageId id, string error, CancellationToken ct)
+    public ValueTask<bool> MarkSucceededAsync(OutboxMessageId id, OutboxLease lease, CancellationToken ct)
+        => Mark(id, lease, e => e.State = EntryState.Succeeded);
+
+    public ValueTask<bool> MarkFailedAsync(OutboxMessageId id, int retryCount, DateTimeOffset nextRetryAt, OutboxLease lease, CancellationToken ct)
+        => Mark(id, lease, e =>
+        {
+            e.RetryCount = retryCount;
+            e.NextRetryAt = nextRetryAt;
+        });
+
+    public ValueTask<bool> DeadLetterAsync(OutboxMessageId id, string error, OutboxLease lease, CancellationToken ct)
+        => Mark(id, lease, e => e.State = EntryState.DeadLetter);
+
+    public int Count
     {
-        _entries.TryRemove(id, out _);
-        return ValueTask.CompletedTask;
+        get { lock (_gate) return _entries.Count; }
     }
 
-    public int Count => _entries.Count;
     public int SucceededCount
     {
         get
         {
-            var n = 0;
-            foreach (var kv in _entries) if (kv.Value.Succeeded) n++;
-            return n;
+            lock (_gate)
+            {
+                var n = 0;
+                foreach (var e in _entries) if (e.State == EntryState.Succeeded) n++;
+                return n;
+            }
         }
     }
 
+    // A mark applies only while this host holds the lease on a pending entry, and clears the lease.
+    private ValueTask<bool> Mark(OutboxMessageId id, OutboxLease lease, Action<Entry> apply)
+    {
+        lock (_gate)
+        {
+            var e = Find(id);
+            if (e is null || !IsHeldBy(e, lease)) return ValueTask.FromResult(false);
+            apply(e);
+            e.LockedBy = null;
+            e.LockedUntil = null;
+            return ValueTask.FromResult(true);
+        }
+    }
+
+    private static bool IsHeldBy(Entry e, OutboxLease lease)
+        => e.State == EntryState.Pending && string.Equals(e.LockedBy, lease.HostId, StringComparison.Ordinal);
+
+    // Callers hold _gate.
+    private Entry? Find(OutboxMessageId id)
+    {
+        foreach (var e in _entries)
+            if (e.Id == id) return e;
+        return null;
+    }
+
+    private enum EntryState { Pending, Succeeded, DeadLetter }
+
     private sealed class Entry
     {
-        public Entry(OutboxMessageId id, string typeName, byte[] payload)
-        { Id = id; TypeName = typeName; Payload = payload; }
+        public Entry(OutboxMessageId id, string typeName, byte[] payload, DateTimeOffset now)
+        { Id = id; TypeName = typeName; Payload = payload; CreatedAt = now; NextRetryAt = now; }
         public OutboxMessageId Id { get; }
         public string TypeName { get; }
         public byte[] Payload { get; }
+        public DateTimeOffset CreatedAt { get; }
+        public DateTimeOffset NextRetryAt { get; set; }
         public int RetryCount { get; set; }
-        public bool Succeeded { get; set; }
+        public EntryState State { get; set; }
+        public string? LockedBy { get; set; }
+        public DateTimeOffset? LockedUntil { get; set; }
     }
 }

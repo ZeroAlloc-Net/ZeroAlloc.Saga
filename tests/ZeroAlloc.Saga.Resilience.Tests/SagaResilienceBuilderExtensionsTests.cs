@@ -160,7 +160,7 @@ public class SagaResilienceBuilderExtensionsTests
         var warnings = capturingProvider.Logs.Where(l => l.Level == LogLevel.Warning).ToList();
         Assert.Single(warnings);
         Assert.Contains("OutboxSagaCommandDispatcher", warnings[0].Message, StringComparison.Ordinal);
-        Assert.Contains("OutboxSagaPollerOptions", warnings[0].Message, StringComparison.Ordinal);
+        Assert.Contains("AddOutbox()", warnings[0].Message, StringComparison.Ordinal);
 
         await Task.CompletedTask;
     }

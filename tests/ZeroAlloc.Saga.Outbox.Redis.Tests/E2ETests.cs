@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using StackExchange.Redis;
+using StackExchange.Redis.KeyspaceIsolation;
 using ZeroAlloc.Mediator;
 using ZeroAlloc.Outbox;
 using ZeroAlloc.Saga.Outbox.Redis.Tests.Fixtures;
@@ -17,43 +18,68 @@ namespace ZeroAlloc.Saga.Outbox.Redis.Tests;
 /// End-to-end atomic-dispatch tests for the Redis-native outbox bridge.
 /// Verifies the load-bearing claim of Phase 3a-2: a saga step's outbox-row
 /// write commits in the same Redis MULTI/EXEC as the saga state save, so
-/// rollback discards both.
+/// rollback discards both. ZeroAlloc.Outbox's worker dispatches the commands.
 /// </summary>
 public sealed class E2ETests : IAsyncLifetime
 {
+    private static readonly TimeSpan WorkerTimeout = TimeSpan.FromSeconds(15);
     private readonly RedisFixture _fx = new();
 
     public Task InitializeAsync() => _fx.InitializeAsync();
     public ValueTask DisposeAsync() => _fx.DisposeAsync();
     Task IAsyncLifetime.DisposeAsync() => _fx.DisposeAsync().AsTask();
 
-    private IServiceProvider BuildHost(string sagaPrefix, string outboxPrefix, Action<IServiceCollection>? extra = null)
+    /// <summary>
+    /// The database the host resolves: the plain one, or with a non-empty
+    /// <paramref name="dbKeyPrefix"/> a key-prefixed one, which prefixes every key a command
+    /// sends, script KEYS included, but never script ARGV.
+    /// </summary>
+    private IDatabase Database(string dbKeyPrefix)
+        => dbKeyPrefix.Length == 0
+            ? _fx.Multiplexer.GetDatabase()
+            : _fx.Multiplexer.GetDatabase().WithKeyPrefix(dbKeyPrefix);
+
+    private IHost BuildHost(string sagaPrefix, string outboxPrefix, Action<IServiceCollection>? extra = null, string dbKeyPrefix = "")
     {
         SagaStoreRegistrar.Reset();
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddMediator();
-        // Mediator 4.x: explicit handler registration (no reflection).
-        services.TryAddTransient<ReserveStockHandler>();
-        services.TryAddTransient<ChargeCustomerHandler>();
-        services.TryAddTransient<ShipOrderHandler>();
-        services.TryAddTransient<CancelReservationHandler>();
-        services.TryAddTransient<RefundPaymentHandler>();
-        services.AddSingleton(_fx.Multiplexer);
-        services.AddTestSerializers();
-        services.AddSaga()
-            .WithRedisStore(opts =>
+        return new HostBuilder()
+            .ConfigureServices(services =>
             {
-                opts.MaxRetryAttempts = 3;
-                opts.RetryBaseDelay = TimeSpan.FromMilliseconds(1);
-                opts.UseExponentialBackoff = false;
-                opts.KeyPrefix = sagaPrefix;
+                services.AddLogging();
+                // Counts the worker's MessageDispatchedEvents; RunWorkerUntilDispatchedAsync waits on it.
+                services.AddSingleton<DispatchedEventCounter>();
+                services.AddSingleton<IOutboxDashboardEventPublisher>(
+                    sp => sp.GetRequiredService<DispatchedEventCounter>());
+                services.AddMediator();
+                // Mediator 4.x: explicit handler registration (no reflection).
+                services.TryAddTransient<ReserveStockHandler>();
+                services.TryAddTransient<ChargeCustomerHandler>();
+                services.TryAddTransient<ShipOrderHandler>();
+                services.TryAddTransient<CancelReservationHandler>();
+                services.TryAddTransient<RefundPaymentHandler>();
+                services.AddSingleton(_fx.Multiplexer);
+                // WithRedisStore and WithRedisOutbox register IDatabase with TryAdd, so a
+                // registration made first wins.
+                if (dbKeyPrefix.Length > 0)
+                    services.AddScoped(_ => Database(dbKeyPrefix));
+                services.AddTestSerializers();
+                // The documented Redis setup: AddOutbox registers the worker, and
+                // WithRedisOutbox supplies the IOutboxStore.
+                services.AddOutbox(o => o.PollingInterval = TimeSpan.FromMilliseconds(50));
+                services.AddSaga()
+                    .WithRedisStore(opts =>
+                    {
+                        opts.MaxRetryAttempts = 3;
+                        opts.RetryBaseDelay = TimeSpan.FromMilliseconds(1);
+                        opts.UseExponentialBackoff = false;
+                        opts.KeyPrefix = sagaPrefix;
+                    })
+                    .WithOutbox()
+                    .WithRedisOutbox(opts => opts.KeyPrefix = outboxPrefix)
+                    .WithOrderFulfillmentSaga();
+                extra?.Invoke(services);
             })
-            .WithOutbox()
-            .WithRedisOutbox(opts => opts.KeyPrefix = outboxPrefix)
-            .WithOrderFulfillmentSaga();
-        extra?.Invoke(services);
-        return services.BuildServiceProvider();
+            .Build();
     }
 
     // Goes through the real IMediator.Publish rather than resolving INotificationHandler<T>
@@ -65,46 +91,75 @@ public sealed class E2ETests : IAsyncLifetime
         await scope.ServiceProvider.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
     }
 
-    [Fact]
-    public async Task AtomicCommit_SagaState_AndOutboxRow_BothPersistedTogether()
+    /// <summary>
+    /// Starts the host, waits until the worker has published <paramref name="expected"/>
+    /// MessageDispatchedEvents, and stops it. The worker publishes that event only after
+    /// MarkSucceededAsync, so stopping never cancels a mark in flight. Set CommandLedger.Current
+    /// before calling it: the worker's execution context flows from StartAsync.
+    /// </summary>
+    private static async Task RunWorkerUntilDispatchedAsync(IHost host, int expected)
+    {
+        var counter = host.Services.GetRequiredService<DispatchedEventCounter>();
+        await host.StartAsync().ConfigureAwait(false);
+        try
+        {
+            var deadline = DateTime.UtcNow + WorkerTimeout;
+            while (counter.Dispatched < expected)
+            {
+                if (DateTime.UtcNow > deadline)
+                    Assert.Fail($"The outbox worker did not finish within {WorkerTimeout.TotalSeconds} seconds.");
+                await Task.Delay(20).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await host.StopAsync().ConfigureAwait(false);
+        }
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("ns:")]
+    public async Task AtomicCommit_SagaState_AndOutboxRow_BothPersistedTogether(string dbKeyPrefix)
     {
         var sagaPrefix = $"saga-{Guid.NewGuid():N}";
         var outboxPrefix = $"saga-outbox-{Guid.NewGuid():N}";
-        var sp = BuildHost(sagaPrefix, outboxPrefix);
+        using var host = BuildHost(sagaPrefix, outboxPrefix, dbKeyPrefix: dbKeyPrefix);
         var ledger = new CommandLedger();
         CommandLedger.Current = ledger;
 
         var orderId = new OrderId(7001);
-        await PublishAsync(sp, new OrderPlaced(orderId, 199m));
+        await PublishAsync(host.Services, new OrderPlaced(orderId, 199m));
 
         // After the handler completes: exactly one outbox row in Redis Pending sorted set.
         var db = _fx.Multiplexer.GetDatabase();
-        var pending = await db.SortedSetRangeByRankWithScoresAsync($"{outboxPrefix}:pending");
+        var pending = await db.SortedSetRangeByRankWithScoresAsync($"{dbKeyPrefix}{outboxPrefix}:pending");
         Assert.Single(pending);
 
-        var entryKey = $"{outboxPrefix}:entry:{(string)pending[0].Element!}";
+        var entryKey = $"{dbKeyPrefix}{outboxPrefix}:entry:{(string)pending[0].Element!}";
         var typeName = (string?)await db.HashGetAsync(entryKey, "typeName");
         Assert.Equal(typeof(ReserveStockCommand).FullName, typeName);
 
         // Mediator NOT called on the dispatch path — the bridge enlists, doesn't dispatch inline.
         Assert.Empty(ledger.CommandsOfType<ReserveStockCommand>());
 
-        // Drive a poll cycle: the poller dispatches via SagaCommandRegistry → mediator → ledger.
-        var poller = sp.GetServices<IHostedService>().OfType<OutboxSagaCommandPoller>().Single();
-        await poller.PollOnceAsync(default);
+        // Run the worker: it dispatches via the saga's dispatcher → SagaCommandRegistry → mediator → ledger.
+        await RunWorkerUntilDispatchedAsync(host, expected: 1);
 
 #pragma warning disable HLQ005
         Assert.Single(ledger.CommandsOfType<ReserveStockCommand>());
 #pragma warning restore HLQ005
 
         // Pending now empty; succeeded set has the entry.
-        Assert.Empty(await db.SortedSetRangeByRankAsync($"{outboxPrefix}:pending"));
-        var succeeded = await db.SetMembersAsync($"{outboxPrefix}:succeeded");
+        Assert.Empty(await db.SortedSetRangeByRankAsync($"{dbKeyPrefix}{outboxPrefix}:pending"));
+        var succeeded = await db.SetMembersAsync($"{dbKeyPrefix}{outboxPrefix}:succeeded");
         Assert.Single(succeeded);
     }
 
-    [Fact]
-    public async Task AtomicRollback_WatchConflict_Mid_MULTI_DiscardsBothSagaState_AndOutboxRow()
+    [Theory]
+    [InlineData("")]
+    [InlineData("ns:")]
+    public async Task AtomicRollback_WatchConflict_Mid_MULTI_DiscardsBothSagaState_AndOutboxRow(string dbKeyPrefix)
     {
         // THE load-bearing test for stage 3. We force a real WATCH conflict mid-MULTI:
         // a custom IRedisSagaTransactionContributor (registered alongside the outbox
@@ -122,16 +177,16 @@ public sealed class E2ETests : IAsyncLifetime
         var sagaPrefix = $"saga-{Guid.NewGuid():N}";
         var outboxPrefix = $"saga-outbox-{Guid.NewGuid():N}";
 
-        var sp = BuildHost(sagaPrefix, outboxPrefix, services =>
+        using var host = BuildHost(sagaPrefix, outboxPrefix, services =>
         {
             services.AddScoped<IRedisSagaTransactionContributor>(_ =>
-                new WatchConflictInjector(_fx.Multiplexer.GetDatabase(), sagaPrefix, orderId, counter));
-        });
+                new WatchConflictInjector(Database(dbKeyPrefix), sagaPrefix, orderId, counter));
+        }, dbKeyPrefix);
 
         var ledger = new CommandLedger();
         CommandLedger.Current = ledger;
 
-        await PublishAsync(sp, new OrderPlaced(orderId, 42m));
+        await PublishAsync(host.Services, new OrderPlaced(orderId, 42m));
 
         // Post-conditions:
         // 1. Conflict was injected exactly once on attempt 1 (and the contributor was
@@ -142,19 +197,18 @@ public sealed class E2ETests : IAsyncLifetime
         // 2. Exactly ONE outbox row in pending. Attempt 1's row was inside the
         //    aborted MULTI; attempt 2's row is the only one that committed.
         var db = _fx.Multiplexer.GetDatabase();
-        var pending = await db.SortedSetRangeByRankWithScoresAsync($"{outboxPrefix}:pending");
+        var pending = await db.SortedSetRangeByRankWithScoresAsync($"{dbKeyPrefix}{outboxPrefix}:pending");
         Assert.Single(pending);
 
         // 3. Saga state matches attempt 2's commit. The injector's transient HSET was
         //    DEL'd before returning so attempt 2 saw a clean key, then committed normally.
-        var sagaKey = $"{sagaPrefix}:OrderFulfillmentSaga:{orderId}";
+        var sagaKey = $"{dbKeyPrefix}{sagaPrefix}:OrderFulfillmentSaga:{orderId}";
         var version = (string?)await db.HashGetAsync(sagaKey, "version");
         Assert.NotNull(version);
         Assert.NotEqual("watch-conflict-injected", version, StringComparer.Ordinal);
 
-        // 4. Driving the poller dispatches exactly once.
-        var poller = sp.GetServices<IHostedService>().OfType<OutboxSagaCommandPoller>().Single();
-        await poller.PollOnceAsync(default);
+        // 4. Running the worker dispatches exactly once.
+        await RunWorkerUntilDispatchedAsync(host, expected: 1);
 
 #pragma warning disable HLQ005
         Assert.Single(ledger.CommandsOfType<ReserveStockCommand>());
@@ -171,8 +225,8 @@ public sealed class E2ETests : IAsyncLifetime
         // would go to a buffer the contributor never sees, silently breaking atomicity.
         // This regression test guards against any future change to the WithRedisOutbox
         // alias-via-factory pattern.
-        var sp = BuildHost($"saga-{Guid.NewGuid():N}", $"saga-outbox-{Guid.NewGuid():N}");
-        using var scope = sp.CreateScope();
+        using var host = BuildHost($"saga-{Guid.NewGuid():N}", $"saga-outbox-{Guid.NewGuid():N}");
+        using var scope = host.Services.CreateScope();
         var asUow = scope.ServiceProvider.GetRequiredService<ISagaUnitOfWork>();
         var asConcrete = scope.ServiceProvider.GetRequiredService<RedisSagaUnitOfWork>();
         Assert.Same(asConcrete, asUow);
@@ -193,15 +247,15 @@ public sealed class E2ETests : IAsyncLifetime
         // mechanism itself is exercised by AtomicRollback_WatchConflict_Mid_MULTI...
         var sagaPrefix = $"shared-saga-{Guid.NewGuid():N}";
         var outboxPrefix = $"shared-outbox-{Guid.NewGuid():N}";
-        var spA = BuildHost(sagaPrefix, outboxPrefix);
-        var spB = BuildHost(sagaPrefix, outboxPrefix);
+        using var hostA = BuildHost(sagaPrefix, outboxPrefix);
+        using var hostB = BuildHost(sagaPrefix, outboxPrefix);
 
         var ledger = new CommandLedger();
         CommandLedger.Current = ledger;
 
         var orderId = new OrderId(7003);
-        await PublishAsync(spA, new OrderPlaced(orderId, 333m));
-        await PublishAsync(spB, new OrderPlaced(orderId, 333m));
+        await PublishAsync(hostA.Services, new OrderPlaced(orderId, 333m));
+        await PublishAsync(hostB.Services, new OrderPlaced(orderId, 333m));
 
         // Replica B's publish reloaded the saga A wrote. The FSM was already past
         // Initial → TryFire(OrderPlaced) returned false → no second outbox row.

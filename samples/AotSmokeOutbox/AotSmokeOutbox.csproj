@@ -9,11 +9,11 @@
     <!-- The whole point of this sample: end-to-end native AOT publish.
          We empirically verify that the [DynamicDependency] the saga
          generator emits on MediatorSagaCommandDispatcher's constructor
-         keeps ZeroAlloc.Saga.Generated.SagaCommandRegistry alive after
-         trimming, so SagaOutboxBuilderExtensions.CreateRegistryDispatcher
-         can locate it reflectively at runtime. If the rooting were
-         missing, the binary would throw "could not locate the
-         generator-emitted SagaCommandRegistry" on the first poller cycle.
+         keeps ZeroAlloc.Saga.Generated.SagaCommandRegistry's GetTypeNames
+         and DispatchAsync alive after trimming, so WithOutbox() can locate
+         them reflectively and ZeroAlloc.Outbox's worker can dispatch saga
+         commands. If the rooting were missing, the startup check would fail
+         the host with "could not locate the generator-emitted SagaCommandRegistry".
          -->
     <PublishAot>true</PublishAot>
     <InvariantGlobalization>true</InvariantGlobalization>
@@ -39,7 +39,7 @@
     <PackageReference Include="ZeroAlloc.Serialisation" />
     <PackageReference Include="ZeroAlloc.Outbox" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>

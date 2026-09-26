@@ -75,27 +75,27 @@ internal sealed class CommandCounters
 internal sealed class ReserveStockHandler : IRequestHandler<ReserveStockCommand, Unit>
 {
     public ValueTask<Unit> Handle(ReserveStockCommand req, CancellationToken ct)
-    { CommandCounters.Current!.Reserve++; return new(Unit.Value); }
+    { Interlocked.Increment(ref CommandCounters.Current!.Reserve); return new(Unit.Value); }
 }
 internal sealed class ChargeCustomerHandler : IRequestHandler<ChargeCustomerCommand, Unit>
 {
     public ValueTask<Unit> Handle(ChargeCustomerCommand req, CancellationToken ct)
-    { CommandCounters.Current!.Charge++; return new(Unit.Value); }
+    { Interlocked.Increment(ref CommandCounters.Current!.Charge); return new(Unit.Value); }
 }
 internal sealed class ShipOrderHandler : IRequestHandler<ShipOrderCommand, Unit>
 {
     public ValueTask<Unit> Handle(ShipOrderCommand req, CancellationToken ct)
-    { CommandCounters.Current!.Ship++; return new(Unit.Value); }
+    { Interlocked.Increment(ref CommandCounters.Current!.Ship); return new(Unit.Value); }
 }
 internal sealed class CancelReservationHandler : IRequestHandler<CancelReservationCommand, Unit>
 {
     public ValueTask<Unit> Handle(CancelReservationCommand req, CancellationToken ct)
-    { CommandCounters.Current!.Cancel++; return new(Unit.Value); }
+    { Interlocked.Increment(ref CommandCounters.Current!.Cancel); return new(Unit.Value); }
 }
 internal sealed class RefundPaymentHandler : IRequestHandler<RefundPaymentCommand, Unit>
 {
     public ValueTask<Unit> Handle(RefundPaymentCommand req, CancellationToken ct)
-    { CommandCounters.Current!.Refund++; return new(Unit.Value); }
+    { Interlocked.Increment(ref CommandCounters.Current!.Refund); return new(Unit.Value); }
 }
 
 // ── Hand-rolled AOT-safe ISerializer<T> impls ────────────────────────────────

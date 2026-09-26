@@ -10,7 +10,7 @@ namespace ZeroAlloc.Saga.Outbox.Redis;
 
 /// <summary>
 /// Wires up the Redis-native outbox bridge: <see cref="RedisOutboxStore"/> as the
-/// <see cref="IOutboxStore"/> the poller reads from, <see cref="RedisSagaUnitOfWork"/>
+/// <see cref="IOutboxStore"/> ZeroAlloc.Outbox's worker claims from, <see cref="RedisSagaUnitOfWork"/>
 /// as the <see cref="ISagaUnitOfWork"/> the dispatcher enlists into, and
 /// <see cref="RedisOutboxTransactionContributor"/> as the
 /// <see cref="IRedisSagaTransactionContributor"/> that drains the unit of work into
@@ -68,8 +68,8 @@ public static class SagaOutboxRedisBuilderExtensions
                 sp.GetRequiredService<RedisSagaUnitOfWork>(),
                 sp.GetRequiredService<RedisOutboxOptions>()));
 
-        // Replace any previously-registered IOutboxStore with the Redis-native one so the
-        // poller reads from the same Redis key-space the saga store writes to.
+        // Replace any previously-registered IOutboxStore with the Redis-native one so
+        // ZeroAlloc.Outbox's worker claims from the same Redis key-space the saga store writes to.
         services.Replace(ServiceDescriptor.Scoped<IOutboxStore>(sp =>
             new RedisOutboxStore(
                 sp.GetRequiredService<IDatabase>(),

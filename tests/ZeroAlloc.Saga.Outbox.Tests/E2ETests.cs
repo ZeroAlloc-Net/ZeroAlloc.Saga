@@ -1,66 +1,84 @@
 using System;
+using System.Collections.Concurrent;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using ZeroAlloc.Mediator;
 using ZeroAlloc.Outbox;
 using ZeroAlloc.Outbox.EfCore;
 using ZeroAlloc.Saga.EfCore;
 using ZeroAlloc.Saga.Outbox.Tests.Fixtures;
+using ZeroAlloc.Serialisation;
 
 namespace ZeroAlloc.Saga.Outbox.Tests;
 
 /// <summary>
-/// End-to-end tests for the saga + outbox bridge. Each test wires a host with
-/// <see cref="EfCoreSagaStore{TSaga,TKey}"/> AND <see cref="EfCoreOutboxStore{TContext}"/>
-/// sharing a single scoped <see cref="OutboxE2EDbContext"/>, then publishes saga
-/// events to verify atomic dispatch (saga state + outbox row commit in one
-/// <c>SaveChangesAsync</c>) and the OCC-conflict regression caveat (Saga 1.1's
-/// duplicate-dispatch on retry no longer occurs because the losing attempt's
-/// outbox row Add is discarded with the failing DbContext).
+/// End-to-end tests for the saga + outbox bridge on the documented EF setup. The host registers
+/// <see cref="EfCoreSagaStore{TSaga,TKey}"/> AND ZeroAlloc.Outbox's EF store, sharing a single
+/// scoped <see cref="OutboxE2EDbContext"/>, and ZeroAlloc.Outbox's <see cref="OutboxWorkerService"/>
+/// dispatches the saga commands. The tests publish saga events to verify atomic dispatch, where
+/// saga state and outbox row commit in one <c>SaveChangesAsync</c>. They also cover the OCC-conflict
+/// regression caveat: Saga 1.1's duplicate dispatch on retry no longer occurs, because the losing
+/// attempt's outbox row Add is discarded with the failing DbContext.
 /// </summary>
+/// <remarks>
+/// The fixture's single SqliteConnection is not thread-safe, so a test touches the database only
+/// while the worker is stopped.
+/// </remarks>
 public sealed class E2ETests
 {
-    private static IServiceProvider BuildHost(SqliteFixture fx, Action<IServiceCollection>? extra = null)
+    private static readonly TimeSpan WorkerTimeout = TimeSpan.FromSeconds(15);
+
+    private static IHost BuildHost(SqliteFixture fx, Action<IServiceCollection>? extra = null)
     {
         // Reset process-wide registrar state between tests so the typed
         // registrar from a previous test (in EfCore.Tests' E2E suite running
         // in another assembly) doesn't bleed into this one.
         SagaStoreRegistrar.Reset();
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddMediator();
-        // Mediator 4.x: explicit handler registration (no reflection).
-        services.TryAddTransient<ReserveStockHandler>();
-        services.TryAddTransient<ChargeCustomerHandler>();
-        services.TryAddTransient<ShipOrderHandler>();
-        services.TryAddTransient<CancelReservationHandler>();
-        services.TryAddTransient<RefundPaymentHandler>();
-        services.AddDbContext<OutboxE2EDbContext>(opts => opts.UseSqlite(fx.Connection),
-            ServiceLifetime.Scoped);
-        // EfCoreOutboxStore takes the same scoped DbContext — this is the
-        // shared-DbContext that makes saga state save + outbox row commit atomic.
-        services.AddScoped<IOutboxStore, EfCoreOutboxStore<OutboxE2EDbContext>>();
-        // Per-command JSON serializers consumed by both the OutboxSagaCommandDispatcher
-        // (write path) and the generator-emitted SagaCommandRegistry (poll path).
-        services.AddTestSerializers();
-        services.AddSaga()
-            .WithEfCoreStore<OutboxE2EDbContext>(opts =>
+        return new HostBuilder()
+            .ConfigureServices(services =>
             {
-                opts.MaxRetryAttempts = 3;
-                opts.RetryBaseDelay = TimeSpan.FromMilliseconds(1);
-                opts.UseExponentialBackoff = false;
+                services.AddLogging();
+                // Counts the worker's MessageDispatchedEvents; RunWorkerUntilDispatchedAsync waits on it.
+                services.AddSingleton<DispatchedEventCounter>();
+                services.AddSingleton<IOutboxDashboardEventPublisher>(
+                    sp => sp.GetRequiredService<DispatchedEventCounter>());
+                services.AddMediator();
+                // Mediator 4.x: explicit handler registration (no reflection).
+                services.TryAddTransient<ReserveStockHandler>();
+                services.TryAddTransient<ChargeCustomerHandler>();
+                services.TryAddTransient<ShipOrderHandler>();
+                services.TryAddTransient<CancelReservationHandler>();
+                services.TryAddTransient<RefundPaymentHandler>();
+                services.AddDbContext<OutboxE2EDbContext>(opts => opts.UseSqlite(fx.Connection),
+                    ServiceLifetime.Scoped);
+                // The documented setup. Outbox's worker dispatches saga commands, and its EF store
+                // takes the same scoped DbContext as the saga store, which is what makes saga
+                // state save + outbox row commit atomic.
+                services.AddOutbox(o => o.PollingInterval = TimeSpan.FromMilliseconds(50))
+                    .WithEfCore<OutboxE2EDbContext>();
+                // Per-command JSON serializers consumed by both the OutboxSagaCommandDispatcher
+                // (write path) and the generator-emitted SagaCommandRegistry (dispatch path).
+                services.AddTestSerializers();
+                services.AddSaga()
+                    .WithEfCoreStore<OutboxE2EDbContext>(opts =>
+                    {
+                        opts.MaxRetryAttempts = 3;
+                        opts.RetryBaseDelay = TimeSpan.FromMilliseconds(1);
+                        opts.UseExponentialBackoff = false;
+                    })
+                    .WithOutbox()
+                    .WithOrderFulfillmentSaga();
+                // Apply test-supplied overrides AFTER per-saga registrations so
+                // decorators replacing ISagaStore<> see the full registration in place.
+                extra?.Invoke(services);
             })
-            .WithOutbox()
-            .WithOrderFulfillmentSaga();
-        // Apply test-supplied overrides AFTER per-saga registrations so
-        // decorators replacing ISagaStore<> see the full registration in place.
-        extra?.Invoke(services);
-        return services.BuildServiceProvider();
+            .Build();
     }
 
     // Goes through the real IMediator.Publish rather than resolving INotificationHandler<T>
@@ -72,25 +90,51 @@ public sealed class E2ETests
         await scope.ServiceProvider.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Starts the host, which runs WithOutbox()'s startup check and then Outbox's worker, waits
+    /// until the worker has published <paramref name="expected"/> MessageDispatchedEvents, and
+    /// stops the host again. The worker publishes that event only after MarkSucceededAsync, so
+    /// stopping never cancels a mark in flight. Set CommandLedger.Current before calling it: the
+    /// worker's execution context flows from StartAsync.
+    /// </summary>
+    private static async Task RunWorkerUntilDispatchedAsync(IHost host, int expected)
+    {
+        var counter = host.Services.GetRequiredService<DispatchedEventCounter>();
+        await host.StartAsync().ConfigureAwait(false);
+        try
+        {
+            var deadline = DateTime.UtcNow + WorkerTimeout;
+            while (counter.Dispatched < expected)
+            {
+                if (DateTime.UtcNow > deadline)
+                    Assert.Fail($"The outbox worker did not finish within {WorkerTimeout.TotalSeconds} seconds.");
+                await Task.Delay(20).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await host.StopAsync().ConfigureAwait(false);
+        }
+    }
+
     [Fact]
     public async Task Saga_DispatchesViaOutbox_CommittedAtomically_WithStateSave()
     {
-        // Task 14: prove that publishing OrderPlaced through the saga handler
-        // results in a single saga row AND a single outbox row in the database
-        // (atomic commit), and that the poller drains the outbox row to dispatch
-        // ReserveStockCommand exactly once via the mediator.
+        // Prove that publishing OrderPlaced through the saga handler results in a single saga row
+        // AND a single outbox row in the database (atomic commit), and that Outbox's worker drains
+        // the outbox row to dispatch ReserveStockCommand exactly once via the mediator.
         await using var fx = new SqliteFixture();
         await fx.EnsureCreatedAsync();
-        var sp = BuildHost(fx);
+        using var host = BuildHost(fx);
         var ledger = new CommandLedger();
         CommandLedger.Current = ledger;
 
         var orderId = new OrderId(7001);
-        await PublishAsync(sp, new OrderPlaced(orderId, 199m));
+        await PublishAsync(host.Services, new OrderPlaced(orderId, 199m));
 
         // After the handler completes: exactly one saga row and one outbox row,
         // committed by the same SaveChangesAsync (atomicity).
-        using (var scope = sp.CreateScope())
+        using (var scope = host.Services.CreateScope())
         {
             var ctx = scope.ServiceProvider.GetRequiredService<OutboxE2EDbContext>();
             var sagas = await ctx.Set<SagaInstanceEntity>().AsNoTracking().ToListAsync();
@@ -107,13 +151,10 @@ public sealed class E2ETests
         // the mediator inline — so the ledger has nothing yet.
         Assert.Empty(ledger.CommandsOfType<ReserveStockCommand>());
 
-        // Drive a single poll cycle: the poller fetches the pending entry,
-        // dispatches it via the generator-emitted SagaCommandRegistry, and
-        // marks it succeeded.
-        var poller = sp.GetServices<Microsoft.Extensions.Hosting.IHostedService>()
-            .OfType<OutboxSagaCommandPoller>()
-            .Single();
-        await poller.PollOnceAsync(default);
+        // Run Outbox's worker: it picks up the row, dispatches it through the saga's
+        // IOutboxTypeDispatcher and the generator-emitted SagaCommandRegistry, and marks it
+        // succeeded.
+        await RunWorkerUntilDispatchedAsync(host, expected: 1);
 
         // Now ReserveStockCommand has been dispatched exactly once.
 #pragma warning disable HLQ005
@@ -122,9 +163,9 @@ public sealed class E2ETests
         Assert.Equal(orderId, ledger.CommandsOfType<ReserveStockCommand>()[0].OrderId);
         Assert.Equal(199m, ledger.CommandsOfType<ReserveStockCommand>()[0].Total);
 
-        // The poller marks the row Succeeded (not removed — EfCoreOutboxStore
+        // The worker marks the row Succeeded (not removed — EfCoreOutboxStore
         // sets Status = Succeeded on MarkSucceededAsync).
-        using (var scope = sp.CreateScope())
+        using (var scope = host.Services.CreateScope())
         {
             var ctx = scope.ServiceProvider.GetRequiredService<OutboxE2EDbContext>();
             var outboxes = await ctx.Set<OutboxMessageEntity>().AsNoTracking().ToListAsync();
@@ -150,7 +191,7 @@ public sealed class E2ETests
         // DbUpdateConcurrencyException, the attempt's `using` scope is
         // disposed — the failed DbContext (and its tracked outbox row) is
         // gone. The handler retries in a fresh scope with a fresh DbContext.
-        // The successful attempt commits exactly ONE outbox row, the poller
+        // The successful attempt commits exactly ONE outbox row, the worker
         // drains exactly ONE entry, and ReserveStockCommand is dispatched
         // exactly ONCE.
         //
@@ -163,7 +204,7 @@ public sealed class E2ETests
         await fx.EnsureCreatedAsync();
 
         var counter = new SharedAttemptCounter();
-        var sp = BuildHost(fx, services =>
+        using var host = BuildHost(fx, services =>
         {
             for (int i = services.Count - 1; i >= 0; i--)
             {
@@ -187,13 +228,13 @@ public sealed class E2ETests
         var orderId = new OrderId(7002);
         // Should NOT throw — the retry loop catches the simulated conflict and
         // succeeds on the second attempt (in a fresh scope).
-        await PublishAsync(sp, new OrderPlaced(orderId, 42m));
+        await PublishAsync(host.Services, new OrderPlaced(orderId, 42m));
 
         // CRITICAL ASSERTION: exactly ONE outbox row in the database. The
         // failed first-attempt scope was disposed before its SaveChangesAsync
         // succeeded, so its tracked outbox row Add never made it to the DB.
         // Only the successful retry's outbox row is committed.
-        using (var scope = sp.CreateScope())
+        using (var scope = host.Services.CreateScope())
         {
             var ctx = scope.ServiceProvider.GetRequiredService<OutboxE2EDbContext>();
             var outboxes = await ctx.Set<OutboxMessageEntity>().AsNoTracking().ToListAsync();
@@ -204,18 +245,103 @@ public sealed class E2ETests
             Assert.Equal(typeof(ReserveStockCommand).FullName, outboxes[0].TypeName);
         }
 
-        // Drive the poller once. With exactly one outbox row, ReserveStockCommand
+        // Run the worker. With exactly one outbox row, ReserveStockCommand
         // is dispatched exactly once.
-        var poller = sp.GetServices<Microsoft.Extensions.Hosting.IHostedService>()
-            .OfType<OutboxSagaCommandPoller>()
-            .Single();
-        await poller.PollOnceAsync(default);
+        await RunWorkerUntilDispatchedAsync(host, expected: 1);
 
         var dispatched = ledger.CommandsOfType<ReserveStockCommand>();
 #pragma warning disable HLQ005
         Assert.Single(dispatched);
 #pragma warning restore HLQ005
         Assert.Equal(orderId, dispatched[0].OrderId);
+    }
+
+    [Fact]
+    public async Task DocumentedSetup_WorkerDispatchesEverySagaCommand_NoneDeadLettered()
+    {
+        // Regression for #173. With AddOutbox + WithOutbox, Saga used to run its own poller next
+        // to Outbox's worker. The worker had no dispatcher for saga command types, so it
+        // dead-lettered every saga row it claimed first as "No dispatcher for type".
+        await using var fx = new SqliteFixture();
+        await fx.EnsureCreatedAsync();
+        using var host = BuildHost(fx);
+        var ledger = new CommandLedger();
+        CommandLedger.Current = ledger;
+
+        const int orders = 5;
+        for (var i = 0; i < orders; i++)
+            await PublishAsync(host.Services, new OrderPlaced(new OrderId(7100 + i), 10m + i));
+
+        await RunWorkerUntilDispatchedAsync(host, expected: orders);
+
+        Assert.Equal(orders, ledger.CommandsOfType<ReserveStockCommand>().Count);
+        using var scope = host.Services.CreateScope();
+        var rows = await scope.ServiceProvider.GetRequiredService<OutboxE2EDbContext>()
+            .Set<OutboxMessageEntity>().AsNoTracking().ToListAsync();
+        Assert.Equal(orders, rows.Count);
+        Assert.All(rows, row => Assert.Equal(OutboxMessageStatus.Succeeded, row.Status));
+    }
+
+    [Fact]
+    public async Task WorkerDispatch_SharesTheStoresScopedDbContext()
+    {
+        // The worker resolves the store and every dispatcher from one per-batch scope. A saga
+        // command must be deserialised and dispatched in that scope, so it sees the DbContext the
+        // store claims and marks through, exactly as the old poller did.
+        await using var fx = new SqliteFixture();
+        await fx.EnsureCreatedAsync();
+        var probe = new ScopeProbe();
+        using var host = BuildHost(fx, services =>
+        {
+            services.Replace(ServiceDescriptor.Scoped<IOutboxStore>(sp =>
+            {
+                probe.RecordStore(sp.GetRequiredService<OutboxE2EDbContext>());
+                return sp.GetRequiredService<EfCoreOutboxStore<OutboxE2EDbContext>>();
+            }));
+            // The registry resolves ISerializer<T> from the dispatcher's service provider, so
+            // this records the DbContext of the scope the dispatch ran in.
+            services.Replace(ServiceDescriptor.Scoped<ISerializer<ReserveStockCommand>>(sp =>
+            {
+                probe.RecordDispatch(sp.GetRequiredService<OutboxE2EDbContext>());
+                return new JsonCommandSerializer<ReserveStockCommand>();
+            }));
+        });
+        var ledger = new CommandLedger();
+        CommandLedger.Current = ledger;
+
+        await PublishAsync(host.Services, new OrderPlaced(new OrderId(7201), 10m));
+        // Record only what happens from here on: the publish above resolved both services too.
+        probe.Arm();
+
+        await RunWorkerUntilDispatchedAsync(host, expected: 1);
+
+        var dispatchContexts = probe.DispatchContexts.ToArray();
+        Assert.NotEmpty(dispatchContexts);
+        foreach (var ctx in dispatchContexts)
+            Assert.Contains(probe.StoreContexts, store => ReferenceEquals(store, ctx));
+    }
+
+    /// <summary>
+    /// Records the scoped DbContext instances the outbox store and the dispatch path resolved.
+    /// </summary>
+    private sealed class ScopeProbe
+    {
+        private volatile bool _armed;
+
+        public ConcurrentBag<OutboxE2EDbContext> StoreContexts { get; } = new();
+        public ConcurrentBag<OutboxE2EDbContext> DispatchContexts { get; } = new();
+
+        public void Arm() => _armed = true;
+
+        public void RecordStore(OutboxE2EDbContext ctx)
+        {
+            if (_armed) StoreContexts.Add(ctx);
+        }
+
+        public void RecordDispatch(OutboxE2EDbContext ctx)
+        {
+            if (_armed) DispatchContexts.Add(ctx);
+        }
     }
 
     /// <summary>

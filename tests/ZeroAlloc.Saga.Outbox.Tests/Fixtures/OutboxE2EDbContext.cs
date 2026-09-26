@@ -24,9 +24,9 @@ public sealed class OutboxE2EDbContext : DbContext
         modelBuilder.AddOutboxMessages();
 
         // SQLite can't translate DateTimeOffset comparisons natively; convert to a
-        // sortable tick-based representation so OutboxStore.FetchPendingAsync queries
-        // (NextRetryAt <= now) translate. Mirrors DashboardTestDbContext from
-        // ZeroAlloc.Outbox.Tests.
+        // sortable tick-based representation so the EF store's ClaimPendingAsync and
+        // RenewLeaseAsync queries (NextRetryAt <= now, LockedUntil < now) translate.
+        // Mirrors DashboardTestDbContext from ZeroAlloc.Outbox.Tests.
         var dtoConverter = new ValueConverter<System.DateTimeOffset, long>(
             v => v.UtcTicks,
             v => new System.DateTimeOffset(v, System.TimeSpan.Zero));
@@ -38,5 +38,6 @@ public sealed class OutboxE2EDbContext : DbContext
         outbox.Property(m => m.CreatedAt).HasConversion(dtoConverter);
         outbox.Property(m => m.NextRetryAt).HasConversion(dtoConverter);
         outbox.Property(m => m.ProcessedAt).HasConversion(nullableDtoConverter);
+        outbox.Property(m => m.LockedUntil).HasConversion(nullableDtoConverter);
     }
 }

@@ -5,10 +5,12 @@ using System.Threading.Tasks;
 namespace ZeroAlloc.Saga.Outbox;
 
 /// <summary>
-/// Delegate that dispatches a single outbox-fetched saga command. The default implementation
-/// (registered by <see cref="SagaOutboxBuilderExtensions.WithOutbox"/>) reflects to the
-/// generator-emitted <c>ZeroAlloc.Saga.Generated.SagaCommandRegistry.DispatchAsync</c> in the
-/// consumer's compilation. Tests may register their own delegate to short-circuit dispatch.
+/// Delegate that dispatches a single saga command read from the outbox. Every saga command's
+/// <c>IOutboxTypeDispatcher</c>, registered by <see cref="SagaOutboxBuilderExtensions.WithOutbox"/>,
+/// calls it with its own type name and its own scoped service provider. The default
+/// implementation reflects to the generator-emitted
+/// <c>ZeroAlloc.Saga.Generated.SagaCommandRegistry.DispatchAsync</c> in the consumer's
+/// compilation. Register your own before <c>WithOutbox()</c> to replace it, for example in tests.
 /// </summary>
 /// <remarks>
 /// The delegate intentionally does NOT take <c>IMediator</c> in its signature: the

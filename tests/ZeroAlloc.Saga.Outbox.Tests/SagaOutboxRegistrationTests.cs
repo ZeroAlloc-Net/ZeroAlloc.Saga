@@ -1,12 +1,28 @@
+using System;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using ZeroAlloc.Outbox;
 using ZeroAlloc.Saga;
+using ZeroAlloc.Saga.Outbox.Tests.Fixtures;
 
 namespace ZeroAlloc.Saga.Outbox.Tests;
 
 public class SagaOutboxRegistrationTests
 {
+    // The step and compensation commands of the fixture's OrderFulfillmentSaga, as the outbox
+    // bridge writes them: Type.FullName.
+    private static readonly string[] FixtureCommandTypeNames =
+    [
+        typeof(CancelReservationCommand).FullName!,
+        typeof(ChargeCustomerCommand).FullName!,
+        typeof(RefundPaymentCommand).FullName!,
+        typeof(ReserveStockCommand).FullName!,
+        typeof(ShipOrderCommand).FullName!,
+    ];
+
     [Fact]
     public void WithOutbox_ReplacesSagaCommandDispatcher()
     {
@@ -25,26 +41,91 @@ public class SagaOutboxRegistrationTests
     }
 
     [Fact]
-    public void WithOutbox_RegistersHostedService()
+    public void WithOutbox_DoesNotRegisterAnOutboxWorker()
     {
+        // AddOutbox registers the worker with a plain AddHostedService, so a second call would
+        // start a second worker. WithOutbox must leave it to the application.
         var services = new ServiceCollection();
-        var builder = services.AddSaga();
-        services.AddScoped<ISagaCommandDispatcher, SentinelDispatcher>();
+        services.AddSaga().WithOutbox();
 
-        builder.WithOutbox();
-
-        var hosted = services.Where(d => d.ServiceType == typeof(IHostedService)).ToList();
-        Assert.Contains(hosted, d => d.ImplementationType == typeof(OutboxSagaCommandPoller));
+        Assert.DoesNotContain(services, d =>
+            d.ServiceType == typeof(IHostedService) && d.ImplementationType == typeof(OutboxWorkerService));
     }
 
     [Fact]
-    public void WithOutbox_RegistersDispatcherDelegate_Lazily()
+    public void WithOutbox_RegistersOneScopedDispatcherPerSagaCommandType()
+    {
+        var services = new ServiceCollection();
+        SagaCommandRegistryDispatcher fake = (_, _, _, _) => default;
+        services.AddSingleton(fake);
+
+        services.AddSaga().WithOutbox();
+
+        var descriptors = services.Where(d => d.ServiceType == typeof(IOutboxTypeDispatcher)).ToList();
+        Assert.Equal(FixtureCommandTypeNames.Length, descriptors.Count);
+        Assert.All(descriptors, d => Assert.Equal(ServiceLifetime.Scoped, d.Lifetime));
+
+        using var sp = services.BuildServiceProvider();
+        using var scope = sp.CreateScope();
+        var names = scope.ServiceProvider.GetServices<IOutboxTypeDispatcher>()
+            .Select(d => d.TypeName)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(FixtureCommandTypeNames.Order(StringComparer.Ordinal), names, StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void WithOutbox_CalledTwice_RegistersEachDispatcherOnce()
+    {
+        var services = new ServiceCollection();
+        var builder = services.AddSaga();
+
+        builder.WithOutbox();
+        builder.WithOutbox();
+
+        Assert.Equal(
+            FixtureCommandTypeNames.Length,
+            services.Count(d => d.ServiceType == typeof(IOutboxTypeDispatcher)));
+    }
+
+    [Fact]
+    public async Task SagaCommandDispatcher_DispatchesThroughTheDelegate_WithItsOwnScope()
+    {
+        var services = new ServiceCollection();
+        var callCount = 0;
+        string? calledTypeName = null;
+        IServiceProvider? calledServices = null;
+        SagaCommandRegistryDispatcher fake = (typeName, _, sp, _) =>
+        {
+            callCount++;
+            calledTypeName = typeName;
+            calledServices = sp;
+            return default;
+        };
+        services.AddSingleton(fake);
+        services.AddSaga().WithOutbox();
+
+        await using var root = services.BuildServiceProvider();
+        await using var scope = root.CreateAsyncScope();
+        var reserve = scope.ServiceProvider.GetServices<IOutboxTypeDispatcher>()
+            .First(d => string.Equals(d.TypeName, typeof(ReserveStockCommand).FullName, StringComparison.Ordinal));
+
+        await reserve.DispatchAsync(new byte[] { 1 }, CancellationToken.None);
+
+        Assert.Equal(1, callCount);
+        Assert.Equal(typeof(ReserveStockCommand).FullName, calledTypeName);
+        // The worker resolves dispatchers and the store from one per-batch scope. A dispatcher
+        // that dispatched through that same scope shares the store's DbContext.
+        Assert.Same(scope.ServiceProvider, calledServices);
+    }
+
+    [Fact]
+    public void WithOutbox_KeepsAPreRegisteredDispatcherDelegate()
     {
         var services = new ServiceCollection();
         var builder = services.AddSaga();
         services.AddScoped<ISagaCommandDispatcher, SentinelDispatcher>();
 
-        // Pre-register a fake delegate to short-circuit the reflective lookup.
         // TryAddSingleton inside WithOutbox() must NOT overwrite this.
         SagaCommandRegistryDispatcher fake = (_, _, _, _) => default;
         services.AddSingleton(fake);
