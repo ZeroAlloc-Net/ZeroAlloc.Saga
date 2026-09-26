@@ -55,7 +55,7 @@
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
 
     <!-- Resilience bridge deps -->
-    <PackageVersion Include="ZeroAlloc.Resilience" Version="2.0.*" />
+    <PackageVersion Include="ZeroAlloc.Resilience" Version="3.1.*" />
 
     <!-- Redis backend deps -->
     <PackageVersion Include="StackExchange.Redis" Version="3.3.*" />
