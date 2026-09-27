@@ -18,8 +18,6 @@ internal static class Program
         // Parse a tiny flag set so the demo can be re-launched against the
         // EfCore backend without rebuilding. Default is the InMemory store
         // (matches the v1.0 demo behaviour).
-        // Plain System.Array.IndexOf — Linq's Contains extension trips
-        // the EPS06 "hidden ReadOnlySpan copy" analyzer in this project.
         var useEfCore = System.Array.IndexOf(args, "--efcore") >= 0;
 
         Console.WriteLine("=== ZeroAlloc.Saga: OrderFulfillment demo ===");

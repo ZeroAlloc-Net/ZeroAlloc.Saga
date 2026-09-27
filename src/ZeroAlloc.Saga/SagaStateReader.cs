@@ -9,13 +9,6 @@ namespace ZeroAlloc.Saga;
 /// produced by <see cref="SagaStateWriter"/>. Each <c>ReadXxx</c> method
 /// consumes the bytes written by the corresponding <c>WriteXxx</c> call.
 /// </summary>
-/// <remarks>
-/// Methods take a local copy of the underlying span before slicing to keep the
-/// <c>ErrorProne.NET.Structs</c> EPS06 analyzer happy — the analyzer flags
-/// <c>Slice</c> calls on a non-<c>readonly</c> struct field as "hidden copy"
-/// candidates. Since <see cref="ReadOnlySpan{T}"/> is itself a thin pointer/length
-/// pair, taking a local does not allocate.
-/// </remarks>
 public ref struct SagaStateReader
 {
     private readonly ReadOnlySpan<byte> _data;
