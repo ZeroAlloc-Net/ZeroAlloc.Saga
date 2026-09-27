@@ -1,14 +1,1 @@
 #nullable enable
-*REMOVED*ZeroAlloc.Saga.Outbox.OutboxSagaCommandPoller
-*REMOVED*ZeroAlloc.Saga.Outbox.OutboxSagaCommandPoller.OutboxSagaCommandPoller(Microsoft.Extensions.DependencyInjection.IServiceScopeFactory! scopeFactory, ZeroAlloc.Saga.Outbox.SagaCommandRegistryDispatcher! dispatch, Microsoft.Extensions.Logging.ILogger<ZeroAlloc.Saga.Outbox.OutboxSagaCommandPoller!>! log, ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions? options = null) -> void
-*REMOVED*ZeroAlloc.Saga.Outbox.OutboxSagaCommandPoller.PollOnceAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
-*REMOVED*ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions
-*REMOVED*ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions.BatchSize.get -> int
-*REMOVED*ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions.BatchSize.init -> void
-*REMOVED*ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions.MaxRetries.get -> int
-*REMOVED*ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions.MaxRetries.init -> void
-*REMOVED*ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions.OutboxSagaPollerOptions() -> void
-*REMOVED*ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions.PollInterval.get -> System.TimeSpan
-*REMOVED*ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions.PollInterval.init -> void
-*REMOVED*ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions.RetryDelay.get -> System.TimeSpan
-*REMOVED*ZeroAlloc.Saga.Outbox.OutboxSagaPollerOptions.RetryDelay.init -> void
