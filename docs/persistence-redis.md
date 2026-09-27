@@ -60,7 +60,7 @@ services.AddSingleton<IConnectionMultiplexer>(_ =>
     ConnectionMultiplexer.Connect("localhost:6379"));
 
 // 2. AddSaga().WithRedisStore() flips the IsRedisBackend flag and registers
-//    RedisSagaStore<TSaga, TKey> as Scoped. AddOrderFulfillmentSaga() then
+//    RedisSagaStore<TSaga, TKey> as Scoped. WithOrderFulfillmentSaga() then
 //    picks up the registrar and wires per-saga state.
 services.AddMediator();
 services.AddSaga()

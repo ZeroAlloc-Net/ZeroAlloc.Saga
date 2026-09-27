@@ -131,16 +131,10 @@ for existing EfCore + Outbox consumers — the default
 The generator-emitted per-saga registration method is renamed from
 `Add{Saga}Saga()` to `With{Saga}Saga()` so it aligns with the rest of
 the builder API (`WithEfCoreStore`, `WithOutbox`, `WithResilience`).
-The legacy `Add`-prefixed name still compiles, but emits diagnostic
-`ZASAGA018` pointing at the new name. The shim will be removed in v2.
+The legacy `Add`-prefixed shim, which emitted diagnostic `ZASAGA018`,
+was removed in 4.0.
 
 ```csharp
-// Before:
-services.AddSaga()
-    .WithEfCoreStore<AppDbContext>()
-    .AddOrderFulfillmentSaga();
-
-// After:
 services.AddSaga()
     .WithEfCoreStore<AppDbContext>()
     .WithOrderFulfillmentSaga();
@@ -312,7 +306,7 @@ Hard dependencies pulled in transitively:
 | ZASAGA011 | `[CorrelationKey]` method appears to mutate state | warning |
 | ZASAGA012 | `Compensate` without `CompensateOn` — dead code | warning |
 | ZASAGA013 | Two sagas correlate on same event with different key types | warning |
-| ZASAGA018 | `Add{Saga}Saga()` is renamed to `With{Saga}Saga()` — legacy shim deprecated | warning (suppressible) |
+| ZASAGA018 | `Add{Saga}Saga()` legacy shim — removed in 4.0; use `With{Saga}Saga()` | removed |
 
 Every diagnostic links to [`docs/diagnostics.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/diagnostics.md) with a
 worked example.
