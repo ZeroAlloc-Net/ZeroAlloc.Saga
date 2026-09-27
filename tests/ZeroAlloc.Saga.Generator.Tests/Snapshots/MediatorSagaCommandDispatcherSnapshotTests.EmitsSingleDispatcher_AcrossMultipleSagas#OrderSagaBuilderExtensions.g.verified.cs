@@ -30,14 +30,6 @@ public static class OrderSagaBuilderExtensions
         builder.Services.AddTransient<INotificationHandler<global::Sample.OrderPlaced>, OrderSaga_OrderPlaced_Handler>();
         return builder;
     }
-
-    /// <summary>
-    /// Legacy alias for <see cref="WithOrderSaga"/>.
-    /// Will be removed in v2; use the <c>With</c>-prefixed name to align with the rest of the builder API.
-    /// </summary>
-    [System.Obsolete("Use WithOrderSaga() instead. Will be removed in the next major.", DiagnosticId = "ZASAGA018")]
-    public static ISagaBuilder AddOrderSaga(this ISagaBuilder builder)
-        => builder.WithOrderSaga();
 }
 
 internal sealed class OrderSagaCompensationDispatcher : ISagaCompensationDispatcher<OrderSaga>

@@ -30,14 +30,6 @@ public static class FulfillmentSagaBuilderExtensions
         builder.Services.AddTransient<INotificationHandler<global::Sample.OrderPlaced>, FulfillmentSaga_OrderPlaced_Handler>();
         return builder;
     }
-
-    /// <summary>
-    /// Legacy alias for <see cref="WithFulfillmentSaga"/>.
-    /// Will be removed in v2; use the <c>With</c>-prefixed name to align with the rest of the builder API.
-    /// </summary>
-    [System.Obsolete("Use WithFulfillmentSaga() instead. Will be removed in the next major.", DiagnosticId = "ZASAGA018")]
-    public static ISagaBuilder AddFulfillmentSaga(this ISagaBuilder builder)
-        => builder.WithFulfillmentSaga();
 }
 
 internal sealed class FulfillmentSagaCompensationDispatcher : ISagaCompensationDispatcher<FulfillmentSaga>

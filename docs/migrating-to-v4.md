@@ -25,6 +25,21 @@ does not raise it.
   Roslyn display name, `Outer.Command`, against the `Type.FullName` the bridge writes,
   `Outer+Command`. It now matches `Type.FullName`.
 
+## `Add{Saga}Saga()` is removed
+
+The legacy, `[Obsolete]`-marked `Add{Saga}Saga()` alias (diagnostic `ZASAGA018`) is gone. Rename
+every call to the `With{Saga}Saga()` name it pointed at:
+
+```csharp
+// 3.x
+services.AddSaga().AddOrderFulfillmentSaga();
+
+// 4.0
+services.AddSaga().WithOrderFulfillmentSaga();
+```
+
+This applies whether or not you use the outbox bridge.
+
 ## 1. Call `AddOutbox()` yourself
 
 `WithOutbox()` no longer brings a poller. ZeroAlloc.Outbox's `OutboxWorkerService` dispatches

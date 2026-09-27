@@ -34,14 +34,6 @@ public static class MultiFailureSagaBuilderExtensions
         builder.Services.AddTransient<INotificationHandler<global::Sample.PaymentFailed>, MultiFailureSaga_PaymentFailed_Handler>();
         return builder;
     }
-
-    /// <summary>
-    /// Legacy alias for <see cref="WithMultiFailureSaga"/>.
-    /// Will be removed in v2; use the <c>With</c>-prefixed name to align with the rest of the builder API.
-    /// </summary>
-    [System.Obsolete("Use WithMultiFailureSaga() instead. Will be removed in the next major.", DiagnosticId = "ZASAGA018")]
-    public static ISagaBuilder AddMultiFailureSaga(this ISagaBuilder builder)
-        => builder.WithMultiFailureSaga();
 }
 
 internal sealed class MultiFailureSagaCompensationDispatcher : ISagaCompensationDispatcher<MultiFailureSaga>

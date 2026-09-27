@@ -30,14 +30,6 @@ public static class ExcludedFieldSagaBuilderExtensions
         builder.Services.AddTransient<INotificationHandler<global::Sample.Started>, ExcludedFieldSaga_Started_Handler>();
         return builder;
     }
-
-    /// <summary>
-    /// Legacy alias for <see cref="WithExcludedFieldSaga"/>.
-    /// Will be removed in v2; use the <c>With</c>-prefixed name to align with the rest of the builder API.
-    /// </summary>
-    [System.Obsolete("Use WithExcludedFieldSaga() instead. Will be removed in the next major.", DiagnosticId = "ZASAGA018")]
-    public static ISagaBuilder AddExcludedFieldSaga(this ISagaBuilder builder)
-        => builder.WithExcludedFieldSaga();
 }
 
 internal sealed class ExcludedFieldSagaCompensationDispatcher : ISagaCompensationDispatcher<ExcludedFieldSaga>
