@@ -30,14 +30,6 @@ public static class EnumFieldSagaBuilderExtensions
         builder.Services.AddTransient<INotificationHandler<global::Sample.Started>, EnumFieldSaga_Started_Handler>();
         return builder;
     }
-
-    /// <summary>
-    /// Legacy alias for <see cref="WithEnumFieldSaga"/>.
-    /// Will be removed in v2; use the <c>With</c>-prefixed name to align with the rest of the builder API.
-    /// </summary>
-    [System.Obsolete("Use WithEnumFieldSaga() instead. Will be removed in the next major.", DiagnosticId = "ZASAGA018")]
-    public static ISagaBuilder AddEnumFieldSaga(this ISagaBuilder builder)
-        => builder.WithEnumFieldSaga();
 }
 
 internal sealed class EnumFieldSagaCompensationDispatcher : ISagaCompensationDispatcher<EnumFieldSaga>

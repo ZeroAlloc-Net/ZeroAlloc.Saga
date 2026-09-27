@@ -33,7 +33,7 @@ backend bridges (EfCore, Redis, etc.) get `ZASAGA1xx`, `ZASAGA2xx`, …
 | [ZASAGA015](#zasaga015) | info | — |
 | [ZASAGA016](#zasaga016) | warning | — |
 | [ZASAGA017](#zasaga017) | info | — |
-| [ZASAGA018](#zasaga018) | warning (suppressible) | — |
+| [ZASAGA018](#zasaga018) | removed in 4.0 | — |
 
 ---
 
@@ -292,28 +292,13 @@ declaration.
 
 ## ZASAGA018
 
-**`Add{Saga}Saga() is renamed; use With{Saga}Saga() instead`** (warning, suppressible)
+**`Removed in 4.0`**
 
-The generator-emitted per-saga registration method now lives under the
-`With`-prefixed name to align with the rest of the builder API
-(`WithEfCoreStore`, `WithOutbox`, `WithResilience`). The legacy
-`Add{Saga}Saga()` shim still compiles but emits this diagnostic. The
-shim will be removed in v2.
+`ZASAGA018` was the `[Obsolete]` diagnostic on the legacy `Add{Saga}Saga()`
+shim. The shim itself was removed in 4.0, so the diagnostic can no longer
+fire. This ID is retired and must not be reused for a future diagnostic.
 
-```csharp
-// ⚠ ZASAGA018
-services.AddSaga()
-    .WithEfCoreStore<AppDbContext>()
-    .AddOrderFulfillmentSaga();   // <-- replace with WithOrderFulfillmentSaga()
-
-// ✓ migrated
-services.AddSaga()
-    .WithEfCoreStore<AppDbContext>()
-    .WithOrderFulfillmentSaga();
-```
-
-To suppress during migration: add `ZASAGA018` to your csproj's
-`<NoWarn>` or use `#pragma warning disable ZASAGA018` at the call site.
+Migration: rename any remaining `Add{Saga}Saga()` call to `With{Saga}Saga()`.
 
 ## See also
 

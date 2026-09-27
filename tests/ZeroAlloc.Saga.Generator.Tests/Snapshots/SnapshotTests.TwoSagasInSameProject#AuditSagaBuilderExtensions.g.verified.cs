@@ -30,14 +30,6 @@ public static class AuditSagaBuilderExtensions
         builder.Services.AddTransient<INotificationHandler<global::Sample.OrderShipped>, AuditSaga_OrderShipped_Handler>();
         return builder;
     }
-
-    /// <summary>
-    /// Legacy alias for <see cref="WithAuditSaga"/>.
-    /// Will be removed in v2; use the <c>With</c>-prefixed name to align with the rest of the builder API.
-    /// </summary>
-    [System.Obsolete("Use WithAuditSaga() instead. Will be removed in the next major.", DiagnosticId = "ZASAGA018")]
-    public static ISagaBuilder AddAuditSaga(this ISagaBuilder builder)
-        => builder.WithAuditSaga();
 }
 
 internal sealed class AuditSagaCompensationDispatcher : ISagaCompensationDispatcher<AuditSaga>
