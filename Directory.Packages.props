@@ -30,8 +30,8 @@
     <PackageVersion Include="AdoNet.Async.Adapters" Version="1.4.1" />
     <PackageVersion Include="Testcontainers.MsSql" Version="4.15.0" />
     <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.1.0" />
-    <PackageVersion Include="ZeroAlloc.ORM" Version="2.0.0" />
-    <PackageVersion Include="ZeroAlloc.ORM.Generator" Version="2.0.0" />
+    <PackageVersion Include="ZeroAlloc.ORM" Version="2.0.1" />
+    <PackageVersion Include="ZeroAlloc.ORM.Generator" Version="2.0.1" />
   </ItemGroup>
 
   <!-- EFCore 10 dropped net8.0 support, so we pin per-TFM:
