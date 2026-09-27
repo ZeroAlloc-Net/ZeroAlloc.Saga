@@ -7,10 +7,8 @@
     <AssemblyName>OrderFulfillment</AssemblyName>
     <!-- Sample code: relax docs/style rules that don't apply to demos.
          ZAM003: Mediator's "use readonly record struct" hint — saga commands are
-                 record class on purpose (saga state may include reference fields).
-         EPC12:  ErrorProne hits Mediator-generator-emitted try/catch on ex.Message;
-                 from a separate codegen we don't own. -->
-    <NoWarn>$(NoWarn);MA0004;MA0011;MA0048;MA0051;CA1812;CA1822;CA1305;CA2007;ZAM003;EPC12</NoWarn>
+                 record class on purpose (saga state may include reference fields). -->
+    <NoWarn>$(NoWarn);MA0004;MA0011;MA0048;MA0051;CA1812;CA1822;CA1305;CA2007;ZAM003</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="ZeroAlloc.Mediator" />

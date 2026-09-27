@@ -1,0 +1,6 @@
+root = true
+
+[*.cs]
+# Enforce readonly structs and readonly struct members.
+dotnet_diagnostic.IDE0250.severity = warning
+dotnet_diagnostic.IDE0251.severity = warning

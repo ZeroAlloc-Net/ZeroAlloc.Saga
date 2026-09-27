@@ -3,7 +3,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <!-- Same set the EF Core backend's tests waive, for the same reasons. -->
-    <NoWarn>$(NoWarn);MA0048;MA0051;ZAM003;EPC12;EPS06</NoWarn>
+    <NoWarn>$(NoWarn);MA0048;MA0051;ZAM003</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />

@@ -36,15 +36,13 @@
     <!-- Sample relaxations.
          ZAM003: Mediator's "use readonly record struct" hint — sample mirrors the
                  saga test fixtures which use record class.
-         EPC12:  ErrorProne hits Mediator-generator-emitted try/catch on ex.Message;
-                 from a separate codegen we don't own.
          IL2026/IL3050: EF Core's DbContext ctor + EnsureCreatedAsync carry
                  RequiresUnreferencedCode/RequiresDynamicCode attributes that
                  propagate into any caller. EF Core 9 is structurally
                  marked as needing JIT/dynamic-code; the runtime library
                  (ZeroAlloc.Saga.EfCore) builds clean under the same
                  analyzer set. -->
-    <NoWarn>$(NoWarn);MA0004;MA0011;MA0048;MA0051;CA1812;CA1305;CA2007;ZAM003;EPC12;IL2026;IL3050</NoWarn>
+    <NoWarn>$(NoWarn);MA0004;MA0011;MA0048;MA0051;CA1812;CA1305;CA2007;ZAM003;IL2026;IL3050</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="ZeroAlloc.Mediator" />
