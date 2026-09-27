@@ -79,19 +79,16 @@ Calling both throws `InvalidOperationException`.
 
 ## Composition with the outbox bridge
 
-`WithRedisStore()` + `WithOutbox()` is **partially supported in this release**:
+For atomic dispatch under Redis, add `ZeroAlloc.Saga.Outbox.Redis` and call
+`WithRedisOutbox()` after `WithOutbox()`. Its `RedisSagaUnitOfWork` batches outbox writes into
+the saga store's `MULTI/EXEC`, and its `RedisOutboxStore` is the store ZeroAlloc.Outbox's worker
+claims from. Register the worker with `AddOutbox()`. See
+[`docs/outbox-redis.md`](outbox-redis.md).
 
-- `WithOutbox()` registers the default `OutboxStoreSagaUnitOfWork` (passthrough
-  to `IOutboxStore.EnqueueDeferredAsync`). With an EfCore-backed `IOutboxStore`
-  that's atomic via the shared `DbContext`. With a non-deferred Redis-backed
-  outbox store, the `EnqueueAsync` fallback auto-commits — the dispatch row
-  may exist in Redis even if the saga state save fails.
-- The forthcoming **`ZeroAlloc.Saga.Outbox.Redis`** package (Stage 3) ships a
-  Redis-native `RedisSagaUnitOfWork` that batches outbox writes into the
-  saga store's `MULTI/EXEC`, restoring atomicity end-to-end. Until that
-  ships, the `Saga.Redis` + `Saga.Outbox` combination has at-least-once
-  dispatch semantics — step command handlers must be idempotent
-  (`ZASAGA015`).
+Without `WithRedisOutbox()`, `WithOutbox()` falls back to `OutboxStoreSagaUnitOfWork`, which
+writes through the configured `IOutboxStore`. That is atomic with an EF Core outbox store sharing
+the saga store's `DbContext`, which a Redis saga store cannot. Dispatch is then at-least-once,
+and step command handlers must be idempotent (`ZASAGA015`).
 
 ## `RedisSagaStoreOptions`
 
@@ -105,6 +102,10 @@ Calling both throws `InvalidOperationException`.
 `RedisSagaStoreOptions` extends `SagaRetryOptions`, so the
 generator-emitted handler reads the Redis-tuned retry knobs through the
 backend-agnostic surface.
+
+### Redis Cluster
+
+Redis Cluster is not tested with `ZeroAlloc.Saga.Redis`, and `ZeroAlloc.Saga.Outbox.Redis` does not support it; see [Redis Cluster](outbox-redis.md#redis-cluster).
 
 ## AOT compatibility
 

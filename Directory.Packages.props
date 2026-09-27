@@ -48,11 +48,12 @@
   <ItemGroup>
 
     <!-- Outbox bridge deps -->
-    <PackageVersion Include="ZeroAlloc.Outbox" Version="2.7.2" />
-    <PackageVersion Include="ZeroAlloc.Outbox.EfCore" Version="2.7.2" />
+    <PackageVersion Include="ZeroAlloc.Outbox" Version="3.0.1" />
+    <PackageVersion Include="ZeroAlloc.Outbox.EfCore" Version="3.0.1" />
     <PackageVersion Include="ZeroAlloc.Serialisation" Version="2.4.4" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
 
     <!-- Resilience bridge deps -->
     <PackageVersion Include="ZeroAlloc.Resilience" Version="3.1.*" />

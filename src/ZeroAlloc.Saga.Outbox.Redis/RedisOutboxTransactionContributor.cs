@@ -43,8 +43,8 @@ public sealed class RedisOutboxTransactionContributor : IRedisSagaTransactionCon
                 new HashEntry("status", "Pending"),
                 new HashEntry("createdAt", w.CreatedAt.ToUnixTimeMilliseconds()),
             ]);
-            // Sorted set with score = next-retry tick (initially createdAt) so
-            // FetchPendingAsync finds entries via ZRANGEBYSCORE ≤ now.
+            // Sorted set with score = due time (initially createdAt) and no lease fields,
+            // so RedisOutboxStore.ClaimPendingAsync finds the entry via ZRANGEBYSCORE ≤ now.
             _ = transaction.SortedSetAddAsync(pendingKey, w.Id.ToString(), w.CreatedAt.ToUnixTimeMilliseconds());
         }
     }

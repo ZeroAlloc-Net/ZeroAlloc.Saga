@@ -39,7 +39,7 @@ optional jitter.
 |---|---|
 | Receiver-side transient failures (HTTP 5xx, network blip) | **Use it.** Retry policy wraps `IMediator.Send`. |
 | Downstream API is occasionally rate-limited or rejecting load | Use a circuit-breaker — saga short-circuits on Open instead of grinding through the retry budget. |
-| `WithOutbox()` already wired | The bridge wraps the **enqueue** path, not the delivery path. Receiver-side retries belong in `OutboxSagaPollerOptions` (which has its own retry/dead-letter built in). See "Composition with the outbox bridge" below. |
+| `WithOutbox()` already wired | The bridge wraps the **enqueue** path, not the delivery path. Receiver-side retries belong to ZeroAlloc.Outbox's worker: `OutboxOptions.MaxAttempts` and `RetryBaseDelay`, set through `AddOutbox()`. See "Composition with the outbox bridge" below. |
 | InMemory backend + simple in-process saga | Optional. The InMemory store doesn't OCC-conflict, so the only failure source is the receiver — retry is helpful. |
 
 ## Wiring
@@ -85,7 +85,7 @@ extensions:
 
 ## Composition with the outbox bridge
 
-The outbox bridge defers actual delivery to a poller. The dispatcher
+The outbox bridge defers actual delivery to ZeroAlloc.Outbox's worker. The dispatcher
 the saga handler invokes does only one thing: serialise the command
 and `Add` a tracked `OutboxMessageEntity` to the scoped `DbContext`.
 This path has very few transient failure modes — the serialiser
@@ -93,23 +93,20 @@ throws (deterministic, not retriable) or DI fails to find an
 `ISerializer<T>` (deterministic).
 
 Receiver-side resilience under outbox lives one layer further out, in
-`OutboxSagaPollerOptions`:
+ZeroAlloc.Outbox's `OutboxOptions`:
 
 ```csharp
-services.Configure<OutboxSagaPollerOptions>(o =>
+services.AddOutbox(o =>
 {
-    o.MaxRetries = 5;
-    o.RetryDelay = TimeSpan.FromSeconds(30);
-    // Plus the poller's built-in dead-letter when MaxRetries is hit.
+    o.MaxAttempts    = 5;                        // then dead-letter
+    o.RetryBaseDelay = TimeSpan.FromSeconds(30); // 30 s, 60 s, 120 s, ...
 });
 ```
 
-The poller's per-entry retry is the right injection point for
-"receiver returned 503, try again later." A future v2 of
-`Saga.Resilience` may plug a `ResiliencePipeline` directly into the
-poller's reflective `SagaCommandRegistry.DispatchAsync` invocation
-to bring full circuit-breaker + rate-limit semantics to the delivery
-layer; the v1 surface is the no-outbox synchronous path.
+The worker's per-entry retry is the right injection point for
+"receiver returned 503, try again later." For in-process retries around
+a dispatcher of your own, see `ZeroAlloc.Outbox.Resilience`'s `WithResilience`.
+The v1 surface of `Saga.Resilience` is the no-outbox synchronous path.
 
 ## Policy primitives
 
@@ -200,8 +197,8 @@ typical retry count, or use a separate breaker per call site.
   need different retry budgets per command, register a single saga
   with multiple `WithResilience` blocks scoped under different
   builders (one builder per saga group), or wait for v2.
-- **Outbox poller-side resilience.** Documented above. v1 doesn't
-  reach into the poller's reflective dispatch path.
+- **Outbox-side resilience.** Documented above: retries and dead-lettering under the
+  outbox bridge are ZeroAlloc.Outbox's, configured through `OutboxOptions`.
 - **No telemetry hooks.** `CircuitBreakerPolicy.State` is publicly
   readable, but the bridge doesn't yet emit OTel spans/metrics for
   retry counts, breaker transitions, etc. A future
@@ -211,6 +208,5 @@ typical retry count, or use a separate breaker per call site.
 
 - [`docs/persistence-efcore.md`](persistence-efcore.md) — base
   `Saga.EfCore` setup, OCC retry, idempotency.
-- [`docs/outbox.md`](outbox.md) — atomic dispatch + the
-  `OutboxSagaPollerOptions` retry knobs.
+- [`docs/outbox.md`](outbox.md) — atomic dispatch and its dispatch options.
 - `ZeroAlloc.Resilience` — full attribute and policy reference.

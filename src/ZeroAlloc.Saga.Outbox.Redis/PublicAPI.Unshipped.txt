@@ -1,1 +1,11 @@
 #nullable enable
+*REMOVED*ZeroAlloc.Saga.Outbox.Redis.RedisOutboxStore.DeadLetterAsync(ZeroAlloc.Outbox.OutboxMessageId id, string! error, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+*REMOVED*ZeroAlloc.Saga.Outbox.Redis.RedisOutboxStore.FetchPendingAsync(int batchSize, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<ZeroAlloc.Outbox.OutboxEntry!>!>
+*REMOVED*ZeroAlloc.Saga.Outbox.Redis.RedisOutboxStore.MarkFailedAsync(ZeroAlloc.Outbox.OutboxMessageId id, int retryCount, System.DateTimeOffset nextRetryAt, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+*REMOVED*ZeroAlloc.Saga.Outbox.Redis.RedisOutboxStore.MarkSucceededAsync(ZeroAlloc.Outbox.OutboxMessageId id, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.Outbox.Redis.RedisOutboxStore.ClaimPendingAsync(int batchSize, ZeroAlloc.Outbox.OutboxLease lease, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<ZeroAlloc.Outbox.OutboxEntry!>!>
+ZeroAlloc.Saga.Outbox.Redis.RedisOutboxStore.DeadLetterAsync(ZeroAlloc.Outbox.OutboxMessageId id, string! error, ZeroAlloc.Outbox.OutboxLease lease, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<bool>
+ZeroAlloc.Saga.Outbox.Redis.RedisOutboxStore.MarkFailedAsync(ZeroAlloc.Outbox.OutboxMessageId id, int retryCount, System.DateTimeOffset nextRetryAt, ZeroAlloc.Outbox.OutboxLease lease, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<bool>
+ZeroAlloc.Saga.Outbox.Redis.RedisOutboxStore.MarkSucceededAsync(ZeroAlloc.Outbox.OutboxMessageId id, ZeroAlloc.Outbox.OutboxLease lease, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<bool>
+ZeroAlloc.Saga.Outbox.Redis.RedisOutboxStore.ReleaseLeasesAsync(System.Collections.Generic.IReadOnlyList<ZeroAlloc.Outbox.OutboxMessageId>! ids, ZeroAlloc.Outbox.OutboxLease lease, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<int>
+ZeroAlloc.Saga.Outbox.Redis.RedisOutboxStore.RenewLeaseAsync(ZeroAlloc.Outbox.OutboxMessageId id, ZeroAlloc.Outbox.OutboxLease lease, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<bool>

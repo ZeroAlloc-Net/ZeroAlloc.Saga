@@ -35,8 +35,8 @@ public interface ISagaUnitOfWork
     /// Stage an outbox row write to be committed atomically with the next
     /// <see cref="ISagaStore{TSaga,TKey}.SaveAsync"/> call from this scope.
     /// </summary>
-    /// <param name="typeName">Fully-qualified name of the command type, used by
-    /// the poller's reflective dispatch path to identify the deserializer.</param>
+    /// <param name="typeName">Fully-qualified name of the command type. The outbox dispatcher
+    /// registered for that name deserializes and dispatches the entry.</param>
     /// <param name="payload">Serialized command bytes.</param>
     /// <param name="ct">Cancellation token.</param>
     ValueTask EnlistOutboxRowAsync(string typeName, ReadOnlyMemory<byte> payload, CancellationToken ct);

@@ -9,33 +9,56 @@ using ZeroAlloc.Outbox;
 namespace ZeroAlloc.Saga.Outbox.Redis;
 
 /// <summary>
-/// Redis-backed <see cref="IOutboxStore"/>. Stores each entry as a Hash
-/// (<c>{KeyPrefix}:entry:{id}</c>) and tracks pending IDs in a sorted set
-/// (<c>{KeyPrefix}:pending</c>) keyed by the timestamp the poller should retry at.
+/// Redis-backed <see cref="IOutboxStore"/> on the ZeroAlloc.Outbox 3.0 lease contract. Stores each
+/// entry as a Hash (<c>{KeyPrefix}:entry:{id}</c>) and tracks pending ids in the sorted set
+/// <c>{KeyPrefix}:pending</c>.
 /// </summary>
 /// <remarks>
-/// Used by <see cref="OutboxSagaCommandPoller"/> to drain enqueued saga commands.
-/// The atomicity-with-saga-save story is owned by <see cref="RedisOutboxTransactionContributor"/>;
-/// this class only implements the read/mark/dead-letter side of the contract.
 /// <para>
-/// The deferred-write override (<see cref="EnqueueDeferredAsync"/>) is intentionally a
-/// no-op that throws — direct enqueue under <c>WithRedisStore</c> + <c>WithOutbox</c> is
-/// not the supported path; <see cref="RedisSagaUnitOfWork"/> is the canonical entry point.
-/// <see cref="EnqueueAsync"/> is supported (for the rare consumer using <c>RedisOutboxStore</c>
-/// outside the saga bridge) and persists the entry directly with no transactional grouping.
+/// ZeroAlloc.Outbox's <c>OutboxWorkerService</c> drives it: it claims a batch under a lease, renews
+/// each entry's lease right before dispatching it, records the outcome, and releases what it did
+/// not finish. Each of those operations is one Lua script, run atomically on the server, so two
+/// hosts never claim the same entry and a mark applies only while its host holds the lease.
+/// </para>
+/// <para>
+/// A pending entry's score is its lease expiry while it is leased, and the time it is next due
+/// otherwise. A claim therefore sees only due, unleased entries, and an entry whose holder died
+/// becomes claimable again when its lease runs out.
+/// </para>
+/// <para>
+/// The atomicity-with-saga-save story is owned by <see cref="RedisOutboxTransactionContributor"/>.
+/// <see cref="EnqueueDeferredAsync"/> throws, because <see cref="RedisSagaUnitOfWork"/> is the
+/// supported write path. <see cref="EnqueueAsync"/> persists an entry directly, for the rare
+/// consumer using this store outside the saga bridge, with no transactional grouping.
+/// </para>
+/// <para>
+/// Times come from this host's clock, as in the other ZeroAlloc.Outbox stores, so hosts need
+/// roughly synchronised clocks. Redis Cluster is not supported: the claim script accesses entry
+/// hashes it derives from the key prefix instead of declaring each one in <c>KEYS</c>, and the
+/// saga store's MULTI/EXEC spans saga and outbox keys. A key-prefixed <see cref="IDatabase"/>
+/// works, because every key a script touches is derived from <c>KEYS</c>.
 /// </para>
 /// </remarks>
 public sealed class RedisOutboxStore : IOutboxStore
 {
+    /// <summary>Values the claim script returns per entry: id, typeName, payload, retryCount, createdAt.</summary>
+    private const int ClaimedValuesPerEntry = 5;
+
     private readonly IDatabase _db;
-    private readonly RedisOutboxOptions _options;
+    private readonly string _entryKeyPrefix;
+    private readonly RedisKey _pendingKey;
+    private readonly RedisKey _succeededKey;
+    private readonly RedisKey _deadLetterKey;
 
     public RedisOutboxStore(IDatabase db, RedisOutboxOptions options)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(options);
         _db = db;
-        _options = options;
+        _entryKeyPrefix = $"{options.KeyPrefix}:entry:";
+        _pendingKey = $"{options.KeyPrefix}:pending";
+        _succeededKey = $"{options.KeyPrefix}:succeeded";
+        _deadLetterKey = $"{options.KeyPrefix}:deadletter";
     }
 
     /// <inheritdoc />
@@ -54,20 +77,19 @@ public sealed class RedisOutboxStore : IOutboxStore
                 "wire WithRedisOutbox() and use RedisSagaUnitOfWork (which joins the saga store's " +
                 "MULTI/EXEC). Otherwise pass null for the transaction parameter.");
         }
-        var id = OutboxMessageId.New();
-        var entryKey = $"{_options.KeyPrefix}:entry:{id}";
-        var pendingKey = $"{_options.KeyPrefix}:pending";
+        var id = OutboxMessageId.New().ToString();
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
+        // No lease fields: absent means unleased.
         var tran = _db.CreateTransaction();
-        _ = tran.HashSetAsync(entryKey, [
+        _ = tran.HashSetAsync(EntryKey(id), [
             new HashEntry("typeName", typeName),
             new HashEntry("payload", payload.ToArray()),
             new HashEntry("retryCount", 0),
             new HashEntry("status", "Pending"),
             new HashEntry("createdAt", now),
         ]);
-        _ = tran.SortedSetAddAsync(pendingKey, id.ToString(), now);
+        _ = tran.SortedSetAddAsync(_pendingKey, id, now);
         await tran.ExecuteAsync().ConfigureAwait(false);
     }
 
@@ -87,95 +109,147 @@ public sealed class RedisOutboxStore : IOutboxStore
     }
 
     /// <inheritdoc />
-    public async ValueTask<IReadOnlyList<OutboxEntry>> FetchPendingAsync(int batchSize, CancellationToken ct)
+    public async ValueTask<IReadOnlyList<OutboxEntry>> ClaimPendingAsync(int batchSize, OutboxLease lease, CancellationToken ct)
     {
-        var pendingKey = $"{_options.KeyPrefix}:pending";
-        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var ids = await _db.SortedSetRangeByScoreAsync(pendingKey, stop: now, take: batchSize).ConfigureAwait(false);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(batchSize);
+        ThrowIfNoHost(lease);
+        ThrowIfShorterThanOneMillisecond(lease);
 
-        var results = new List<OutboxEntry>(ids.Length);
-        foreach (var idValue in ids)
+        var now = DateTimeOffset.UtcNow;
+        var result = await _db.ScriptEvaluateAsync(
+            RedisOutboxScripts.Claim,
+            [_pendingKey, (RedisKey)_entryKeyPrefix],
+            [
+                now.ToUnixTimeMilliseconds(),
+                batchSize,
+                lease.HostId,
+                (now + lease.Duration).ToUnixTimeMilliseconds(),
+            ]).ConfigureAwait(false);
+
+        var values = (RedisResult[]?)result;
+        if (values is null || values.Length == 0)
+            return Array.Empty<OutboxEntry>();
+
+        var entries = new List<OutboxEntry>(values.Length / ClaimedValuesPerEntry);
+        for (var i = 0; i + ClaimedValuesPerEntry <= values.Length; i += ClaimedValuesPerEntry)
         {
-            var idStr = (string?)idValue;
-            if (idStr is null) continue;
-            // If the sorted-set member can't be parsed back to an OutboxMessageId, the
-            // poller can't safely Mark*/DeadLetter it (the round-trip key wouldn't match).
-            // Skip and leave the entry in pending — operator intervention is preferable
-            // to fabricating a fresh id that diverges from what's in Redis.
-            if (!OutboxMessageId.TryParse(idStr, null, out var id)) continue;
-            var entryKey = $"{_options.KeyPrefix}:entry:{idStr}";
-            var fields = await _db.HashGetAsync(entryKey,
-                [(RedisValue)"typeName", (RedisValue)"payload", (RedisValue)"retryCount", (RedisValue)"createdAt"])
-                .ConfigureAwait(false);
+            // An id that does not parse was not written by this store. It stays leased, and is
+            // offered again when the lease runs out; nothing can mark it without a parsed id.
+            if (!OutboxMessageId.TryParse((string?)values[i], null, out var id))
+                continue;
 
-            var typeName = (string?)fields[0];
-            var payload = (byte[]?)fields[1];
-            if (typeName is null || payload is null) continue;
-
-            results.Add(new OutboxEntry
+            // A pending entry without a type name or payload is returned with empty values, so
+            // the worker dead-letters it for having no dispatcher rather than it disappearing.
+            entries.Add(new OutboxEntry
             {
                 Id = id,
-                TypeName = typeName,
-                RawPayload = payload,
-                RetryCount = (int)(fields[2].IsNull ? 0 : (long)fields[2]),
-                CreatedAt = DateTimeOffset.FromUnixTimeMilliseconds(fields[3].IsNull ? 0 : (long)fields[3]),
+                TypeName = (string?)values[i + 1] ?? string.Empty,
+                RawPayload = (byte[]?)values[i + 2] ?? [],
+                RetryCount = (int)(long)values[i + 3],
+                CreatedAt = DateTimeOffset.FromUnixTimeMilliseconds((long)values[i + 4]),
             });
         }
-        return results;
+        return entries;
     }
 
     /// <inheritdoc />
-    public async ValueTask MarkSucceededAsync(OutboxMessageId id, CancellationToken ct)
+    public async ValueTask<bool> RenewLeaseAsync(OutboxMessageId id, OutboxLease lease, CancellationToken ct)
     {
-        var entryKey = $"{_options.KeyPrefix}:entry:{id}";
-        var pendingKey = $"{_options.KeyPrefix}:pending";
-        var succeededKey = $"{_options.KeyPrefix}:succeeded";
+        ThrowIfNoHost(lease);
+        ThrowIfShorterThanOneMillisecond(lease);
 
-        var tran = _db.CreateTransaction();
-        _ = tran.HashSetAsync(entryKey, [
-            new HashEntry("status", "Succeeded"),
-            new HashEntry("processedAt", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()),
-        ]);
-        _ = tran.SortedSetRemoveAsync(pendingKey, id.ToString());
-        _ = tran.SetAddAsync(succeededKey, id.ToString());
-        await tran.ExecuteAsync().ConfigureAwait(false);
+        var now = DateTimeOffset.UtcNow;
+        var idText = id.ToString();
+        var result = await _db.ScriptEvaluateAsync(
+            RedisOutboxScripts.Renew,
+            [EntryKey(idText), _pendingKey],
+            [idText, lease.HostId, now.ToUnixTimeMilliseconds(), (now + lease.Duration).ToUnixTimeMilliseconds()])
+            .ConfigureAwait(false);
+        return (long)result == 1;
     }
 
     /// <inheritdoc />
-    public async ValueTask MarkFailedAsync(OutboxMessageId id, int retryCount, DateTimeOffset nextRetryAt, CancellationToken ct)
+    public async ValueTask<int> ReleaseLeasesAsync(IReadOnlyList<OutboxMessageId> ids, OutboxLease lease, CancellationToken ct)
     {
-        var entryKey = $"{_options.KeyPrefix}:entry:{id}";
-        var pendingKey = $"{_options.KeyPrefix}:pending";
-        var score = nextRetryAt.ToUnixTimeMilliseconds();
+        ArgumentNullException.ThrowIfNull(ids);
+        ThrowIfNoHost(lease);
+        if (ids.Count == 0)
+            return 0;
 
-        var tran = _db.CreateTransaction();
-        _ = tran.HashSetAsync(entryKey, [
-            new HashEntry("retryCount", retryCount),
-            new HashEntry("status", "Failed"),
-            new HashEntry("nextRetryAt", score),
-        ]);
-        // Re-add to pending sorted set with the new (later) score so the poller picks
-        // it up again at nextRetryAt — ZADD overwrites the existing score for the member.
-        _ = tran.SortedSetAddAsync(pendingKey, id.ToString(), score);
-        await tran.ExecuteAsync().ConfigureAwait(false);
+        // Entry hashes go in KEYS, so a key-prefixed IDatabase prefixes them; the ids go in ARGV
+        // as the pending-set members, with ARGV[i + 1] belonging to KEYS[i].
+        var keys = new RedisKey[ids.Count + 1];
+        var values = new RedisValue[ids.Count + 2];
+        keys[0] = _pendingKey;
+        values[0] = lease.HostId;
+        values[1] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        for (var i = 0; i < ids.Count; i++)
+        {
+            var idText = ids[i].ToString();
+            keys[i + 1] = EntryKey(idText);
+            values[i + 2] = idText;
+        }
+
+        var result = await _db.ScriptEvaluateAsync(RedisOutboxScripts.Release, keys, values)
+            .ConfigureAwait(false);
+        return (int)(long)result;
     }
 
     /// <inheritdoc />
-    public async ValueTask DeadLetterAsync(OutboxMessageId id, string error, CancellationToken ct)
+    public async ValueTask<bool> MarkSucceededAsync(OutboxMessageId id, OutboxLease lease, CancellationToken ct)
     {
-        var entryKey = $"{_options.KeyPrefix}:entry:{id}";
-        var pendingKey = $"{_options.KeyPrefix}:pending";
-        var deadKey = $"{_options.KeyPrefix}:deadletter";
+        ThrowIfNoHost(lease);
 
-        var tran = _db.CreateTransaction();
-        _ = tran.HashSetAsync(entryKey, [
-            new HashEntry("status", "DeadLetter"),
-            new HashEntry("error", error ?? string.Empty),
-            new HashEntry("processedAt", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()),
-        ]);
-        _ = tran.SortedSetRemoveAsync(pendingKey, id.ToString());
-        _ = tran.SetAddAsync(deadKey, id.ToString());
-        await tran.ExecuteAsync().ConfigureAwait(false);
+        var idText = id.ToString();
+        var result = await _db.ScriptEvaluateAsync(
+            RedisOutboxScripts.MarkSucceeded,
+            [EntryKey(idText), _pendingKey, _succeededKey],
+            [idText, lease.HostId, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()]).ConfigureAwait(false);
+        return (long)result == 1;
     }
 
+    /// <inheritdoc />
+    public async ValueTask<bool> MarkFailedAsync(
+        OutboxMessageId id, int retryCount, DateTimeOffset nextRetryAt, OutboxLease lease, CancellationToken ct)
+    {
+        ThrowIfNoHost(lease);
+
+        var idText = id.ToString();
+        var result = await _db.ScriptEvaluateAsync(
+            RedisOutboxScripts.MarkFailed,
+            [EntryKey(idText), _pendingKey],
+            [idText, lease.HostId, retryCount, nextRetryAt.ToUnixTimeMilliseconds()]).ConfigureAwait(false);
+        return (long)result == 1;
+    }
+
+    /// <inheritdoc />
+    public async ValueTask<bool> DeadLetterAsync(OutboxMessageId id, string error, OutboxLease lease, CancellationToken ct)
+    {
+        ThrowIfNoHost(lease);
+
+        var idText = id.ToString();
+        var result = await _db.ScriptEvaluateAsync(
+            RedisOutboxScripts.DeadLetter,
+            [EntryKey(idText), _pendingKey, _deadLetterKey],
+            [idText, lease.HostId, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), error ?? string.Empty])
+            .ConfigureAwait(false);
+        return (long)result == 1;
+    }
+
+    private RedisKey EntryKey(string id) => _entryKeyPrefix + id;
+
+    // A blank host id identifies no host, and the scripts would treat it as a lease holder.
+    private static void ThrowIfNoHost(OutboxLease lease)
+        => ArgumentException.ThrowIfNullOrWhiteSpace(lease.HostId, nameof(lease));
+
+    // Lease times are whole unix milliseconds. A shorter lease would truncate to lockedUntil ==
+    // now, and a second claim in the same millisecond could take the entry.
+    private static void ThrowIfShorterThanOneMillisecond(OutboxLease lease)
+    {
+        if (lease.Duration < TimeSpan.FromMilliseconds(1))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(lease), lease.Duration, "OutboxLease.Duration must be at least 1 millisecond.");
+        }
+    }
 }

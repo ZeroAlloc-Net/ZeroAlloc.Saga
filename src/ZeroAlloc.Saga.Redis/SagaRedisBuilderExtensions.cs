@@ -26,15 +26,12 @@ public static class SagaRedisBuilderExtensions
     /// <para>Mutually exclusive with <c>WithEfCoreStore&lt;TContext&gt;()</c>: calling both
     /// throws <see cref="InvalidOperationException"/> via <see cref="SagaBuilderMutationExtensions.SetDurableStore"/>.</para>
     ///
-    /// <para>Composition with <c>WithOutbox()</c>: <em>limited</em> in this release.
-    /// <c>WithOutbox()</c> registers <c>OutboxStoreSagaUnitOfWork</c> as the default
-    /// <see cref="ISagaUnitOfWork"/>, which delegates to the configured
-    /// <c>IOutboxStore.EnqueueDeferredAsync</c>. With an EfCore-backed
-    /// <c>IOutboxStore</c> that's atomic; with a non-deferred Redis-backed outbox
-    /// store, atomicity is not guaranteed in this release. The forthcoming
-    /// <c>ZeroAlloc.Saga.Outbox.Redis</c> package (Stage 3) ships a
-    /// <c>RedisSagaUnitOfWork</c> that batches outbox writes into the saga store's
-    /// MULTI/EXEC for true atomic dispatch under Redis.</para>
+    /// <para>Composition with <c>WithOutbox()</c>: add <c>ZeroAlloc.Saga.Outbox.Redis</c> and
+    /// call <c>WithRedisOutbox()</c> after <c>WithOutbox()</c>. Its <c>RedisSagaUnitOfWork</c>
+    /// batches outbox writes into this store's MULTI/EXEC, so saga state and outbox row commit
+    /// together. Without it, <c>WithOutbox()</c>'s default <see cref="ISagaUnitOfWork"/> writes
+    /// through the configured <c>IOutboxStore</c>, which is not atomic with a Redis saga
+    /// store.</para>
     /// </remarks>
     public static ISagaBuilder WithRedisStore(this ISagaBuilder builder, Action<RedisSagaStoreOptions>? configure = null)
     {

@@ -30,11 +30,11 @@ public static class SagaResilienceBuilderExtensions
     /// <para><strong>Composition with the outbox bridge.</strong> Under
     /// <c>ZeroAlloc.Saga.Outbox</c> the dispatcher's call site is the deferred-enqueue
     /// path, which rarely sees transient failures — actual delivery happens later
-    /// inside <c>OutboxSagaCommandPoller</c>. For receiver-side retry/circuit-breaker
-    /// under outbox, prefer <c>OutboxSagaPollerOptions</c>; <see cref="WithResilience"/>
-    /// is most useful on the no-outbox synchronous path. Wrapping the outbox dispatcher
-    /// is permitted but emits a one-shot warning at first resolve to surface this caveat.
-    /// See <c>docs/resilience.md</c>.</para>
+    /// inside ZeroAlloc.Outbox's <c>OutboxWorkerService</c>. For receiver-side retries
+    /// under outbox, set <c>OutboxOptions.MaxAttempts</c> and <c>RetryBaseDelay</c> through
+    /// <c>AddOutbox()</c>; <see cref="WithResilience"/> is most useful on the no-outbox
+    /// synchronous path. Wrapping the outbox dispatcher is permitted but emits a one-shot
+    /// warning at first resolve to surface this caveat. See <c>docs/resilience.md</c>.</para>
     /// </remarks>
     /// <summary>The type name (not a typed reference, to avoid a project dep on Saga.Outbox) of the
     /// outbox dispatcher. Used by <see cref="WithResilience"/> to detect a low-value composition
@@ -78,7 +78,7 @@ public static class SagaResilienceBuilderExtensions
                     var logger = loggerFactory?.CreateLogger("ZeroAlloc.Saga.Resilience.SagaResilienceBuilderExtensions")
                         ?? (ILogger)NullLogger.Instance;
                     logger.LogWarning(
-                        "WithResilience() is wrapping ZeroAlloc.Saga.Outbox.OutboxSagaCommandDispatcher. The wrap covers the deferred-enqueue path, which rarely sees transient failures. For receiver-side retry/circuit-breaker under the outbox bridge, configure OutboxSagaPollerOptions instead. See docs/resilience.md.");
+                        "WithResilience() is wrapping ZeroAlloc.Saga.Outbox.OutboxSagaCommandDispatcher. The wrap covers the deferred-enqueue path, which rarely sees transient failures. For receiver-side retries under the outbox bridge, set OutboxOptions.MaxAttempts and RetryBaseDelay through AddOutbox() instead. See docs/resilience.md.");
                 }
 
                 var inner = ResolveInner(existing, sp);

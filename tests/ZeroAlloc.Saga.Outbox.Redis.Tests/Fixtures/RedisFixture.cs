@@ -5,7 +5,7 @@ using Testcontainers.Redis;
 
 namespace ZeroAlloc.Saga.Outbox.Redis.Tests.Fixtures;
 
-public sealed class RedisFixture : IAsyncDisposable
+public sealed class RedisFixture : IAsyncDisposable, IAsyncLifetime
 {
     private readonly RedisContainer _container;
     public IConnectionMultiplexer Multiplexer { get; private set; } = null!;
@@ -27,4 +27,6 @@ public sealed class RedisFixture : IAsyncDisposable
         if (Multiplexer is not null) await Multiplexer.DisposeAsync().ConfigureAwait(false);
         await _container.DisposeAsync().ConfigureAwait(false);
     }
+
+    Task IAsyncLifetime.DisposeAsync() => DisposeAsync().AsTask();
 }

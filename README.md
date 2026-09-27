@@ -86,6 +86,7 @@ sagas.
 
 ```csharp
 services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect("..."));
+services.AddOutbox();         // ZeroAlloc.Outbox's worker dispatches the saga commands
 services.AddSaga()
     .WithRedisStore()
     .WithOutbox()
@@ -94,8 +95,8 @@ services.AddSaga()
 ```
 
 See [`docs/outbox-redis.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox-redis.md) for the full atomicity
-contract, the `IRedisSagaTransactionContributor` extension point, and the
-poller integration.
+contract, the `IRedisSagaTransactionContributor` extension point, and how dispatch claims entries
+under a lease.
 
 ### `ZeroAlloc.Saga.Redis` (new package)
 
@@ -113,8 +114,8 @@ services.AddSaga()
 ```
 
 Mutually exclusive with `WithEfCoreStore<TContext>()`. Composition with
-`WithOutbox()` works for the dispatch path but full atomic-commit
-guarantees await Stage 3 (`ZeroAlloc.Saga.Outbox.Redis`). Requires
+`WithOutbox()` alone gives at-least-once dispatch; add `ZeroAlloc.Saga.Outbox.Redis` and
+`WithRedisOutbox()` for full atomic-commit guarantees, see above. Requires
 `StackExchange.Redis` 2.8+. See [`docs/persistence-redis.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/persistence-redis.md).
 
 ### `ISagaUnitOfWork` abstraction (Phase 3a-2 stage 1)
@@ -177,16 +178,18 @@ where a state update can succeed without the corresponding command being
 delivered.
 
 ```csharp
+services.AddOutbox().WithEfCore<AppDbContext>();   // the worker that dispatches saga commands
 services.AddSaga()
     .WithEfCoreStore<AppDbContext>(opts => opts.MaxRetryAttempts = 3)
     .WithOutbox()                        // <-- one fluent call
     .WithOrderFulfillmentSaga();
 ```
 
-Requires `ZeroAlloc.Outbox` 2.4.0+ (introduces
-`IOutboxStore.EnqueueDeferredAsync`) and `ZeroAlloc.Serialisation` 2.1.0+.
+Requires `ZeroAlloc.Outbox` 3.0.1+ and `ZeroAlloc.Serialisation` 2.1.0+. EF Core users also need
+`ZeroAlloc.Outbox.EfCore` 3.0.1 or later; Saga's floor on `ZeroAlloc.Outbox` does not raise it.
 See [`docs/outbox.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox.md) for the full setup, marker
-diagnostics (`ZASAGA016`/`ZASAGA017`), and poller knobs.
+diagnostics (`ZASAGA016`/`ZASAGA017`), and dispatch options. Upgrading from 3.x: see
+[`docs/migrating-to-v4.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/migrating-to-v4.md).
 
 ### `ZeroAlloc.Saga` runtime
 

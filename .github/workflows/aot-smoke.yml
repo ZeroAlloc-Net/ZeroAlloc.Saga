@@ -89,17 +89,17 @@ jobs:
             10.0.x
       - name: Restore solution
         run: dotnet restore ZeroAlloc.Saga.slnx
-      # Empirically verify the Phase 3a AOT-rooting contract: the saga
-      # generator's [DynamicDependency] on MediatorSagaCommandDispatcher's
-      # constructor must keep ZeroAlloc.Saga.Generated.SagaCommandRegistry
-      # alive after trimming so SagaOutboxBuilderExtensions.CreateRegistryDispatcher
-      # can locate it reflectively. PublishAot=true is set in
-      # AotSmokeOutbox.csproj itself (not on the command line — same reasoning
-      # as AotSmoke). The published binary asserts: saga step → outbox enqueue
-      # → poller drain → mediator dispatch round-trip succeeds. Exit code 0
-      # is the load-bearing assertion — without the [DynamicDependency] the
-      # registry would be trimmed and the first poll cycle would throw
-      # "could not locate the generator-emitted SagaCommandRegistry".
+      # Empirically verify the AOT-rooting contract: the saga generator's
+      # [DynamicDependency] on MediatorSagaCommandDispatcher's constructor
+      # must keep ZeroAlloc.Saga.Generated.SagaCommandRegistry's GetTypeNames
+      # and DispatchAsync alive after trimming, so WithOutbox() can locate them
+      # reflectively. PublishAot=true is set in AotSmokeOutbox.csproj itself
+      # (not on the command line — same reasoning as AotSmoke). The published
+      # binary runs a real host: WithOutbox()'s startup check, then
+      # ZeroAlloc.Outbox's OutboxWorkerService dispatching saga step → outbox
+      # enqueue → worker claim → saga dispatcher → mediator. Exit code 0 is the
+      # load-bearing assertion — without the rooting the startup check fails
+      # with "could not locate the generator-emitted SagaCommandRegistry".
       - name: Publish AotSmokeOutbox
         run: dotnet publish samples/AotSmokeOutbox/AotSmokeOutbox.csproj -c Release -o aot-out-outbox
       - name: Run AotSmokeOutbox

@@ -10,10 +10,12 @@ corresponding command being delivered (or vice versa).
 
 [outbox]: https://microservices.io/patterns/data/transactional-outbox.html
 
-> **Status:** ships in v1.2 alongside `ZeroAlloc.Saga` 1.2 and
-> `ZeroAlloc.Saga.Outbox` 1.0. Requires `ZeroAlloc.Outbox` 2.4.0+
-> (`EnqueueDeferredAsync` default-interface-method) and
-> `ZeroAlloc.Serialisation` 2.1.0+.
+> **Status:** `ZeroAlloc.Saga.Outbox` 4.0 requires `ZeroAlloc.Outbox` 3.0.1 or later and
+> `ZeroAlloc.Serialisation` 2.1.0 or later. Not 3.0.0: its EfCore package throws
+> `TypeLoadException` on .NET 10 with EF Core 10, fixed in
+> [ZeroAlloc.Outbox#208](https://github.com/ZeroAlloc-Net/ZeroAlloc.Outbox/issues/208). EF Core
+> users also need `ZeroAlloc.Outbox.EfCore` 3.0.1 or later; Saga's floor on `ZeroAlloc.Outbox`
+> does not raise it. Upgrading from 3.x? See [Migrating to v4](migrating-to-v4.md).
 
 ## What it fixes
 
@@ -35,20 +37,20 @@ With the outbox bridge:
 2. The saga store's `SaveAsync` calls `SaveChangesAsync` on the same
    scoped `DbContext`, committing both the saga update and the outbox
    row in one round-trip.
-3. A long-running `OutboxSagaCommandPoller` (registered by `WithOutbox`)
-   reads pending entries, deserialises via the generator-emitted
-   `ZeroAlloc.Saga.Generated.SagaCommandRegistry`, and dispatches each
-   command through the consumer's `IMediator`.
-4. After successful dispatch the entry is marked succeeded; on failure
-   the entry is rescheduled (or dead-lettered after
-   `OutboxSagaPollerOptions.MaxRetries`).
+3. ZeroAlloc.Outbox's `OutboxWorkerService`, registered by `AddOutbox()`, claims pending
+   entries under a lease. For each saga command type, `WithOutbox()` registered an
+   `IOutboxTypeDispatcher` that deserialises the command through the generator-emitted
+   `ZeroAlloc.Saga.Generated.SagaCommandRegistry` and sends it through the consumer's `IMediator`.
+4. After a successful dispatch the worker marks the entry succeeded. On failure it reschedules
+   the entry with exponential backoff, or dead-letters it after `OutboxOptions.MaxAttempts`
+   attempts.
 
 When `SaveChangesAsync` raises `DbUpdateConcurrencyException` (or
 `DbUpdateException` for fresh-key INSERT races), the failing attempt's
 `IServiceScope` is disposed by the generated handler — its tracked
 outbox row goes away with the rolled-back saga update. The handler
 then retries in a fresh scope with a fresh `DbContext`. A retry that
-eventually succeeds commits exactly one outbox row, and the poller
+eventually succeeds commits exactly one outbox row, and the worker
 dispatches the command exactly once. Same guarantee for cross-process
 races (each replica has its own scope) and same-process OCC retries
 (scope-per-attempt makes them equivalent).
@@ -58,9 +60,9 @@ races (each replica has its own scope) and same-process OCC retries
 | Scenario | Recommendation |
 |---|---|
 | `ZeroAlloc.Saga.EfCore` backend | **Use the bridge.** This is the primary deployment shape it was designed for. |
-| `ZeroAlloc.Saga` InMemory backend | Don't bother. InMemory writes are atomic by construction; the bridge adds latency and a poller for no benefit. |
+| `ZeroAlloc.Saga` InMemory backend | Don't bother. InMemory writes are atomic by construction; the bridge adds latency and a worker for no benefit. |
 | Cross-process / multi-replica deployments | **Use the bridge.** This is exactly the race it fixes. |
-| Single-process, single-replica, fire-and-forget commands | Optional; the bridge converts synchronous dispatch into asynchronous dispatch (poller cadence). Either is correct. |
+| Single-process, single-replica, fire-and-forget commands | Optional; the bridge converts synchronous dispatch into asynchronous dispatch (worker cadence). Either is correct. |
 
 ## Wiring
 
@@ -77,19 +79,24 @@ public sealed class AppDbContext : DbContext
 }
 
 // 2. Service registration. AddDbContext registers the DbContext as Scoped;
-//    AddOutbox().WithEfCore<TContext>() registers IOutboxStore as Scoped so
-//    EfCoreOutboxStore<T> resolves the same scoped DbContext as the saga store
-//    — that shared scope is what makes the dispatch row commit atomically with
-//    the saga state save.
+//    WithEfCore<TContext>() registers IOutboxStore as Scoped so EfCoreOutboxStore<T>
+//    resolves the same scoped DbContext as the saga store — that shared scope is what
+//    makes the dispatch row commit atomically with the saga state save.
 services.AddDbContext<AppDbContext>(opts => opts.UseNpgsql(connectionString),
     ServiceLifetime.Scoped);
 
-services.AddOutbox().WithEfCore<AppDbContext>();
+// ZeroAlloc.Outbox: the worker that dispatches saga commands, and its EF store.
+// Call AddOutbox() exactly once.
+services.AddOutbox(o =>
+{
+    o.PollingInterval = TimeSpan.FromSeconds(2);
+    o.LeaseDuration   = TimeSpan.FromMinutes(2); // longer than your slowest command handler
+}).WithEfCore<AppDbContext>();
 
 services.AddMediator();
 services.AddSaga()
     .WithEfCoreStore<AppDbContext>(opts => opts.MaxRetryAttempts = 3)
-    .WithOutbox()                        // <-- replaces dispatcher + adds poller
+    .WithOutbox()                        // <-- replaces the dispatcher, registers saga dispatchers
     .WithOrderFulfillmentSaga();
 
 // 3. Per-command serialiser registration.
@@ -101,18 +108,141 @@ services.AddSingleton<ISerializer<ChargeCustomerCommand>, JsonCommandSerializer<
 // ...one per step command.
 ```
 
-`WithOutbox()` does three things:
+`AddOutbox()` and `AddSaga()` can come in either order. `WithOutbox()` does not call
+`AddOutbox()`: a second `AddOutbox()` would start a second worker
+([ZeroAlloc.Outbox#206](https://github.com/ZeroAlloc-Net/ZeroAlloc.Outbox/issues/206)).
+
+`WithOutbox()` does four things:
 
 - Replaces the default scoped `ISagaCommandDispatcher` with
   `OutboxSagaCommandDispatcher`.
-- Lazily registers a `SagaCommandRegistryDispatcher` singleton that locates
-  the generator-emitted `ZeroAlloc.Saga.Generated.SagaCommandRegistry` via
-  reflection on first poller cycle.
-- Adds `OutboxSagaCommandPoller` as a hosted service.
+- Locates the generator-emitted `SagaCommandRegistry` by reflection, and registers one scoped
+  `IOutboxTypeDispatcher` for each saga step and compensation command type it lists. The worker
+  resolves them from the same per-batch scope as the store, so dispatch shares the store's
+  `DbContext`.
+- Registers the `SagaCommandRegistryDispatcher` delegate those dispatchers call. Register your
+  own before `WithOutbox()` to replace it, for example in tests.
+- Registers a startup check, described below.
+
+The assembly that declares your sagas must be loaded when `WithOutbox()` runs. It is whenever
+the same method also calls its `With{Saga}Saga()`.
+
+### Startup check
+
+`WithOutbox()` also registers an `IHostedLifecycleService`. Its check runs in `StartingAsync`,
+which the host calls on every such service before it starts any `IHostedService`, so
+`OutboxWorkerService` cannot claim a saga row before the check has passed. It throws
+`InvalidOperationException` with one of these messages:
+
+- The generator-emitted registry was not found:
+
+  > ZeroAlloc.Saga.Outbox.WithOutbox(): could not locate the generator-emitted
+  > ZeroAlloc.Saga.Generated.SagaCommandRegistry. The Saga generator emits it into the assembly
+  > that declares your [Saga] classes when that assembly references ZeroAlloc.Serialisation, and
+  > WithOutbox() needs one built by ZeroAlloc.Saga 4.0 or later. That assembly must be loaded when
+  > WithOutbox() runs, which it is when the same method calls its With{Saga}Saga().
+
+- No `OutboxWorkerService` is registered, meaning `AddOutbox()` was never called:
+
+  > ZeroAlloc.Saga.Outbox.WithOutbox(): no OutboxWorkerService is registered. ZeroAlloc.Outbox's
+  > worker dispatches saga commands, and WithOutbox() does not register it: call
+  > services.AddOutbox() once, before or after AddSaga().
+
+- No `IOutboxStore` resolves, meaning no store was wired up:
+
+  > ZeroAlloc.Saga.Outbox.WithOutbox(): no IOutboxStore is registered. Register one with
+  > AddOutbox().WithEfCore\<TContext>(), or with WithRedisOutbox() when the saga store is Redis.
+
+- Two `IOutboxTypeDispatcher`s claim the same saga command type name — see below.
+
+The missing-worker and missing-store messages also print the supported EF and Redis setups shown under Wiring above.
+
+### One dispatcher per type name
+
+The worker keeps a single `IOutboxTypeDispatcher` per type name: when two claim the same name,
+the last registration wins and the other never runs. A saga command's type name is its
+`Type.FullName`. If an `[OutboxMessage]` type or a hand-written dispatcher uses the same name, the
+startup check throws:
+
+> ZeroAlloc.Saga.Outbox.WithOutbox(): another IOutboxTypeDispatcher is registered for the saga
+> command type '\<TypeName>'. ZeroAlloc.Outbox's worker keeps one dispatcher per type name, so one
+> of the two would never run. Remove the other registration, or give its message type a different
+> name.
+
+Rename one of the types or remove the other registration.
+
+### Telemetry
+
+`ZeroAlloc.Outbox.Telemetry`'s `WithTelemetry()` decorates the dispatchers registered before it
+runs. To instrument saga dispatch too, call it after `WithOutbox()`:
+
+```csharp
+var outbox = services.AddOutbox().WithEfCore<AppDbContext>();
+services.AddSaga()
+    .WithEfCoreStore<AppDbContext>()
+    .WithOutbox()
+    .WithOrderFulfillmentSaga();
+outbox.WithTelemetry();
+```
+
+## Dispatch options
+
+Outbox's worker dispatches saga commands, so you configure dispatch through `AddOutbox(o => …)`:
+
+| Option | Default | Effect |
+|---|---|---|
+| `PollingInterval` | 5 s | Delay between polling cycles |
+| `BatchSize` | 50 | Max entries claimed per cycle |
+| `MaxAttempts` | 5 | Total dispatch attempts before dead-letter |
+| `RetryBaseDelay` | 2 s | First retry delay; each further failure doubles it |
+| `LeaseDuration` | 5 min | How long a claim lasts. Must exceed the slowest single dispatch |
+| `HostId` | machine name + a random value | Identifies this process as a lease holder. Must be unique per process |
+
+The 3.x `OutboxSagaPollerOptions` map onto them like this:
+
+| 3.x | 4.0 | Note |
+|---|---|---|
+| `PollInterval` (default 2 s) | `PollingInterval` | Set it to 2 s to keep the old cadence |
+| `BatchSize` (default 32) | `BatchSize` | |
+| `MaxRetries` (default 5) | `MaxAttempts` | Same meaning: total attempts |
+| `RetryDelay` (default 10 s, fixed) | `RetryBaseDelay` | Now exponential: base, 2 × base, 4 × base, … |
+
+Per-entry failure isolation: a single dispatch failure does not poison the
+batch; the entry is rescheduled (or dead-lettered) and the worker continues
+with the next entry.
+
+## Leases and multiple hosts
+
+ZeroAlloc.Outbox 3.0 claims entries under a lease. Each host claims a batch atomically, renews
+an entry's lease right before dispatching it, records the outcome only while it still holds the
+lease, and releases what it did not finish when it stops. Two hosts polling the same store never
+dispatch the same saga command, unless a single dispatch outlives `LeaseDuration`. See
+ZeroAlloc.Outbox's [claim, renew and release model](https://github.com/ZeroAlloc-Net/ZeroAlloc.Outbox/blob/main/docs/outbox-pattern.md#the-claim-renew-and-release-model).
+
+Hosts need roughly synchronised clocks, which NTP gives you: each host compares lease expiry
+times written from its own clock. Delivery stays at-least-once. A duplicate now needs a dispatch
+that outlives `LeaseDuration`, or a host that dies after dispatching but before marking.
+
+## Native AOT
+
+`AddOutbox()` is `[RequiresUnreferencedCode]`, because it may register a reflection-based JSON
+serializer that saga dispatch never uses. Until ZeroAlloc.Outbox offers an AOT-clean registration
+([ZeroAlloc.Outbox#207](https://github.com/ZeroAlloc-Net/ZeroAlloc.Outbox/issues/207)),
+a `PublishAot` app registers what the worker needs itself:
+
+```csharp
+services.AddOptions<OutboxOptions>().Configure(o => o.PollingInterval = TimeSpan.FromSeconds(2));
+services.AddHostedService<OutboxWorkerService>();
+```
+
+This skips the `OutboxOptions` validation that `AddOutbox()` adds, so check the values yourself.
+Register the `IOutboxStore` yourself as well, or use `WithRedisOutbox()`, which supplies it.
+`WithEfCore<T>()` hangs off the `IOutboxBuilder` that only `AddOutbox()` returns.
+`samples/AotSmokeOutbox` runs this setup under ILC in CI.
 
 ## Marking step command types `partial`
 
-The poller deserialises commands through the generator-emitted
+Outbox dispatch deserialises commands through the generator-emitted
 `SagaCommandRegistry`, which routes by `typeof(T).FullName!` and resolves
 the per-command `ISerializer<T>` from DI. For the generator to auto-apply
 `[ZeroAllocSerializable(SerializationFormat.SystemTextJson)]` (so
@@ -135,29 +265,6 @@ The saga generator emits two diagnostics to nudge users to the right shape:
   extension across assembly boundaries; the consumer must apply
   `[ZeroAllocSerializable]` themselves on the source-of-truth type.
 
-## Poller knobs
-
-```csharp
-services.AddSingleton(new OutboxSagaPollerOptions
-{
-    PollInterval = TimeSpan.FromSeconds(2),
-    BatchSize    = 32,
-    MaxRetries   = 5,
-    RetryDelay   = TimeSpan.FromSeconds(10),
-});
-```
-
-| Option | Default | Effect |
-|---|---|---|
-| `PollInterval` | 2 s | Sleep between cycles |
-| `BatchSize` | 32 | Max entries fetched per cycle |
-| `MaxRetries` | 5 | Total dispatch attempts before dead-letter |
-| `RetryDelay` | 10 s | Delay added to `UtcNow` when scheduling the next retry |
-
-Per-entry failure isolation: a single dispatch failure does not poison the
-batch; the entry is rescheduled (or dead-lettered) and the poller continues
-with the next entry.
-
 ## Single-dispatch under OCC retry
 
 The generator-emitted handler's retry loop creates a fresh
@@ -166,16 +273,17 @@ The generator-emitted handler's retry loop creates a fresh
 On `DbUpdateConcurrencyException`, the failed attempt's scope is disposed
 — its tracked outbox row is discarded along with the rolled-back saga
 update. A later attempt that succeeds commits exactly **one** outbox row,
-and the poller dispatches the command exactly **once**.
+and the worker dispatches the command exactly **once**.
 
 This holds for both same-process retries (one consumer, one OCC
 clash) and cross-process races (multiple replicas, one wins, the others
 retry into a now-stale FSM trigger and silently no-op). `ZASAGA015`'s
 "step commands must be idempotent" guidance remains good practice for
 the rare residual cases (the saga handler itself crashes between
-`SaveChangesAsync` and the message-bus ack, the outbox poller crashes
-after dispatching but before `MarkSucceededAsync`, etc.) but is no
-longer needed to defend against the bridge's own retry path.
+`SaveChangesAsync` and the message-bus ack, a worker dies after
+dispatching but before `MarkSucceededAsync`, a dispatch outlives
+`LeaseDuration`, etc.) but is no longer needed to defend against the
+bridge's own retry path.
 
 ## Limitations
 
@@ -195,22 +303,32 @@ assembly. The auto-`[ZeroAllocSerializable]` partial-extension generator
 can't reach across assemblies; the consumer must apply the attribute
 themselves on the source-of-truth declaration.
 
+### Sagas declared across more than one assembly
+
+`WithOutbox()` locates the generator-emitted `SagaCommandRegistry` by scanning loaded assemblies
+and uses the **first** one it finds; the saga generator's default `MediatorSagaCommandDispatcher`
+has the same first-wins behaviour when more than one `With{Saga}Saga()` runs. Splitting sagas
+across assemblies therefore leaves the other assemblies' commands never dispatched, and nothing
+fails at startup. Tracked in
+[ZeroAlloc-Net/ZeroAlloc.Saga#176](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/176).
+
 ### Default-interface-method fallback
 
 `IOutboxStore.EnqueueDeferredAsync` is a default-interface-method that
 falls back to `EnqueueAsync(transaction: null, ct)` when not overridden.
 A backend that does not override it auto-commits each enqueue, defeating
-the atomicity premise. Use `ZeroAlloc.Outbox.EfCore` 2.4.0+ (which
+the atomicity premise. Use `ZeroAlloc.Outbox.EfCore` (which
 overrides) — or any third-party backend that explicitly overrides
 `EnqueueDeferredAsync` to defer the write to the caller's
 `SaveChangesAsync` (or equivalent).
 
 ## See also
 
+- [`docs/migrating-to-v4.md`](migrating-to-v4.md) — upgrading from Saga 3.x.
 - [`docs/persistence-efcore.md`](persistence-efcore.md) — base
   `Saga.EfCore` setup, OCC retry, idempotency expectation
   (`ZASAGA015`).
 - [`docs/diagnostics.md`](diagnostics.md) — full diagnostic catalog
   including `ZASAGA015` / `ZASAGA016` / `ZASAGA017`.
 - `ZeroAlloc.Outbox` documentation — backend-side outbox semantics,
-  poller patterns, dead-letter queue management.
+  the worker, dead-letter queue management.

@@ -130,7 +130,7 @@ every step command is dispatched **exactly once** across both
 cross-process races and same-process OCC retries. See
 [`docs/outbox.md`](outbox.md). The idempotency guidance above remains
 good practice for residual at-least-once cases (handler crashes
-between save and message-bus ack, poller crashes after dispatch but
+between save and message-bus ack, the worker dies after dispatch but
 before `MarkSucceededAsync`).
 
 ## `EfCoreSagaStoreOptions`
