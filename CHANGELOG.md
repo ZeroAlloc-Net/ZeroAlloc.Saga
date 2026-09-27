@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v3.1.1...ZeroAlloc.Saga-v4.0.0) (2026-09-27)
+
+
+### ⚠ BREAKING CHANGES
+
+* the generated Add{Saga}Saga() alias is removed; call With{Saga}Saga() instead.
+* OutboxSagaCommandPoller and OutboxSagaPollerOptions are removed. Call services.AddOutbox yourself and configure dispatch through OutboxOptions. RedisOutboxStore follows the Outbox 3.0 lease contract. The outbox packages need ZeroAlloc.Outbox 3.0.1 or later, and EF Core users add the lease columns with a migration. See docs/migrating-to-v4.md.
+
+### Features
+
+* dispatch saga commands through ZeroAlloc.Outbox 3.0's lease-based worker ([e1bccf0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/e1bccf0aa4427efdd679d04dbfc6f7cc38fa1645))
+* remove the ZASAGA018 Add{Saga}Saga compatibility shim ([#183](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/183)) ([0f4ed2c](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/0f4ed2c0968618751392f3644546b54e8c4aae07)), closes [#171](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/171)
+
+
+### Bug Fixes
+
+* saga commands declared as nested types were never dispatched from the outbox ([e1bccf0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/e1bccf0aa4427efdd679d04dbfc6f7cc38fa1645))
+* the documented EF outbox setup dead-lettered saga commands ([e1bccf0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/e1bccf0aa4427efdd679d04dbfc6f7cc38fa1645))
+* the Redis outbox dispatched each saga command on every replica ([e1bccf0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/e1bccf0aa4427efdd679d04dbfc6f7cc38fa1645))
+
 ## [3.1.1](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v3.1.0...ZeroAlloc.Saga-v3.1.1) (2026-09-25)
 
 
