@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -31,7 +30,8 @@ public sealed class SagaGenerator : IIncrementalGenerator
         var extracted = context.SyntaxProvider.ForAttributeWithMetadataName(
             SagaAttributeFqn,
             predicate: static (node, _) => node is ClassDeclarationSyntax,
-            transform: static (ctx, ct) => SagaModel.From(ctx, ct));
+            transform: static (ctx, ct) => SagaModel.From(ctx, ct))
+            .WithTrackingName(TrackingNames.SagaModels);
 
         // Per-saga emission + per-saga diagnostic reporting.
         context.RegisterSourceOutput(extracted, static (spc, result) =>
@@ -53,7 +53,9 @@ public sealed class SagaGenerator : IIncrementalGenerator
         });
 
         // Cross-saga ZASAGA013: two sagas correlate on the same event but with different key types.
-        var allModels = extracted.Collect();
+        var allModels = extracted.Collect()
+            .Select(static (results, _) => new EquatableArray<SagaExtractResult>(results))
+            .WithTrackingName(TrackingNames.AllSagaModels);
         context.RegisterSourceOutput(allModels, static (spc, results) =>
         {
             ReportCrossSagaDiagnostics(spc, results);
@@ -67,7 +69,8 @@ public sealed class SagaGenerator : IIncrementalGenerator
         // don't use the outbox bridge see no change in generator output.
         var serialisationReferenced = context.CompilationProvider
             .Select(static (compilation, _) =>
-                compilation.GetTypeByMetadataName("ZeroAlloc.Serialisation.ZeroAllocSerializableAttribute") is not null);
+                compilation.GetTypeByMetadataName("ZeroAlloc.Serialisation.ZeroAllocSerializableAttribute") is not null)
+            .WithTrackingName(TrackingNames.SerialisationReferenced);
 
         // Per-compilation MediatorSagaCommandDispatcher — single emit covering every
         // [Step] command type across all sagas in the consumer assembly. Lives in the
@@ -102,14 +105,15 @@ public sealed class SagaGenerator : IIncrementalGenerator
         // step command type via a partial-class extension when ZeroAlloc.Serialisation
         // is referenced. Skips cross-assembly types (ZASAGA017), non-partial types
         // (ZASAGA016), and types where the user already applied the attribute themselves.
-        // The CompilationProvider is required to resolve the existing-attribute check
-        // and to determine the type-keyword sequence (record/struct/class).
+        // The existing-attribute check and the type-keyword sequence (record/struct/class)
+        // are captured in the model, so this output stays cached across unrelated edits.
         context.RegisterSourceOutput(
-            allModels.Combine(context.CompilationProvider),
+            allModels.Combine(serialisationReferenced),
             static (spc, tuple) =>
             {
-                var (results, compilation) = tuple;
-                SerializableExtensionEmitter.Emit(spc, results, compilation);
+                var (results, hasSerialisation) = tuple;
+                if (!hasSerialisation) return;
+                SerializableExtensionEmitter.Emit(spc, results);
             });
 
         // ZASAGA016 / ZASAGA017 — fired only when ZeroAlloc.Serialisation is
@@ -144,20 +148,20 @@ public sealed class SagaGenerator : IIncrementalGenerator
                             {
                                 spc.ReportDiagnostic(Diagnostic.Create(
                                     SagaDiagnostics.StepCommandTypeNotPartial,
-                                    location: step.CommandTypeLocation,
+                                    location: step.CommandTypeLocation?.ToLocation(),
                                     step.CommandTypeFqn));
                             }
                         }
                         else if (step.CommandTypeIsInOwnAssembly == false)
                         {
-                            // Cross-assembly: location is None — the type's
-                            // declaration is not in this compilation. That's
-                            // acceptable for an Info-severity diagnostic.
+                            // Cross-assembly: the type's declaration is not in this
+                            // compilation, so the diagnostic points at the [Step]
+                            // method's return type, which names it.
                             if (reportedCrossAssembly.Add(step.CommandTypeFqn))
                             {
                                 spc.ReportDiagnostic(Diagnostic.Create(
                                     SagaDiagnostics.StepCommandTypeCrossAssembly,
-                                    location: Location.None,
+                                    location: step.CommandTypeLocation?.ToLocation(),
                                     step.CommandTypeFqn));
                             }
                         }
@@ -168,14 +172,15 @@ public sealed class SagaGenerator : IIncrementalGenerator
         // ZASAGA015: best-effort idempotency hint when a durable backend is wired
         // anywhere in the same compilation. We don't bind the call — we look for
         // any invocation whose name starts with WithEfCoreStore / WithRedisStore,
-        // and emit one diagnostic per [Saga] in the compilation. Suppressible
-        // via #pragma warning disable ZASAGA015.
+        // and emit one diagnostic per [Saga] in the compilation, at the saga's class
+        // name, so #pragma warning disable ZASAGA015 around a saga suppresses it.
         var hasDurableBackend = context.SyntaxProvider
             .CreateSyntaxProvider(
                 predicate: static (node, _) => IsDurableBackendInvocation(node),
                 transform: static (ctx, _) => true)
             .Collect()
-            .Select(static (arr, _) => arr.Length > 0);
+            .Select(static (arr, _) => arr.Length > 0)
+            .WithTrackingName(TrackingNames.DurableBackendReferenced);
 
         var sagasAndBackend = allModels.Combine(hasDurableBackend);
         context.RegisterSourceOutput(sagasAndBackend, static (spc, tuple) =>
@@ -187,7 +192,7 @@ public sealed class SagaGenerator : IIncrementalGenerator
                 if (result.Model is null) continue;
                 spc.ReportDiagnostic(Diagnostic.Create(
                     SagaDiagnostics.IdempotencyHint,
-                    location: null,
+                    location: result.Model.ClassNameLocation?.ToLocation(),
                     result.Model.ClassName));
             }
         });
@@ -206,12 +211,14 @@ public sealed class SagaGenerator : IIncrementalGenerator
         return name is "WithEfCoreStore" or "WithRedisStore";
     }
 
-    private static void ReportCrossSagaDiagnostics(SourceProductionContext spc, ImmutableArray<SagaExtractResult> results)
+    private static void ReportCrossSagaDiagnostics(SourceProductionContext spc, EquatableArray<SagaExtractResult> results)
     {
         // For every event-type observed by a saga's correlation methods, gather
-        // (saga name, key type). If two sagas observe the same event with
-        // different key types, report ZASAGA013 once.
-        var byEvent = new Dictionary<string, List<(string Saga, string KeyType, Location? Loc)>>(System.StringComparer.Ordinal);
+        // (saga name, key type, [CorrelationKey] method). If two sagas observe the
+        // same event with different key types, report ZASAGA013 once per pair, at
+        // the later saga's [CorrelationKey] method, the one that conflicts, with the
+        // earlier saga's method as an additional location.
+        var byEvent = new Dictionary<string, List<(string Saga, string KeyType, LocationInfo? Loc)>>(System.StringComparer.Ordinal);
         foreach (var result in results)
         {
             var model = result.Model;
@@ -220,10 +227,10 @@ public sealed class SagaGenerator : IIncrementalGenerator
             {
                 if (!byEvent.TryGetValue(corr.EventTypeFqn, out var list))
                 {
-                    list = new List<(string, string, Location?)>();
+                    list = new List<(string, string, LocationInfo?)>();
                     byEvent[corr.EventTypeFqn] = list;
                 }
-                list.Add((model.ClassName, model.CorrelationKeyTypeFqn, null));
+                list.Add((model.ClassName, model.CorrelationKeyTypeFqn, corr.Location));
             }
         }
 
@@ -237,9 +244,11 @@ public sealed class SagaGenerator : IIncrementalGenerator
                 {
                     if (!string.Equals(entries[i].KeyType, entries[j].KeyType, System.StringComparison.Ordinal))
                     {
+                        var earlier = entries[i].Loc?.ToLocation();
                         spc.ReportDiagnostic(Diagnostic.Create(
                             SagaDiagnostics.DuplicateSagaCorrelationKeyType,
-                            location: null,
+                            location: entries[j].Loc?.ToLocation(),
+                            additionalLocations: earlier is null ? null : new[] { earlier },
                             entries[i].Saga,
                             entries[j].Saga,
                             kvp.Key,

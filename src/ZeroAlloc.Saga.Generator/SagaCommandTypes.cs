@@ -1,7 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
+using ZeroAlloc.Saga.Generator.Diagnostics;
 using System.Linq;
 
 namespace ZeroAlloc.Saga.Generator;
@@ -13,7 +13,7 @@ namespace ZeroAlloc.Saga.Generator;
 /// </summary>
 internal static class SagaCommandTypes
 {
-    public static List<string> Collect(ImmutableArray<SagaExtractResult> sagaResults)
+    public static List<string> Collect(EquatableArray<SagaExtractResult> sagaResults)
         => sagaResults
             .Select(r => r.Model)
             .Where(m => m is not null)
