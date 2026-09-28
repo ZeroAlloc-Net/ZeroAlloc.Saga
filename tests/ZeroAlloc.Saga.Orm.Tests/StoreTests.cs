@@ -235,6 +235,161 @@ public sealed class StoreTests
             async () => await storeB.SaveAsync(orderId, sagaA, default).ConfigureAwait(false));
     }
 
+    private static async Task SeedStartedSagaAsync(SqliteFixture fx, OrderId orderId)
+    {
+        var connection = await fx.ConnectAsync().ConfigureAwait(false);
+        var sp = BuildProvider(connection);
+        await using (sp.ConfigureAwait(false))
+        {
+            var store = StoreFrom(sp);
+            var saga = await store.LoadOrCreateAsync(orderId, default).ConfigureAwait(false);
+            saga.Fsm.TryFire(OrderFulfillmentSagaFsm.Trigger.OrderPlaced);
+            saga.ReserveStock(new OrderPlaced(orderId, 1m));
+            await store.SaveAsync(orderId, saga, default).ConfigureAwait(false);
+        }
+    }
+
+    [Fact]
+    public async Task Removing_A_Saga_Changed_Behind_Our_Back_Is_A_Conflict_And_Keeps_Their_Row()
+    {
+        // The delete carries the row version this store loaded, as the update
+        // does. Without it, a completing step deletes the row another writer
+        // just advanced and discards their progress without a conflict, #196.
+        await using var fx = new SqliteFixture();
+        await fx.MigrateAsync();
+        var orderId = new OrderId(401);
+        await SeedStartedSagaAsync(fx, orderId);
+
+        await using var spA = BuildProvider(await fx.ConnectAsync());
+        await using var spB = BuildProvider(await fx.ConnectAsync());
+        var storeA = StoreFrom(spA);
+        var storeB = StoreFrom(spB);
+
+        await storeB.LoadOrCreateAsync(orderId, default);
+
+        var sagaA = await storeA.LoadOrCreateAsync(orderId, default);
+        sagaA.Fsm.TryFire(OrderFulfillmentSagaFsm.Trigger.StockReserved);
+        sagaA.ChargeCustomer(new StockReserved(orderId));
+        await storeA.SaveAsync(orderId, sagaA, default);
+
+        var ex = await Assert.ThrowsAsync<OrmSagaConcurrencyException>(
+            async () => await storeB.RemoveAsync(orderId, default).ConfigureAwait(false));
+
+        Assert.IsAssignableFrom<ISagaConcurrencyConflict>(ex);
+        Assert.Equal(orderId.ToString(), ex.CorrelationKey);
+        Assert.Equal(1, await CountRowsAsync(fx));
+    }
+
+    [Fact]
+    public async Task Removing_A_Saga_Deleted_Behind_Our_Back_Is_A_Conflict()
+    {
+        // Another writer ended the saga after this store loaded it. Reporting
+        // a successful remove would complete it a second time.
+        await using var fx = new SqliteFixture();
+        await fx.MigrateAsync();
+        var orderId = new OrderId(402);
+        await SeedStartedSagaAsync(fx, orderId);
+
+        await using var spA = BuildProvider(await fx.ConnectAsync());
+        await using var spB = BuildProvider(await fx.ConnectAsync());
+        var storeA = StoreFrom(spA);
+        var storeB = StoreFrom(spB);
+
+        await storeB.LoadOrCreateAsync(orderId, default);
+        await storeA.LoadOrCreateAsync(orderId, default);
+        await storeA.RemoveAsync(orderId, default);
+
+        await Assert.ThrowsAsync<OrmSagaConcurrencyException>(
+            async () => await storeB.RemoveAsync(orderId, default).ConfigureAwait(false));
+    }
+
+    [Fact]
+    public async Task Removing_After_Loading_No_Saga_When_Another_Writer_Created_It_Is_A_Conflict_And_Keeps_Their_Saga()
+    {
+        // This store saw no saga, so its remove may not delete one another
+        // writer created since.
+        await using var fx = new SqliteFixture();
+        await fx.MigrateAsync();
+        var orderId = new OrderId(403);
+
+        await using var spB = BuildProvider(await fx.ConnectAsync());
+        var storeB = StoreFrom(spB);
+        Assert.Null(await storeB.TryLoadAsync(orderId, default));
+
+        await SeedStartedSagaAsync(fx, orderId);
+
+        await Assert.ThrowsAsync<OrmSagaConcurrencyException>(
+            async () => await storeB.RemoveAsync(orderId, default).ConfigureAwait(false));
+        Assert.Equal(1, await CountRowsAsync(fx));
+    }
+
+    [Fact]
+    public async Task Removing_After_Loading_No_Saga_When_There_Is_Still_None_Succeeds()
+    {
+        // The single-step shape: the saga starts and completes in one attempt
+        // and is never saved, so there is nothing to delete and nothing to
+        // conflict with.
+        await using var fx = new SqliteFixture();
+        await fx.MigrateAsync();
+        var orderId = new OrderId(404);
+
+        await using var sp = BuildProvider(await fx.ConnectAsync());
+        var store = StoreFrom(sp);
+        await store.LoadOrCreateAsync(orderId, default);
+
+        await store.RemoveAsync(orderId, default);
+
+        Assert.Equal(0, await CountRowsAsync(fx));
+    }
+
+    [Fact]
+    public async Task Removing_Without_A_Prior_Load_Deletes_Unconditionally()
+    {
+        // With no observation there is no version to compare against. The
+        // EF Core and Redis stores delete in this case too.
+        await using var fx = new SqliteFixture();
+        await fx.MigrateAsync();
+        var orderId = new OrderId(405);
+        await SeedStartedSagaAsync(fx, orderId);
+
+        await using var sp = BuildProvider(await fx.ConnectAsync());
+        await StoreFrom(sp).RemoveAsync(orderId, default);
+
+        Assert.Equal(0, await CountRowsAsync(fx));
+    }
+
+    [Fact]
+    public async Task A_Store_That_Lost_A_Conflict_Keeps_Conflicting_Until_It_Reloads()
+    {
+        // The stale version is the only evidence this store is behind. If a
+        // conflict forgot it, the next save would plan an insert and silently
+        // re-create a saga another writer had already ended.
+        await using var fx = new SqliteFixture();
+        await fx.MigrateAsync();
+        var orderId = new OrderId(406);
+        await SeedStartedSagaAsync(fx, orderId);
+
+        await using var spA = BuildProvider(await fx.ConnectAsync());
+        await using var spB = BuildProvider(await fx.ConnectAsync());
+        var storeA = StoreFrom(spA);
+        var storeB = StoreFrom(spB);
+
+        var sagaB = await storeB.LoadOrCreateAsync(orderId, default);
+        await storeA.LoadOrCreateAsync(orderId, default);
+        await storeA.RemoveAsync(orderId, default);
+
+        sagaB.Fsm.TryFire(OrderFulfillmentSagaFsm.Trigger.StockReserved);
+        sagaB.ChargeCustomer(new StockReserved(orderId));
+        await Assert.ThrowsAsync<OrmSagaConcurrencyException>(
+            async () => await storeB.SaveAsync(orderId, sagaB, default).ConfigureAwait(false));
+        await Assert.ThrowsAsync<OrmSagaConcurrencyException>(
+            async () => await storeB.SaveAsync(orderId, sagaB, default).ConfigureAwait(false));
+        await Assert.ThrowsAsync<OrmSagaConcurrencyException>(
+            async () => await storeB.RemoveAsync(orderId, default).ConfigureAwait(false));
+
+        Assert.Equal(0, await CountRowsAsync(fx));
+    }
+
     [Fact]
     public void Configuring_A_Second_Durable_Store_Is_Rejected()
     {

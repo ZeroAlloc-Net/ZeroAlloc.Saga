@@ -4,7 +4,7 @@ using ZeroAlloc.ORM;
 namespace ZeroAlloc.Saga.Orm;
 
 /// <summary>
-/// The four SQL statements the saga store needs, as ZeroAlloc.ORM partial
+/// The SQL statements the saga store needs, as ZeroAlloc.ORM partial
 /// methods. The generator emits the parameter binding and materialisation at
 /// compile time, so nothing here reflects at runtime.
 /// </summary>
@@ -15,11 +15,12 @@ namespace ZeroAlloc.Saga.Orm;
 /// DDL differs between them, and that lives in <see cref="SagaOrmMigrations"/>.
 /// </para>
 /// <para>
-/// <see cref="UpdateAsync"/> carries the optimistic-concurrency predicate. It
-/// matches on the row version the caller read, and rotates it in the same
-/// statement. A caller whose version is stale updates zero rows, which the
-/// store turns into <see cref="OrmSagaConcurrencyException"/> — there is no
-/// read-then-write window for a competing writer to slip through.
+/// <see cref="UpdateAsync"/> and <see cref="DeleteVersionedAsync"/> carry the
+/// optimistic-concurrency predicate. They match on the row version the caller
+/// read, and the update rotates it in the same statement. A caller whose
+/// version is stale affects zero rows, which the store turns into
+/// <see cref="OrmSagaConcurrencyException"/> — there is no read-then-write
+/// window for a competing writer to slip through.
 /// </para>
 /// </remarks>
 internal sealed partial class SagaInstanceRepository(IAsyncDbConnection connection)
@@ -74,4 +75,13 @@ internal sealed partial class SagaInstanceRepository(IAsyncDbConnection connecti
         """)]
     public partial Task<int> DeleteAsync(
         string sagaType, string correlationKey, CancellationToken ct);
+
+    [Command("""
+        DELETE FROM SagaInstance
+        WHERE SagaType = @sagaType
+          AND CorrelationKey = @correlationKey
+          AND RowVersion = @expectedRowVersion
+        """)]
+    public partial Task<int> DeleteVersionedAsync(
+        string sagaType, string correlationKey, byte[] expectedRowVersion, CancellationToken ct);
 }

@@ -1,0 +1,33 @@
+#nullable enable
+static ZeroAlloc.Saga.EfCore.SagaEfCoreBuilderExtensions.WithEfCoreStore<TContext>(this ZeroAlloc.Saga.ISagaBuilder! builder, System.Action<ZeroAlloc.Saga.EfCore.EfCoreSagaStoreOptions!>? configure = null) -> ZeroAlloc.Saga.ISagaBuilder!
+static ZeroAlloc.Saga.EfCore.SagaModelBuilderExtensions.AddSagas(this Microsoft.EntityFrameworkCore.ModelBuilder! modelBuilder) -> Microsoft.EntityFrameworkCore.ModelBuilder!
+ZeroAlloc.Saga.EfCore.EfCoreSagaConcurrencyException
+ZeroAlloc.Saga.EfCore.EfCoreSagaConcurrencyException.CorrelationKey.get -> string!
+ZeroAlloc.Saga.EfCore.EfCoreSagaConcurrencyException.EfCoreSagaConcurrencyException(string! sagaType, string! correlationKey, Microsoft.EntityFrameworkCore.DbUpdateException! inner) -> void
+ZeroAlloc.Saga.EfCore.EfCoreSagaConcurrencyException.SagaType.get -> string!
+ZeroAlloc.Saga.EfCore.EfCoreSagaStore<TSaga, TKey>
+ZeroAlloc.Saga.EfCore.EfCoreSagaStore<TSaga, TKey>.EfCoreSagaStore(Microsoft.EntityFrameworkCore.DbContext! context, Microsoft.Extensions.Logging.ILogger<ZeroAlloc.Saga.EfCore.EfCoreSagaStore<TSaga!, TKey>!>? log = null) -> void
+ZeroAlloc.Saga.EfCore.EfCoreSagaStore<TSaga, TKey>.LoadOrCreateAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<TSaga!>
+ZeroAlloc.Saga.EfCore.EfCoreSagaStore<TSaga, TKey>.RemoveAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.EfCore.EfCoreSagaStore<TSaga, TKey>.SaveAsync(TKey key, TSaga! saga, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.EfCore.EfCoreSagaStore<TSaga, TKey>.TryLoadAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<TSaga?>
+ZeroAlloc.Saga.EfCore.EfCoreSagaStoreOptions
+ZeroAlloc.Saga.EfCore.EfCoreSagaStoreOptions.EfCoreSagaStoreOptions() -> void
+ZeroAlloc.Saga.EfCore.SagaEfCoreBuilderExtensions
+ZeroAlloc.Saga.EfCore.SagaInstanceEntity
+ZeroAlloc.Saga.EfCore.SagaInstanceEntity.CorrelationKey.get -> string!
+ZeroAlloc.Saga.EfCore.SagaInstanceEntity.CorrelationKey.set -> void
+ZeroAlloc.Saga.EfCore.SagaInstanceEntity.CreatedAt.get -> System.DateTimeOffset
+ZeroAlloc.Saga.EfCore.SagaInstanceEntity.CreatedAt.set -> void
+ZeroAlloc.Saga.EfCore.SagaInstanceEntity.CurrentFsmState.get -> string!
+ZeroAlloc.Saga.EfCore.SagaInstanceEntity.CurrentFsmState.set -> void
+ZeroAlloc.Saga.EfCore.SagaInstanceEntity.RowVersion.get -> byte[]!
+ZeroAlloc.Saga.EfCore.SagaInstanceEntity.RowVersion.set -> void
+ZeroAlloc.Saga.EfCore.SagaInstanceEntity.SagaInstanceEntity() -> void
+ZeroAlloc.Saga.EfCore.SagaInstanceEntity.SagaType.get -> string!
+ZeroAlloc.Saga.EfCore.SagaInstanceEntity.SagaType.set -> void
+ZeroAlloc.Saga.EfCore.SagaInstanceEntity.State.get -> byte[]!
+ZeroAlloc.Saga.EfCore.SagaInstanceEntity.State.set -> void
+ZeroAlloc.Saga.EfCore.SagaInstanceEntity.UpdatedAt.get -> System.DateTimeOffset
+ZeroAlloc.Saga.EfCore.SagaInstanceEntity.UpdatedAt.set -> void
+ZeroAlloc.Saga.EfCore.SagaModelBuilderExtensions

@@ -1,0 +1,18 @@
+#nullable enable
+static ZeroAlloc.Saga.Orm.SagaOrmBuilderExtensions.WithOrmStore(this ZeroAlloc.Saga.ISagaBuilder! builder, System.Action<ZeroAlloc.Saga.Orm.OrmSagaStoreOptions!>? configure = null) -> ZeroAlloc.Saga.ISagaBuilder!
+static ZeroAlloc.Saga.Orm.SagaOrmMigrations.Postgres.get -> ZeroAlloc.ORM.Migrations.IMigrationSource!
+static ZeroAlloc.Saga.Orm.SagaOrmMigrations.Sqlite.get -> ZeroAlloc.ORM.Migrations.IMigrationSource!
+static ZeroAlloc.Saga.Orm.SagaOrmMigrations.SqlServer.get -> ZeroAlloc.ORM.Migrations.IMigrationSource!
+ZeroAlloc.Saga.Orm.OrmSagaConcurrencyException
+ZeroAlloc.Saga.Orm.OrmSagaConcurrencyException.CorrelationKey.get -> string!
+ZeroAlloc.Saga.Orm.OrmSagaConcurrencyException.OrmSagaConcurrencyException(string! sagaType, string! correlationKey, System.Exception? inner = null) -> void
+ZeroAlloc.Saga.Orm.OrmSagaConcurrencyException.SagaType.get -> string!
+ZeroAlloc.Saga.Orm.OrmSagaStore<TSaga, TKey>
+ZeroAlloc.Saga.Orm.OrmSagaStore<TSaga, TKey>.LoadOrCreateAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<TSaga!>
+ZeroAlloc.Saga.Orm.OrmSagaStore<TSaga, TKey>.RemoveAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.Orm.OrmSagaStore<TSaga, TKey>.SaveAsync(TKey key, TSaga! saga, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+ZeroAlloc.Saga.Orm.OrmSagaStore<TSaga, TKey>.TryLoadAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<TSaga?>
+ZeroAlloc.Saga.Orm.OrmSagaStoreOptions
+ZeroAlloc.Saga.Orm.OrmSagaStoreOptions.OrmSagaStoreOptions() -> void
+ZeroAlloc.Saga.Orm.SagaOrmBuilderExtensions
+ZeroAlloc.Saga.Orm.SagaOrmMigrations
