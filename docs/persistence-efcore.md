@@ -104,6 +104,15 @@ row-version column). The store rotates `RowVersion` to a fresh
 value in the `WHERE` clause, so a stale write affects zero rows and
 surfaces as `DbUpdateConcurrencyException`.
 
+A load that finds no row is an observation too, as on the Redis and ORM stores. If another
+writer creates the saga after that load, for example because two events that both start it are
+handled at once, the save or remove that follows raises `EfCoreSagaConcurrencyException` and
+their row is kept. The save does not overwrite their saga with this attempt's state, and the
+remove does not delete it. When there is still no row, the save inserts one, and the remove
+deletes nothing and still commits what the attempt enlisted, such as its outbox rows.
+`RemoveAsync` deletes a loaded row against the `RowVersion` it was loaded with, so a row another
+writer changed or deleted since is a conflict as well.
+
 The generator-emitted notification handler catches that exception and
 retries the entire load → step → save loop. After
 `MaxRetryAttempts` consecutive conflicts the handler gives up and

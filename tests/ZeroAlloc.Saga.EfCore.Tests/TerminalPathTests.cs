@@ -41,6 +41,17 @@ public sealed class TerminalPathTests
         }
     }
 
+    private static async Task<SagaInstanceEntity?> ReadRowAsync(SqliteFixture fx, OrderId orderId)
+    {
+        var ctx = fx.CreateContext();
+        await using (ctx.ConfigureAwait(false))
+        {
+            var key = orderId.ToString();
+            return await ctx.Set<SagaInstanceEntity>().AsNoTracking()
+                .SingleOrDefaultAsync(e => e.CorrelationKey == key).ConfigureAwait(false);
+        }
+    }
+
     [Fact]
     public async Task Remove_WithNoSagaRow_StillCommitsWhatTheScopeEnlisted()
     {
@@ -165,5 +176,100 @@ public sealed class TerminalPathTests
         }
 
         Assert.False(await RowExistsAsync(fx, orderId));
+    }
+
+    [Fact]
+    public async Task Save_AfterLoadingNoSaga_WhenAnotherWriterCreatedIt_IsAConflict_AndKeepsTheirSaga()
+    {
+        // Two events that both start the same saga, handled concurrently: this scope loaded the
+        // key and found no saga, then the other writer created it. Saving must not overwrite
+        // their row with this scope's state; it is a conflict, and the retry reloads their saga.
+        // #198
+        await using var fx = new SqliteFixture();
+        await fx.EnsureCreatedAsync();
+        var orderId = new OrderId(541);
+
+        var ctx = fx.CreateContext();
+        await using (ctx.ConfigureAwait(false))
+        {
+            var store = CreateStore(ctx);
+            var saga = await store.LoadOrCreateAsync(orderId, default);
+
+            await SaveStartedSagaAsync(fx, orderId);
+            var theirs = await ReadRowAsync(fx, orderId);
+            Assert.NotNull(theirs);
+
+            saga.Fsm.TryFire(OrderFulfillmentSagaFsm.Trigger.OrderPlaced);
+            saga.ReserveStock(new OrderPlaced(orderId, 99m));
+            var ex = await Assert.ThrowsAsync<EfCoreSagaConcurrencyException>(
+                async () => await store.SaveAsync(orderId, saga, default).ConfigureAwait(false));
+            Assert.IsAssignableFrom<ISagaConcurrencyConflict>(ex);
+
+            var after = await ReadRowAsync(fx, orderId);
+            Assert.NotNull(after);
+            Assert.Equal(theirs.RowVersion, after.RowVersion);
+            Assert.Equal(theirs.State, after.State);
+        }
+    }
+
+    [Fact]
+    public async Task Remove_AfterLoadingNoSaga_WhenAnotherWriterCreatedIt_IsAConflict_AndKeepsTheirSaga()
+    {
+        // Same race on the remove path: the step that completes the saga in this scope must not
+        // delete the saga another writer created after this scope found none. #198
+        await using var fx = new SqliteFixture();
+        await fx.EnsureCreatedAsync();
+        var orderId = new OrderId(551);
+
+        var ctx = fx.CreateContext();
+        await using (ctx.ConfigureAwait(false))
+        {
+            var store = CreateStore(ctx);
+            await store.LoadOrCreateAsync(orderId, default);
+
+            await SaveStartedSagaAsync(fx, orderId);
+            var theirs = await ReadRowAsync(fx, orderId);
+            Assert.NotNull(theirs);
+
+            var ex = await Assert.ThrowsAsync<EfCoreSagaConcurrencyException>(
+                async () => await store.RemoveAsync(orderId, default).ConfigureAwait(false));
+            Assert.IsAssignableFrom<ISagaConcurrencyConflict>(ex);
+
+            var after = await ReadRowAsync(fx, orderId);
+            Assert.NotNull(after);
+            Assert.Equal(theirs.RowVersion, after.RowVersion);
+        }
+    }
+
+    [Fact]
+    public async Task Save_AfterLoadingNoSaga_ThenSavingAgain_UpdatesTheRowThisScopeInserted()
+    {
+        // The row this scope inserted is its own, so a second save in the same scope is an
+        // update of it, not a conflict with "another writer".
+        await using var fx = new SqliteFixture();
+        await fx.EnsureCreatedAsync();
+        var orderId = new OrderId(561);
+        string expected;
+
+        var ctx = fx.CreateContext();
+        await using (ctx.ConfigureAwait(false))
+        {
+            var store = CreateStore(ctx);
+            var saga = await store.LoadOrCreateAsync(orderId, default);
+            saga.Fsm.TryFire(OrderFulfillmentSagaFsm.Trigger.OrderPlaced);
+            saga.ReserveStock(new OrderPlaced(orderId, 1m));
+            await store.SaveAsync(orderId, saga, default);
+
+            var inserted = ((ISagaPersistableState)saga).CurrentFsmStateName;
+
+            saga.Fsm.TryFire(OrderFulfillmentSagaFsm.Trigger.StockReserved);
+            await store.SaveAsync(orderId, saga, default);
+            expected = ((ISagaPersistableState)saga).CurrentFsmStateName;
+            Assert.NotEqual(inserted, expected, StringComparer.Ordinal);
+        }
+
+        var row = await ReadRowAsync(fx, orderId);
+        Assert.NotNull(row);
+        Assert.Equal(expected, row.CurrentFsmState);
     }
 }
