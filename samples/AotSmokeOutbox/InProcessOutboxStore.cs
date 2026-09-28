@@ -10,8 +10,8 @@ namespace AotSmokeOutbox;
 /// <summary>
 /// Tiny in-process <see cref="IOutboxStore"/> on the ZeroAlloc.Outbox 3.0 lease contract, for the
 /// AOT smoke. Auto-commits each enqueue; the deferred-EfCore semantics don't matter here. The
-/// load-bearing AOT contract is that the saga generator's MediatorSagaCommandDispatcher roots
-/// SagaCommandRegistry, so WithOutbox()'s reflective lookup works after trimming. One lock guards
+/// load-bearing AOT contract is that saga commands read back from this store reach
+/// SagaCommandRegistry through the generated command source after trimming. One lock guards
 /// everything, which is all a single-process smoke needs.
 /// </summary>
 internal sealed class InProcessOutboxStore : IOutboxStore

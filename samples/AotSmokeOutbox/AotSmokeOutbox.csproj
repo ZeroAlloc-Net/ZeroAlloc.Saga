@@ -7,13 +7,11 @@
     <AssemblyName>AotSmokeOutbox</AssemblyName>
 
     <!-- The whole point of this sample: end-to-end native AOT publish.
-         We empirically verify that the [DynamicDependency] the saga
-         generator emits on MediatorSagaCommandDispatcher's constructor
-         keeps ZeroAlloc.Saga.Generated.SagaCommandRegistry's GetTypeNames
-         and DispatchAsync alive after trimming, so WithOutbox() can locate
-         them reflectively and ZeroAlloc.Outbox's worker can dispatch saga
-         commands. If the rooting were missing, the startup check would fail
-         the host with "could not locate the generator-emitted SagaCommandRegistry".
+         WithOutbox() learns the saga command types from the generated
+         GeneratedSagaCommandSource that With{Saga}() registers, and the worker
+         dispatches through it into ZeroAlloc.Saga.Generated.SagaCommandRegistry.
+         Both are referenced directly, with no reflection, so this proves the
+         outbox round trip survives trimming without any rooting attribute.
          -->
     <PublishAot>true</PublishAot>
     <InvariantGlobalization>true</InvariantGlobalization>

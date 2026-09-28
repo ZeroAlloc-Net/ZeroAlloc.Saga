@@ -52,14 +52,19 @@ public class SagaOutboxRegistrationTests
             d.ServiceType == typeof(IHostedService) && d.ImplementationType == typeof(OutboxWorkerService));
     }
 
-    [Fact]
-    public void WithOutbox_RegistersOneScopedDispatcherPerSagaCommandType()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void WithOutbox_RegistersOneScopedDispatcherPerSagaCommandType_InEitherOrder(bool outboxFirst)
     {
         var services = new ServiceCollection();
         SagaCommandRegistryDispatcher fake = (_, _, _, _) => default;
         services.AddSingleton(fake);
 
-        services.AddSaga().WithOutbox();
+        if (outboxFirst)
+            services.AddSaga().WithOutbox().WithOrderFulfillmentSaga();
+        else
+            services.AddSaga().WithOrderFulfillmentSaga().WithOutbox();
 
         var descriptors = services.Where(d => d.ServiceType == typeof(IOutboxTypeDispatcher)).ToList();
         Assert.Equal(FixtureCommandTypeNames.Length, descriptors.Count);
@@ -80,7 +85,7 @@ public class SagaOutboxRegistrationTests
         var services = new ServiceCollection();
         var builder = services.AddSaga();
 
-        builder.WithOutbox();
+        builder.WithOutbox().WithOrderFulfillmentSaga();
         builder.WithOutbox();
 
         Assert.Equal(
@@ -103,7 +108,7 @@ public class SagaOutboxRegistrationTests
             return default;
         };
         services.AddSingleton(fake);
-        services.AddSaga().WithOutbox();
+        services.AddSaga().WithOutbox().WithOrderFulfillmentSaga();
 
         await using var root = services.BuildServiceProvider();
         await using var scope = root.CreateAsyncScope();

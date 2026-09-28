@@ -21,7 +21,8 @@ namespace ZeroAlloc.Saga.Outbox;
 /// check has passed.
 /// </para>
 /// <para>
-/// It throws when the generator-emitted registry was not found, when no
+/// It throws when no saga is registered, when an assembly's sagas cannot be dispatched from the
+/// outbox because it does not reference ZeroAlloc.Serialisation, when no
 /// <see cref="OutboxWorkerService"/> is registered, when no <see cref="IOutboxStore"/> resolves,
 /// or when another <see cref="IOutboxTypeDispatcher"/> claims a saga command's type name. The
 /// worker keeps one dispatcher per type name, the last one registered, so the other one would
@@ -38,12 +39,19 @@ internal sealed class SagaOutboxStartupCheck : IHostedLifecycleService
         "           services.AddSaga()...WithRedisStore()...WithOutbox().WithRedisOutbox();\n" +
         "See https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox.md";
 
-    internal const string RegistryNotFoundMessage =
-        "ZeroAlloc.Saga.Outbox.WithOutbox(): could not locate the generator-emitted " +
-        "ZeroAlloc.Saga.Generated.SagaCommandRegistry. The Saga generator emits it into the assembly " +
-        "that declares your [Saga] classes when that assembly references ZeroAlloc.Serialisation, " +
-        "and WithOutbox() needs one built by ZeroAlloc.Saga 4.0 or later. That assembly must be " +
-        "loaded when WithOutbox() runs, which it is when the same method calls its With{Saga}Saga().";
+    internal const string NoSagaRegisteredMessage =
+        "ZeroAlloc.Saga.Outbox.WithOutbox(): no saga is registered, so there is no saga command to dispatch. " +
+        "Register your sagas on the same service collection with their generator-emitted With{Saga}(), " +
+        "before or after WithOutbox(). A saga assembly built with a Saga generator older than this " +
+        "ZeroAlloc.Saga.Outbox registers no saga command source; rebuild it.";
+
+    internal static string MissingSerialisationMessage(IReadOnlyList<string> assemblies) =>
+        "ZeroAlloc.Saga.Outbox.WithOutbox(): the saga commands of " +
+        string.Join(", ", assemblies.Select(a => $"'{a}'")) +
+        " cannot be dispatched from the outbox. The outbox stores serialized commands, and the Saga " +
+        "generator emits the SagaCommandRegistry that deserializes them only into an assembly that " +
+        "references ZeroAlloc.Serialisation. Add a ZeroAlloc.Serialisation package reference to the " +
+        "project that declares those [Saga] classes.";
 
     internal const string MissingWorkerMessage =
         "ZeroAlloc.Saga.Outbox.WithOutbox(): no OutboxWorkerService is registered. ZeroAlloc.Outbox's " +
@@ -67,8 +75,11 @@ internal sealed class SagaOutboxStartupCheck : IHostedLifecycleService
     /// <inheritdoc />
     public async Task StartingAsync(CancellationToken cancellationToken)
     {
-        if (!_registration.RegistryFound)
-            throw new InvalidOperationException(RegistryNotFoundMessage);
+        if (_registration.SourceCount == 0)
+            throw new InvalidOperationException(NoSagaRegisteredMessage);
+
+        if (_registration.AssembliesWithoutSerialisation.Count > 0)
+            throw new InvalidOperationException(MissingSerialisationMessage(_registration.AssembliesWithoutSerialisation));
 
         if (!HasOutboxWorker())
             throw new InvalidOperationException(MissingWorkerMessage);

@@ -18,14 +18,11 @@ namespace AotSmokeOutbox;
 /// AOT-compatibility smoke test for the Saga.Outbox bridge.
 ///
 /// What this proves end-to-end under <c>PublishAot=true</c>:
-///   1. The saga generator's <c>MediatorSagaCommandDispatcher</c> roots
-///      <c>ZeroAlloc.Saga.Generated.SagaCommandRegistry</c> via the emitted
-///      <c>[DynamicDependency]</c>, so its <c>GetTypeNames</c> and <c>DispatchAsync</c>
-///      survive trimming.
-///   2. <c>SagaOutboxBuilderExtensions.WithOutbox()</c> locates that registry
-///      reflectively through <c>AppDomain.CurrentDomain.GetAssemblies()</c> and
-///      registers one outbox dispatcher per saga command type, through the path the
-///      IL2026/IL2075/IL3050 suppressions claim is AOT-safe.
+///   1. <c>With{Saga}()</c> registers the generated <c>GeneratedSagaCommandSource</c>,
+///      which references <c>ZeroAlloc.Saga.Generated.SagaCommandRegistry</c> directly, so
+///      the registry survives trimming without reflection or a rooting attribute.
+///   2. <c>SagaOutboxBuilderExtensions.WithOutbox()</c> registers one outbox dispatcher per
+///      command type that source lists.
 ///   3. A real host runs <c>WithOutbox()</c>'s startup check, then ZeroAlloc.Outbox's
 ///      <c>OutboxWorkerService</c> dispatches the round trip: saga step → enqueue →
 ///      worker claim → saga dispatcher → registry deserialise → mediator Send.
@@ -123,8 +120,8 @@ internal static class Program
         if (store.Count != 1) return Fail($"Expected 1 outbox entry after OrderPlaced, got {store.Count}");
 
         // Starting the host runs WithOutbox()'s startup check, then the worker. The worker
-        // dispatches through the reflectively located SagaCommandRegistry — the calls that fail
-        // under PublishAot=true if the [DynamicDependency] rooting is missing.
+        // dispatches through the generated command source into SagaCommandRegistry — the
+        // calls that would fail under PublishAot=true if trimming removed the registry.
         await host.StartAsync();
         try
         {

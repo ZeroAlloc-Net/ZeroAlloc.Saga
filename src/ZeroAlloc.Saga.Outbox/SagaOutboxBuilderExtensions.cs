@@ -1,10 +1,5 @@
 using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.Linq;
-using System.Reflection;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -20,8 +15,6 @@ namespace ZeroAlloc.Saga.Outbox;
 /// </summary>
 public static class SagaOutboxBuilderExtensions
 {
-    private const BindingFlags AnyStatic = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
-
     /// <summary>
     /// Replaces the default <see cref="ISagaCommandDispatcher"/> with
     /// <see cref="OutboxSagaCommandDispatcher"/>, so every saga step's command is written to the
@@ -38,10 +31,14 @@ public static class SagaOutboxBuilderExtensions
     /// another <see cref="IOutboxTypeDispatcher"/> claims a saga command's type name.
     /// </para>
     /// <para>
-    /// The generator-emitted <c>ZeroAlloc.Saga.Generated.SagaCommandRegistry</c> is located by
-    /// reflection when this method runs, to learn the saga command type names. A
+    /// The saga command types come from the <see cref="SagaCommandSource"/> of every assembly whose
+    /// sagas are registered on the same service collection, with their generator-emitted
+    /// <c>With{Saga}()</c>, before or after this call. Sagas may be split across assemblies: each
+    /// command is dispatched through the source of the assembly that declares it. The start check
+    /// fails when no saga is registered, or when an assembly's sagas cannot be dispatched from the
+    /// outbox because it does not reference ZeroAlloc.Serialisation. A
     /// <see cref="SagaCommandRegistryDispatcher"/> registered before this call replaces the
-    /// reflective dispatch; tests use that to short-circuit it.
+    /// dispatch through the sources; tests use that to short-circuit it.
     /// </para>
     /// </remarks>
     public static ISagaBuilder WithOutbox(this ISagaBuilder builder)
@@ -62,105 +59,25 @@ public static class SagaOutboxBuilderExtensions
         if (services.Any(d => d.ServiceType == typeof(SagaOutboxRegistration)))
             return builder;
 
-        var registryFound = TryFindRegistry(out var typeNames, out var dispatch);
-        if (registryFound)
+        var registration = new SagaOutboxRegistration();
+        services.AddSingleton(registration);
+        // The default routes each type name to the source of the assembly that declares the
+        // command. TryAdd, so a delegate registered before this call replaces it.
+        SagaCommandRegistryDispatcher dispatch = registration.DispatchAsync;
+        services.TryAddSingleton(dispatch);
+
+        // Every assembly's sagas, including those whose With{Saga}() runs after this call.
+        builder.ForEachCommandSource(source =>
         {
-            services.TryAddSingleton<SagaCommandRegistryDispatcher>(dispatch!);
-            foreach (var typeName in typeNames)
+            foreach (var typeName in registration.Add(source))
             {
                 services.AddScoped<IOutboxTypeDispatcher>(sp => new SagaCommandOutboxDispatcher(
                     typeName, sp.GetRequiredService<SagaCommandRegistryDispatcher>(), sp));
             }
-        }
+        });
 
-        services.AddSingleton(new SagaOutboxRegistration(typeNames, registryFound));
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, SagaOutboxStartupCheck>(
             sp => new SagaOutboxStartupCheck(sp, sp.GetRequiredService<SagaOutboxRegistration>())));
         return builder;
-    }
-
-    [UnconditionalSuppressMessage(
-        "Trimming",
-        "IL2026:RequiresUnreferencedCode",
-        Justification = "SagaCommandRegistry is rooted by [DynamicDependency(NonPublicMethods, typeof(SagaCommandRegistry))] emitted on the saga generator's MediatorSagaCommandDispatcher. That dispatcher is rooted by the generator-emitted With{Saga}Saga DI registration, transitively keeping the registry's DispatchAsync and GetTypeNames alive under PublishAot=true.")]
-    [UnconditionalSuppressMessage(
-        "Trimming",
-        "IL2075:RequiresUnreferencedCode",
-        Justification = "Same: SagaCommandRegistry's non-public methods, DispatchAsync and GetTypeNames, are kept by the [DynamicDependency] on MediatorSagaCommandDispatcher; both GetMethod lookups find them after trimming.")]
-    [UnconditionalSuppressMessage(
-        "AOT",
-        "IL3050:RequiresDynamicCode",
-        Justification = "Reflective MethodInfo.Invoke is over non-generic static methods; no dynamic code generation needed for AOT.")]
-    private static bool TryFindRegistry(
-        out IReadOnlyList<string> typeNames,
-        [NotNullWhen(true)] out SagaCommandRegistryDispatcher? dispatch)
-    {
-        // Walk the loaded assemblies to find the generator-emitted registry. Lives in
-        // namespace ZeroAlloc.Saga.Generated; static methods GetTypeNames() and
-        // DispatchAsync(string, ReadOnlyMemory<byte>, IServiceProvider, IMediator, CancellationToken).
-        // IMediator is also generator-emitted in the consumer compilation, so we
-        // resolve it via IServiceProvider and pass it along.
-        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            var registryType = asm.GetType("ZeroAlloc.Saga.Generated.SagaCommandRegistry", throwOnError: false);
-            if (registryType is null) continue;
-
-            // Resolve the IMediator type from the same assembly as the registry — it lives
-            // in namespace ZeroAlloc.Mediator and is generator-emitted in the consumer.
-            var mediatorType = asm.GetType("ZeroAlloc.Mediator.IMediator", throwOnError: false)
-                ?? FindIMediatorType();
-            if (mediatorType is null) continue;
-
-            // NonPublic as well as Public: the registry's methods are internal, because
-            // DispatchAsync takes the generator-emitted IMediator, which is internal from Mediator v5.
-            var method = registryType.GetMethod(
-                "DispatchAsync",
-                AnyStatic,
-                binder: null,
-                types: new[]
-                {
-                    typeof(string),
-                    typeof(ReadOnlyMemory<byte>),
-                    typeof(IServiceProvider),
-                    mediatorType,
-                    typeof(CancellationToken),
-                },
-                modifiers: null);
-            var getTypeNames = registryType.GetMethod(
-                "GetTypeNames", AnyStatic, binder: null, types: Type.EmptyTypes, modifiers: null);
-            if (method is null || getTypeNames?.Invoke(null, null) is not IReadOnlyList<string> names) continue;
-
-            typeNames = names;
-            dispatch = (typeName, bytes, sp, ct) =>
-            {
-                var mediator = sp.GetService(mediatorType);
-                if (mediator is null)
-                {
-                    throw new InvalidOperationException(
-                        $"WithOutbox(): no service registered for the generator-emitted {mediatorType.FullName}. Did you call AddMediator()?");
-                }
-                var result = method.Invoke(null, new[] { typeName, (object)bytes, sp, mediator, ct });
-                return result is ValueTask vt ? vt : default;
-            };
-            return true;
-        }
-
-        typeNames = Array.Empty<string>();
-        dispatch = null;
-        return false;
-    }
-
-    [UnconditionalSuppressMessage(
-        "Trimming",
-        "IL2026:RequiresUnreferencedCode",
-        Justification = "Walks loaded assemblies looking for the generator-emitted IMediator; types are rooted by the consumer's Mediator generator.")]
-    private static Type? FindIMediatorType()
-    {
-        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            var t = asm.GetType("ZeroAlloc.Mediator.IMediator", throwOnError: false);
-            if (t is not null) return t;
-        }
-        return null;
     }
 }

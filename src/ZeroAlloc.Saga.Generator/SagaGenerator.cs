@@ -15,6 +15,9 @@ namespace ZeroAlloc.Saga.Generator;
 ///   4. {SagaName}CorrelationDispatch.g.cs — typed event-to-key dispatch
 ///   5. {SagaName}BuilderExtensions.g.cs — AOT-safe DI registrations + compensation dispatcher
 ///
+/// and once per compilation MediatorSagaCommandDispatcher.g.cs, GeneratedSagaCommandSource.g.cs
+/// and, when ZeroAlloc.Serialisation is referenced, SagaCommandRegistry.g.cs.
+///
 /// The generator also reports authoring diagnostics ZASAGA001-013 directly via
 /// <see cref="SourceProductionContext.ReportDiagnostic"/>.
 /// </summary>
@@ -69,16 +72,21 @@ public sealed class SagaGenerator : IIncrementalGenerator
         // Per-compilation MediatorSagaCommandDispatcher — single emit covering every
         // [Step] command type across all sagas in the consumer assembly. Lives in the
         // consumer's compilation so it can reference IMediator directly (which is
-        // emitted per-assembly by the Mediator source generator). Combined with
-        // serialisationReferenced so the emitter can attach a [DynamicDependency]
-        // on SagaCommandRegistry when (and only when) the registry is also being
-        // emitted — this roots the registry under PublishAot=true.
+        // emitted per-assembly by the Mediator source generator).
+        context.RegisterSourceOutput(
+            allModels,
+            static (spc, results) => MediatorSagaCommandDispatcherEmitter.Emit(spc, results));
+
+        // Per-compilation GeneratedSagaCommandSource — the SagaCommandSource every With{Saga}()
+        // adds to the builder, so sagas in several assemblies each dispatch their own commands
+        // (#176). It overrides DispatchSerializedAsync, forwarding to SagaCommandRegistry, when
+        // (and only when) the registry is also being emitted.
         context.RegisterSourceOutput(
             allModels.Combine(serialisationReferenced),
             static (spc, tuple) =>
             {
                 var (results, hasSerialisation) = tuple;
-                MediatorSagaCommandDispatcherEmitter.Emit(spc, results, registryAlsoEmitted: hasSerialisation);
+                SagaCommandSourceEmitter.Emit(spc, results, registryAlsoEmitted: hasSerialisation);
             });
 
         context.RegisterSourceOutput(

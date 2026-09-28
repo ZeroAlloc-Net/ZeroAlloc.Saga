@@ -25,7 +25,7 @@ public static class TwoStepSagaBuilderExtensions
         builder.Services.TryAddSingleton<SagaLockManager<global::Sample.OrderId>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<TwoStepSaga>, TwoStepSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<TwoStepSaga, global::Sample.OrderId>, SagaManager<TwoStepSaga, global::Sample.OrderId>>();
-        builder.Services.TryAddScoped<global::ZeroAlloc.Saga.ISagaCommandDispatcher, global::ZeroAlloc.Saga.Generated.MediatorSagaCommandDispatcher>();
+        global::ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.AddCommandSource(builder, global::ZeroAlloc.Saga.Generated.GeneratedSagaCommandSource.Instance);
 
         builder.Services.AddTransient<INotificationHandler<global::Sample.OrderPlaced>, TwoStepSaga_OrderPlaced_Handler>();
         builder.Services.AddTransient<INotificationHandler<global::Sample.StockReserved>, TwoStepSaga_StockReserved_Handler>();

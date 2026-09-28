@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -38,7 +39,7 @@ public sealed class SagaOutboxStartupCheckTests
         using var host = BuildHost(fx, services =>
         {
             services.AddScoped<IOutboxStore, EfCoreOutboxStore<OutboxE2EDbContext>>();
-            services.AddSaga().WithOutbox();
+            services.AddSaga().WithOutbox().WithOrderFulfillmentSaga();
         });
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => host.StartAsync());
@@ -55,7 +56,7 @@ public sealed class SagaOutboxStartupCheckTests
         using var host = BuildHost(fx, services =>
         {
             services.AddOutbox();
-            services.AddSaga().WithOutbox();
+            services.AddSaga().WithOutbox().WithOrderFulfillmentSaga();
         });
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => host.StartAsync());
@@ -64,17 +65,40 @@ public sealed class SagaOutboxStartupCheckTests
     }
 
     [Fact]
-    public async Task Start_Without_The_Generator_Emitted_Registry_Throws()
+    public async Task Start_Without_A_Registered_Saga_Throws()
     {
-        // The test host's own assembly always carries a real SagaCommandRegistry, so this branch
-        // is exercised directly rather than through the full WithOutbox() -> host pipeline.
-        var registration = new SagaOutboxRegistration(Array.Empty<string>(), registryFound: false);
-        var check = new SagaOutboxStartupCheck(new ServiceCollection().BuildServiceProvider(), registration);
+        // WithOutbox() dispatches the commands of the sagas registered on the same collection.
+        // It no longer scans loaded assemblies, so an assembly that merely exists, such as this
+        // one, registers nothing.
+        await using var fx = new SqliteFixture();
+        using var host = BuildHost(fx, services =>
+        {
+            AddDocumentedOutbox(services);
+            services.AddSaga().WithOutbox();
+        });
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => check.StartingAsync(CancellationToken.None));
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => host.StartAsync());
 
-        Assert.Equal(SagaOutboxStartupCheck.RegistryNotFoundMessage, ex.Message);
+        Assert.Equal(SagaOutboxStartupCheck.NoSagaRegisteredMessage, ex.Message);
+    }
+
+    [Fact]
+    public async Task Start_With_A_Saga_Assembly_Without_Serialisation_Throws_Naming_It()
+    {
+        // The generator emits the registry that deserializes outbox rows only into an assembly
+        // that references ZeroAlloc.Serialisation; its source then cannot dispatch serialized
+        // commands, and those commands would be dead-lettered.
+        await using var fx = new SqliteFixture();
+        using var host = BuildHost(fx, services =>
+        {
+            AddDocumentedOutbox(services);
+            services.AddSaga().WithOutbox().WithOrderFulfillmentSaga().AddCommandSource(new NonSerializingSource());
+        });
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => host.StartAsync());
+
+        Assert.Contains("'ZeroAlloc.Saga.Outbox.Tests'", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("ZeroAlloc.Serialisation", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -85,7 +109,7 @@ public sealed class SagaOutboxStartupCheckTests
         using var host = BuildHost(fx, services =>
         {
             AddDocumentedOutbox(services);
-            services.AddSaga().WithOutbox();
+            services.AddSaga().WithOutbox().WithOrderFulfillmentSaga();
             services.AddScoped<IOutboxTypeDispatcher>(_ => new ForeignDispatcher(typeName));
         });
 
@@ -104,7 +128,7 @@ public sealed class SagaOutboxStartupCheckTests
         using var host = BuildHost(fx, services =>
         {
             if (outboxFirst) AddDocumentedOutbox(services);
-            services.AddSaga().WithOutbox();
+            services.AddSaga().WithOutbox().WithOrderFulfillmentSaga();
             if (!outboxFirst) AddDocumentedOutbox(services);
         });
 
@@ -124,7 +148,7 @@ public sealed class SagaOutboxStartupCheckTests
             services.AddOptions<OutboxOptions>().Configure(o => o.PollingInterval = TimeSpan.FromMilliseconds(50));
             services.AddSingleton<IHostedService>(sp => ActivatorUtilities.CreateInstance<OutboxWorkerService>(sp));
             services.AddScoped<IOutboxStore, EfCoreOutboxStore<OutboxE2EDbContext>>();
-            services.AddSaga().WithOutbox();
+            services.AddSaga().WithOutbox().WithOrderFulfillmentSaga();
         });
 
         await host.StartAsync();
@@ -141,7 +165,7 @@ public sealed class SagaOutboxStartupCheckTests
         using var host = BuildHost(fx, services =>
         {
             AddDocumentedOutbox(services);
-            services.AddSaga().WithOutbox();
+            services.AddSaga().WithOutbox().WithOrderFulfillmentSaga();
             DecorateDispatchersInPlace(services);
         });
 
@@ -184,6 +208,18 @@ public sealed class SagaOutboxStartupCheckTests
         public ValueTask DispatchAsync(ReadOnlyMemory<byte> payload, CancellationToken ct)
             => inner.DispatchAsync(payload, ct);
     }
+
+    // A source like the one the generator emits into an assembly without ZeroAlloc.Serialisation.
+    private sealed class NonSerializingSource : SagaCommandSource
+    {
+        public override IReadOnlyList<Type> CommandTypes { get; } = [typeof(StrayCommand)];
+
+        public override ISagaCommandDispatcher CreateDispatcher(IServiceProvider services)
+            => throw new NotSupportedException();
+    }
+
+    // Not an IRequest: this project runs the Mediator generator, which would demand a handler.
+    private sealed class StrayCommand;
 
     private sealed class ForeignDispatcher(string typeName) : IOutboxTypeDispatcher
     {

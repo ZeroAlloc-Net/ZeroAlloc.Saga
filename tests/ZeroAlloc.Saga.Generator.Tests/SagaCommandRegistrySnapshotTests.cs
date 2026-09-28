@@ -137,8 +137,24 @@ public class SagaCommandRegistrySnapshotTests
         Assert.Contains("typeof(global::Sample.CancelReserveCmd).FullName!,", registry, StringComparison.Ordinal);
         Assert.Contains("typeof(global::Sample.Commands.ChargeCmd).FullName!,", registry, StringComparison.Ordinal);
         Assert.Contains("typeof(global::Sample.ReserveCmd).FullName!,", registry, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Source_Lists_Every_Command_Type_And_Forwards_Serialized_Dispatch_To_The_Registry()
+    {
+        // WithOutbox() takes its type names from the source's CommandTypes, as Type.FullName, and
+        // dispatches through DispatchSerializedAsync. The registry is referenced directly, so it
+        // needs no reflection and no trimming root, #176.
+        var source = GeneratedSource(GeneratorTestHost.Run(CompensatingSagaWithNestedCommand), "GeneratedSagaCommandSource.g.cs");
+
+        Assert.Contains("typeof(global::Sample.CancelReserveCmd),", source, StringComparison.Ordinal);
+        Assert.Contains("typeof(global::Sample.Commands.ChargeCmd),", source, StringComparison.Ordinal);
+        Assert.Contains("typeof(global::Sample.ReserveCmd),", source, StringComparison.Ordinal);
+        Assert.Contains("public override bool CanDispatchSerialized => true;", source, StringComparison.Ordinal);
         Assert.Contains(
-            "internal static IReadOnlyList<string> GetTypeNames() => s_typeNames;", registry, StringComparison.Ordinal);
+            "=> SagaCommandRegistry.DispatchAsync(typeName, payload, services, services.GetRequiredService<IMediator>(), ct);",
+            source,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -155,17 +171,19 @@ public class SagaCommandRegistrySnapshotTests
             "ISerializer<global::Sample.Commands.ChargeCmd>", registry, StringComparison.Ordinal);
     }
 
-    private static string RegistrySource(GeneratorDriver driver)
+    private static string RegistrySource(GeneratorDriver driver) => GeneratedSource(driver, "SagaCommandRegistry.g.cs");
+
+    private static string GeneratedSource(GeneratorDriver driver, string hintName)
     {
         foreach (var result in driver.GetRunResult().Results)
         {
             foreach (var source in result.GeneratedSources)
             {
-                if (string.Equals(source.HintName, "SagaCommandRegistry.g.cs", StringComparison.Ordinal))
+                if (string.Equals(source.HintName, hintName, StringComparison.Ordinal))
                     return source.SourceText.ToString();
             }
         }
 
-        throw new InvalidOperationException("SagaCommandRegistry.g.cs was not generated.");
+        throw new InvalidOperationException($"{hintName} was not generated.");
     }
 }
