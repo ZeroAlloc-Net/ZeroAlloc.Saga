@@ -23,6 +23,7 @@ namespace ZeroAlloc.Saga.Orm;
 /// <see cref="SaveAsync"/> reads the current row version and passes it as the
 /// <c>WHERE</c> predicate of the update, so the check happens inside the single
 /// statement the database executes rather than in a read-then-write window here.
+/// <see cref="RemoveAsync"/> deletes against the same predicate.
 /// </para>
 /// </remarks>
 /// <typeparam name="TSaga">The saga type. Must implement <c>ISagaPersistableState</c>, which the Saga generator emits.</typeparam>
@@ -44,11 +45,15 @@ public sealed class OrmSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
     // two writers that both loaded and then saved overwrite each other -- the
     // exact lost update the row version exists to prevent.
     //
+    // A null value records that the load found no row. That is an observation
+    // too: a remove must not then delete a row another writer created since.
+    // A key with no entry was never loaded by this store.
+    //
     // The store is scoped, so this dictionary lives as long as the request
     // that owns it. That is the same unit-of-work boundary EF Core's change
     // tracker gives the EF backend, and like a DbContext it is not safe to
     // share a single instance across concurrent work.
-    private readonly Dictionary<TKey, byte[]> _loadedVersions = new();
+    private readonly Dictionary<TKey, byte[]?> _loadedVersions = new();
 
     /// <summary>
     /// Creates a store over the supplied repository.
@@ -82,10 +87,10 @@ public sealed class OrmSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
         var row = await _repo.GetAsync(s_sagaTypeKey, KeyOf(key), ct).ConfigureAwait(false);
         if (row is null)
         {
-            // Absent now means "insert on save". Drop any version from an
+            // Absent now means "insert on save". Replace any version from an
             // earlier read so a row deleted behind our back is not still
             // treated as an update.
-            _loadedVersions.Remove(key);
+            _loadedVersions[key] = null;
             return null;
         }
 
@@ -125,7 +130,7 @@ public sealed class OrmSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
         // Decide insert vs update from what this store has seen, not from a
         // fresh read. See _loadedVersions for why re-reading here would defeat
         // the concurrency check entirely.
-        if (!_loadedVersions.TryGetValue(key, out var expectedRowVersion))
+        if (!_loadedVersions.TryGetValue(key, out var expectedRowVersion) || expectedRowVersion is null)
         {
             var rowVersion = NewRowVersion();
             _log.LogDebug("Inserting new saga row {SagaType}/{Key}", s_sagaTypeKey, key);
@@ -158,9 +163,10 @@ public sealed class OrmSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
         {
             // The row version moved since we read it, so the predicate matched
             // nothing -- someone else wrote first, or removed the row outright.
-            // Forget our stale version so a retry re-reads rather than
-            // repeating the same doomed update.
-            _loadedVersions.Remove(key);
+            // Keep the stale version: it is the only evidence this store is
+            // behind. Forgetting it would turn a repeated save into an insert
+            // that re-creates a saga another writer ended. A retry reloads,
+            // which replaces it.
             throw new OrmSagaConcurrencyException(s_sagaTypeKey, correlationKey);
         }
 
@@ -169,12 +175,65 @@ public sealed class OrmSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The remove is checked against what this store observed at load, as
+    /// <see cref="SaveAsync"/> is, and as the EF Core and Redis stores do:
+    /// <list type="bullet">
+    /// <item>A loaded row is deleted only while its row version is still the
+    /// one this store loaded. A row another writer changed or deleted since is
+    /// a conflict, so a completing step cannot discard their progress.</item>
+    /// <item>A load that found no row must still find none. A row another
+    /// writer created since is a conflict and is kept. When there is still no
+    /// row, as for a saga one event both starts and completes, nothing is
+    /// deleted and the remove succeeds.</item>
+    /// <item>With no load at all there is nothing to compare against, and the
+    /// delete is unconditional.</item>
+    /// </list>
+    /// </remarks>
+    /// <exception cref="OrmSagaConcurrencyException">
+    /// Another writer changed, deleted or created the row since this store
+    /// loaded it. The generated handler retries, as it does for a save.
+    /// </exception>
     public async ValueTask RemoveAsync(TKey key, CancellationToken ct)
     {
-        var affected = await _repo.DeleteAsync(s_sagaTypeKey, KeyOf(key), ct).ConfigureAwait(false);
-        _loadedVersions.Remove(key);
-        _log.LogDebug(
-            "Removed {Affected} row(s) for saga {SagaType}/{Key}", affected, s_sagaTypeKey, key);
+        var correlationKey = KeyOf(key);
+
+        if (!_loadedVersions.TryGetValue(key, out var expectedRowVersion))
+        {
+            var deleted = await _repo.DeleteAsync(s_sagaTypeKey, correlationKey, ct).ConfigureAwait(false);
+            _loadedVersions[key] = null;
+            _log.LogDebug(
+                "Removed {Affected} row(s) for saga {SagaType}/{Key} without a prior load",
+                deleted, s_sagaTypeKey, key);
+            return;
+        }
+
+        if (expectedRowVersion is null)
+        {
+            // This store saw no row. There is nothing of ours to delete, and a
+            // row that exists now belongs to another writer.
+            var current = await _repo.GetAsync(s_sagaTypeKey, correlationKey, ct).ConfigureAwait(false);
+            if (current is not null)
+            {
+                throw new OrmSagaConcurrencyException(s_sagaTypeKey, correlationKey);
+            }
+
+            _log.LogDebug("No saga row to remove for {SagaType}/{Key}", s_sagaTypeKey, key);
+            return;
+        }
+
+        var affected = await _repo.DeleteVersionedAsync(
+            s_sagaTypeKey, correlationKey, expectedRowVersion, ct).ConfigureAwait(false);
+        if (affected == 0)
+        {
+            // Same as a stale update: the row moved or vanished since the load.
+            // The stale version stays for the reason given in SaveAsync.
+            throw new OrmSagaConcurrencyException(s_sagaTypeKey, correlationKey);
+        }
+
+        // The row is gone as of our own delete, which is an observation too.
+        _loadedVersions[key] = null;
+        _log.LogDebug("Removed saga row {SagaType}/{Key}", s_sagaTypeKey, key);
     }
 
     private static TSaga Rehydrate(SagaInstanceRow row)

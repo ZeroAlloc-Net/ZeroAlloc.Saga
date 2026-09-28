@@ -153,4 +153,37 @@ public sealed class SqlServerStoreTests : IAsyncLifetime
 
         Assert.Null(await store.TryLoadAsync(id, default));
     }
+
+    [Fact]
+    public async Task Stale_Remove_Is_A_Conflict_On_SqlServer()
+    {
+        // The delete matches on the VARBINARY(16) row version too. A store
+        // whose version is stale must not delete the row another writer
+        // advanced, #196.
+        await using var spSeed = await ProviderAsync();
+        var seed = spSeed.GetRequiredService<ISagaStore<OrderFulfillmentSaga, OrderId>>();
+        var id = new OrderId(4);
+        var s = await seed.LoadOrCreateAsync(id, default);
+        s.Fsm.TryFire(OrderFulfillmentSagaFsm.Trigger.OrderPlaced);
+        s.ReserveStock(new OrderPlaced(id, 1m));
+        await seed.SaveAsync(id, s, default);
+
+        await using var spA = await ProviderAsync();
+        await using var spB = await ProviderAsync();
+        var a = spA.GetRequiredService<ISagaStore<OrderFulfillmentSaga, OrderId>>();
+        var b = spB.GetRequiredService<ISagaStore<OrderFulfillmentSaga, OrderId>>();
+
+        await b.LoadOrCreateAsync(id, default);
+        var sa = await a.LoadOrCreateAsync(id, default);
+        sa.Fsm.TryFire(OrderFulfillmentSagaFsm.Trigger.StockReserved);
+        sa.ChargeCustomer(new StockReserved(id));
+        await a.SaveAsync(id, sa, default);
+
+        await Assert.ThrowsAsync<OrmSagaConcurrencyException>(
+            async () => await b.RemoveAsync(id, default).ConfigureAwait(false));
+        Assert.NotNull(await a.TryLoadAsync(id, default));
+
+        await a.RemoveAsync(id, default);
+        Assert.Null(await a.TryLoadAsync(id, default));
+    }
 }
