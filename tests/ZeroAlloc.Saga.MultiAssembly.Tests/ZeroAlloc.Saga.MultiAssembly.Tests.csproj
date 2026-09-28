@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Sagas declared in more than one assembly, #176. This project declares no saga of its own: the
+    two it registers live in ZeroAlloc.Saga.MultiAssembly.Billing and .Shipping, each compiled with
+    its own Saga and Mediator generator output.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);MA0048;MA0051</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="ZeroAlloc.Mediator" VersionOverride="6.0.*" />
+    <PackageReference Include="ZeroAlloc.Outbox.EfCore" />
+    <PackageReference Include="ZeroAlloc.Serialisation" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ZeroAlloc.Saga.Outbox\ZeroAlloc.Saga.Outbox.csproj" />
+    <ProjectReference Include="..\..\src\ZeroAlloc.Saga.EfCore\ZeroAlloc.Saga.EfCore.csproj" />
+    <ProjectReference Include="..\ZeroAlloc.Saga.MultiAssembly.Billing\ZeroAlloc.Saga.MultiAssembly.Billing.csproj" />
+    <ProjectReference Include="..\ZeroAlloc.Saga.MultiAssembly.Shipping\ZeroAlloc.Saga.MultiAssembly.Shipping.csproj" />
+  </ItemGroup>
+</Project>

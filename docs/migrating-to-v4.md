@@ -91,8 +91,8 @@ await host.StartAsync();
 await host.StopAsync();
 ```
 
-A `SagaCommandRegistryDispatcher` registered before `WithOutbox()` still replaces the reflective
-dispatch.
+A `SagaCommandRegistryDispatcher` registered before `WithOutbox()` still replaces the default
+dispatch through the generated command sources.
 
 ## 3. Options
 

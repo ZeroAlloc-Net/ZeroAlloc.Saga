@@ -40,7 +40,8 @@ With the outbox bridge:
 3. ZeroAlloc.Outbox's `OutboxWorkerService`, registered by `AddOutbox()`, claims pending
    entries under a lease. For each saga command type, `WithOutbox()` registered an
    `IOutboxTypeDispatcher` that deserialises the command through the generator-emitted
-   `ZeroAlloc.Saga.Generated.SagaCommandRegistry` and sends it through the consumer's `IMediator`.
+   `ZeroAlloc.Saga.Generated.SagaCommandRegistry` of the assembly that declares the saga, and
+   sends it through that assembly's `IMediator`.
 4. After a successful dispatch the worker marks the entry succeeded. On failure it reschedules
    the entry with exponential backoff, or dead-letters it after `OutboxOptions.MaxAttempts`
    attempts.
@@ -116,16 +117,18 @@ services.AddSingleton<ISerializer<ChargeCustomerCommand>, JsonCommandSerializer<
 
 - Replaces the default scoped `ISagaCommandDispatcher` with
   `OutboxSagaCommandDispatcher`.
-- Locates the generator-emitted `SagaCommandRegistry` by reflection, and registers one scoped
-  `IOutboxTypeDispatcher` for each saga step and compensation command type it lists. The worker
-  resolves them from the same per-batch scope as the store, so dispatch shares the store's
-  `DbContext`.
-- Registers the `SagaCommandRegistryDispatcher` delegate those dispatchers call. Register your
-  own before `WithOutbox()` to replace it, for example in tests.
+- Registers one scoped `IOutboxTypeDispatcher` for each saga step and compensation command
+  type. The types come from the `SagaCommandSource` that every generator-emitted
+  `With{Saga}()` registers, one per assembly that declares sagas, so sagas may be split across
+  projects. `With{Saga}()` calls may come before or after `WithOutbox()`. Nothing is found by
+  reflection. The worker resolves the dispatchers from the same per-batch scope as the store, so
+  dispatch shares the store's `DbContext`.
+- Registers the `SagaCommandRegistryDispatcher` delegate those dispatchers call. The default
+  routes each command to the source of the assembly that declares it. Register your own before
+  `WithOutbox()` to replace it, for example in tests.
 - Registers a startup check, described below.
 
-The assembly that declares your sagas must be loaded when `WithOutbox()` runs. It is whenever
-the same method also calls its `With{Saga}Saga()`.
+See [Sagas in more than one assembly](concepts.md#sagas-in-more-than-one-assembly).
 
 ### Startup check
 
@@ -134,13 +137,20 @@ which the host calls on every such service before it starts any `IHostedService`
 `OutboxWorkerService` cannot claim a saga row before the check has passed. It throws
 `InvalidOperationException` with one of these messages:
 
-- The generator-emitted registry was not found:
+- No saga is registered on the service collection:
 
-  > ZeroAlloc.Saga.Outbox.WithOutbox(): could not locate the generator-emitted
-  > ZeroAlloc.Saga.Generated.SagaCommandRegistry. The Saga generator emits it into the assembly
-  > that declares your [Saga] classes when that assembly references ZeroAlloc.Serialisation, and
-  > WithOutbox() needs one built by ZeroAlloc.Saga 4.0 or later. That assembly must be loaded when
-  > WithOutbox() runs, which it is when the same method calls its With{Saga}Saga().
+  > ZeroAlloc.Saga.Outbox.WithOutbox(): no saga is registered, so there is no saga command to
+  > dispatch. Register your sagas on the same service collection with their generator-emitted
+  > With{Saga}(), before or after WithOutbox(). A saga assembly built with a Saga generator older
+  > than this ZeroAlloc.Saga.Outbox registers no saga command source; rebuild it.
+
+- An assembly's sagas are registered, but the assembly does not reference
+  `ZeroAlloc.Serialisation`, so the generator emitted no `SagaCommandRegistry` to deserialize its
+  commands. The message names each such assembly:
+
+  > ZeroAlloc.Saga.Outbox.WithOutbox(): the saga commands of 'Billing' cannot be dispatched from
+  > the outbox. [...] Add a ZeroAlloc.Serialisation package reference to the project that
+  > declares those [Saga] classes.
 
 - No `OutboxWorkerService` is registered, meaning `AddOutbox()` was never called:
 
@@ -305,12 +315,9 @@ themselves on the source-of-truth declaration.
 
 ### Sagas declared across more than one assembly
 
-`WithOutbox()` locates the generator-emitted `SagaCommandRegistry` by scanning loaded assemblies
-and uses the **first** one it finds; the saga generator's default `MediatorSagaCommandDispatcher`
-has the same first-wins behaviour when more than one `With{Saga}Saga()` runs. Splitting sagas
-across assemblies therefore leaves the other assemblies' commands never dispatched, and nothing
-fails at startup. Tracked in
-[ZeroAlloc-Net/ZeroAlloc.Saga#176](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/176).
+Supported. Every assembly that declares sagas must reference `ZeroAlloc.Serialisation`, and each
+saga command type must belong to the sagas of one assembly. See
+[Sagas in more than one assembly](concepts.md#sagas-in-more-than-one-assembly).
 
 ### Default-interface-method fallback
 

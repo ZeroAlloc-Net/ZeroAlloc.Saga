@@ -7,9 +7,9 @@ namespace ZeroAlloc.Saga.Outbox;
 
 /// <summary>
 /// The <see cref="IOutboxTypeDispatcher"/> for one saga command type.
-/// <see cref="SagaOutboxBuilderExtensions.WithOutbox"/> registers one per name the
-/// generator-emitted registry lists, so ZeroAlloc.Outbox's worker dispatches saga commands like
-/// any other outbox message.
+/// <see cref="SagaOutboxBuilderExtensions.WithOutbox"/> registers one per command type of every
+/// registered <see cref="SagaCommandSource"/>, so ZeroAlloc.Outbox's worker dispatches saga
+/// commands like any other outbox message, whichever assembly declares them.
 /// </summary>
 /// <remarks>
 /// Registered scoped. The worker resolves it from the same per-batch scope as the

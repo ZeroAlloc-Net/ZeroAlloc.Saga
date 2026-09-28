@@ -19,6 +19,9 @@
     <Project Path="tests/ZeroAlloc.Saga.Outbox.Redis.Tests/ZeroAlloc.Saga.Outbox.Redis.Tests.csproj" />
     <Project Path="tests/ZeroAlloc.Saga.Redis.Tests/ZeroAlloc.Saga.Redis.Tests.csproj" />
     <Project Path="tests/ZeroAlloc.Saga.Resilience.Tests/ZeroAlloc.Saga.Resilience.Tests.csproj" />
+    <Project Path="tests/ZeroAlloc.Saga.MultiAssembly.Billing/ZeroAlloc.Saga.MultiAssembly.Billing.csproj" />
+    <Project Path="tests/ZeroAlloc.Saga.MultiAssembly.Shipping/ZeroAlloc.Saga.MultiAssembly.Shipping.csproj" />
+    <Project Path="tests/ZeroAlloc.Saga.MultiAssembly.Tests/ZeroAlloc.Saga.MultiAssembly.Tests.csproj" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/OrderFulfillment/OrderFulfillment.csproj" />

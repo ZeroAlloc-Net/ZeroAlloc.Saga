@@ -65,10 +65,12 @@ internal static class BuilderExtensionsEmitter
         sb.Append("        builder.Services.TryAddTransient<ISagaCompensationDispatcher<").Append(model.ClassName).Append(">, ").Append(model.ClassName).AppendLine("CompensationDispatcher>();");
         sb.Append("        builder.Services.TryAddTransient<ISagaManager<").Append(model.ClassName).Append(", ").Append(keyType)
           .Append(">, SagaManager<").Append(model.ClassName).Append(", ").Append(keyType).AppendLine(">>();");
-        // Default ISagaCommandDispatcher: the per-compilation MediatorSagaCommandDispatcher
-        // emitted alongside this file. TryAddScoped so ZeroAlloc.Saga.Outbox.WithOutbox()
-        // can Replace it. Scoped to match IMediator's lifetime.
-        sb.AppendLine("        builder.Services.TryAddScoped<global::ZeroAlloc.Saga.ISagaCommandDispatcher, global::ZeroAlloc.Saga.Generated.MediatorSagaCommandDispatcher>();");
+        // This assembly's saga commands: the per-compilation GeneratedSagaCommandSource emitted
+        // alongside this file. AddCommandSource is idempotent per assembly, registers the default
+        // ISagaCommandDispatcher once, and routes commands to the right assembly when sagas are
+        // declared in more than one (#176). ZeroAlloc.Saga.Outbox.WithOutbox() replaces that
+        // default and registers an outbox dispatcher for every source.
+        sb.AppendLine("        global::ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.AddCommandSource(builder, global::ZeroAlloc.Saga.Generated.GeneratedSagaCommandSource.Instance);");
         sb.AppendLine();
 
         var allEvents = model.Steps.Select(s => s.EventTypeFqn)

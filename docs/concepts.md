@@ -64,7 +64,10 @@ services.AddSaga()
 
 ## What the source generator emits
 
-For every `[Saga]` class the generator emits five files:
+For every `[Saga]` class the generator emits the files below. Once per assembly it also emits
+`MediatorSagaCommandDispatcher`, which sends that assembly's saga commands through its
+`IMediator`, and `GeneratedSagaCommandSource`, which lists them; see
+[Sagas in more than one assembly](#sagas-in-more-than-one-assembly).
 
 1. **`<SagaName>Fsm.g.cs`** — a companion state machine modeling the steps as
    FSM states (`NotStarted` → `Step1` → … → `Completed`; or `Compensating` →
@@ -84,6 +87,44 @@ For every `[Saga]` class the generator emits five files:
 5. **`<SagaName>BuilderExtensions.g.cs`** — the `WithXxxSaga()` extension
    method that registers every concrete-closed-type the saga needs. AOT-safe;
    nothing is resolved with open generics at runtime.
+
+## Sagas in more than one assembly
+
+Sagas can live in several projects of one application: for example `Billing` declares
+`InvoiceSaga` and `Shipping` declares `ShipmentSaga`. Register each with its generated extension
+on the same builder, in any order:
+
+```csharp
+services.AddSaga()
+    .WithInvoiceSaga()       // from Billing
+    .WithShipmentSaga();     // from Shipping
+```
+
+ZeroAlloc.Mediator emits an internal `IMediator` into every compilation, so only code inside
+`Billing` can send `Billing`'s commands. The generator therefore emits a
+`GeneratedSagaCommandSource` into each assembly with sagas. It lists that assembly's step and
+compensation command types and dispatches them through the assembly's own mediator. Every
+`With{Saga}()` adds its assembly's source to the service collection; adding it twice is a
+no-op. No assembly is scanned, so it works under native AOT and whether or not an assembly has
+been loaded yet.
+
+- **Default dispatch.** With one source, `ISagaCommandDispatcher` is that assembly's
+  `MediatorSagaCommandDispatcher`, as it always was. With more, it routes each command to the
+  source that lists its type.
+- **Outbox dispatch.** `WithOutbox()` registers an outbox dispatcher for every command type of
+  every source, including sources added after it. Each assembly with sagas must reference
+  `ZeroAlloc.Serialisation`; the start check names any that does not. See [`outbox.md`](outbox.md).
+- **One owner per command type.** A command type returned by sagas in two assemblies is
+  rejected when the second `With{Saga}()` runs, with an `InvalidOperationException` that names
+  both assemblies. The outbox keeps one dispatcher per type name, so two owners cannot both be
+  served. Give each assembly's sagas their own command types.
+- **Rebuild saga assemblies together.** A saga assembly compiled by an older Saga generator
+  does not register a source. Rebuild it against the same ZeroAlloc.Saga version as the
+  application.
+
+Integrations that register something per saga command, as the outbox bridge does, use
+`ISagaBuilder.ForEachCommandSource(...)`. It runs a callback for every source already added and
+every source added later.
 
 ## Lifecycle
 

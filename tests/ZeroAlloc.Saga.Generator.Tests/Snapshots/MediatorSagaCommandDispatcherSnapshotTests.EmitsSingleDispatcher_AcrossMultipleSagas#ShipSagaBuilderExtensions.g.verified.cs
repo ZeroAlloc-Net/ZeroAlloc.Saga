@@ -25,7 +25,7 @@ public static class ShipSagaBuilderExtensions
         builder.Services.TryAddSingleton<SagaLockManager<global::Sample.ShipId>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<ShipSaga>, ShipSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<ShipSaga, global::Sample.ShipId>, SagaManager<ShipSaga, global::Sample.ShipId>>();
-        builder.Services.TryAddScoped<global::ZeroAlloc.Saga.ISagaCommandDispatcher, global::ZeroAlloc.Saga.Generated.MediatorSagaCommandDispatcher>();
+        global::ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.AddCommandSource(builder, global::ZeroAlloc.Saga.Generated.GeneratedSagaCommandSource.Instance);
 
         builder.Services.AddTransient<INotificationHandler<global::Sample.ShipQueued>, ShipSaga_ShipQueued_Handler>();
         return builder;
