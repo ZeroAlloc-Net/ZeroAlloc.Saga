@@ -13,8 +13,11 @@ namespace ZeroAlloc.Saga;
 /// <remarks>
 /// <para>The contract: <see cref="EnlistOutboxRowAsync"/> stages a write that
 /// MUST be committed atomically with the next <see cref="ISagaStore{TSaga,TKey}.SaveAsync"/>
-/// call from the same DI scope. If the saga state save fails (OCC conflict,
-/// etc.), the enlisted outbox write MUST also be discarded.</para>
+/// or <see cref="ISagaStore{TSaga,TKey}.RemoveAsync"/> call from the same DI scope,
+/// whichever ends the handler attempt. <c>RemoveAsync</c> commits the enlisted writes even
+/// when no saga instance exists, as for a saga that one event both starts and completes.
+/// If that save or removal fails (OCC conflict, etc.), the enlisted outbox write MUST also
+/// be discarded.</para>
 ///
 /// <para>Backends own the meaning of "atomic": <c>ZeroAlloc.Saga.EfCore</c> uses
 /// a shared scoped <c>DbContext</c> whose <c>SaveChangesAsync</c> commits both
@@ -33,7 +36,8 @@ public interface ISagaUnitOfWork
 {
     /// <summary>
     /// Stage an outbox row write to be committed atomically with the next
-    /// <see cref="ISagaStore{TSaga,TKey}.SaveAsync"/> call from this scope.
+    /// <see cref="ISagaStore{TSaga,TKey}.SaveAsync"/> or
+    /// <see cref="ISagaStore{TSaga,TKey}.RemoveAsync"/> call from this scope.
     /// </summary>
     /// <param name="typeName">Fully-qualified name of the command type. The outbox dispatcher
     /// registered for that name deserializes and dispatches the entry.</param>

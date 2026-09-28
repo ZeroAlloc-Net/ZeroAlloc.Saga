@@ -12,7 +12,7 @@ namespace ZeroAlloc.Saga.Outbox;
 /// <see cref="ISagaCommandDispatcher"/> that serializes the saga step command via
 /// <see cref="ISerializer{T}"/> resolved from DI and enlists the bytes with the
 /// scope's <see cref="ISagaUnitOfWork"/>. The unit of work is responsible for
-/// committing the enlisted writes atomically with the next saga state save.
+/// committing the enlisted writes atomically with the next saga state save or removal.
 /// </summary>
 /// <remarks>
 /// <para>The dispatcher is backend-agnostic: with <c>WithEfCoreStore()</c>, the

@@ -63,6 +63,7 @@ public sealed class E2ETests : IAsyncLifetime
                 if (dbKeyPrefix.Length > 0)
                     services.AddScoped(_ => Database(dbKeyPrefix));
                 services.AddTestSerializers();
+                services.AddWelcomeSagaFixture();
                 // The documented Redis setup: AddOutbox registers the worker, and
                 // WithRedisOutbox supplies the IOutboxStore.
                 services.AddOutbox(o => o.PollingInterval = TimeSpan.FromMilliseconds(50));
@@ -76,7 +77,8 @@ public sealed class E2ETests : IAsyncLifetime
                     })
                     .WithOutbox()
                     .WithRedisOutbox(opts => opts.KeyPrefix = outboxPrefix)
-                    .WithOrderFulfillmentSaga();
+                    .WithOrderFulfillmentSaga()
+                    .WithWelcomeSaga();
                 extra?.Invoke(services);
             })
             .Build();
@@ -89,6 +91,43 @@ public sealed class E2ETests : IAsyncLifetime
     {
         using var scope = sp.CreateScope();
         await scope.ServiceProvider.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
+    }
+
+    // IMediator.Publish has one overload per notification type, so each event needs its own helper.
+    private static async Task PublishAsync(IServiceProvider sp, StockReserved evt)
+    {
+        using var scope = sp.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
+    }
+
+    private static async Task PublishAsync(IServiceProvider sp, PaymentCharged evt)
+    {
+        using var scope = sp.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
+    }
+
+    private static async Task PublishAsync(IServiceProvider sp, PaymentDeclined evt)
+    {
+        using var scope = sp.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
+    }
+
+    private static async Task PublishAsync(IServiceProvider sp, CustomerRegistered evt)
+    {
+        using var scope = sp.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
+    }
+
+    /// <summary>The type names of the outbox entries still pending under <paramref name="outboxPrefix"/>.</summary>
+    private async Task<string[]> PendingTypeNamesAsync(string outboxPrefix)
+    {
+        var db = _fx.Multiplexer.GetDatabase();
+        var ids = await db.SortedSetRangeByRankAsync($"{outboxPrefix}:pending").ConfigureAwait(false);
+        var names = new string[ids.Length];
+        for (var i = 0; i < ids.Length; i++)
+            names[i] = (string)(await db.HashGetAsync($"{outboxPrefix}:entry:{(string)ids[i]!}", "typeName").ConfigureAwait(false))!;
+        Array.Sort(names, StringComparer.Ordinal);
+        return names;
     }
 
     /// <summary>
@@ -213,6 +252,84 @@ public sealed class E2ETests : IAsyncLifetime
 #pragma warning disable HLQ005
         Assert.Single(ledger.CommandsOfType<ReserveStockCommand>());
 #pragma warning restore HLQ005
+    }
+
+    [Fact]
+    public async Task SingleStepSaga_StartedAndCompletedByOneEvent_CommitsItsOutboxRow()
+    {
+        // #194. The one event both starts and completes the saga, so the handler ends in
+        // RemoveAsync, not SaveAsync. RemoveAsync has to drain the transaction contributors into
+        // its MULTI/EXEC too, or the enlisted outbox row is dropped with the scope.
+        var sagaPrefix = $"saga-{Guid.NewGuid():N}";
+        var outboxPrefix = $"saga-outbox-{Guid.NewGuid():N}";
+        using var host = BuildHost(sagaPrefix, outboxPrefix);
+        var ledger = new CommandLedger();
+        CommandLedger.Current = ledger;
+
+        var customerId = new CustomerId(8001);
+        await PublishAsync(host.Services, new CustomerRegistered(customerId));
+
+        Assert.Equal([typeof(SendWelcomeCommand).FullName!], await PendingTypeNamesAsync(outboxPrefix));
+        var db = _fx.Multiplexer.GetDatabase();
+        Assert.False(await db.KeyExistsAsync($"{sagaPrefix}:WelcomeSaga:{customerId}"));
+
+        await RunWorkerUntilDispatchedAsync(host, expected: 1);
+
+        Assert.Equal(customerId, Assert.Single(ledger.CommandsOfType<SendWelcomeCommand>()).CustomerId);
+    }
+
+    [Fact]
+    public async Task LastStep_OfAMultiStepSaga_CommitsItsOutboxRow_AndRemovesTheSaga()
+    {
+        // The completing step of a saga whose key exists ends in RemoveAsync as well; the last
+        // step's command must commit in the same MULTI/EXEC as the key delete.
+        var sagaPrefix = $"saga-{Guid.NewGuid():N}";
+        var outboxPrefix = $"saga-outbox-{Guid.NewGuid():N}";
+        using var host = BuildHost(sagaPrefix, outboxPrefix);
+        var ledger = new CommandLedger();
+        CommandLedger.Current = ledger;
+
+        var orderId = new OrderId(8101);
+        await PublishAsync(host.Services, new OrderPlaced(orderId, 5m));
+        await PublishAsync(host.Services, new StockReserved(orderId));
+        await PublishAsync(host.Services, new PaymentCharged(orderId));
+
+        Assert.Equal(
+            [typeof(ChargeCustomerCommand).FullName!, typeof(ReserveStockCommand).FullName!, typeof(ShipOrderCommand).FullName!],
+            await PendingTypeNamesAsync(outboxPrefix));
+        var db = _fx.Multiplexer.GetDatabase();
+        Assert.False(await db.KeyExistsAsync($"{sagaPrefix}:OrderFulfillmentSaga:{orderId}"));
+
+        await RunWorkerUntilDispatchedAsync(host, expected: 3);
+
+        Assert.Equal(orderId, Assert.Single(ledger.CommandsOfType<ShipOrderCommand>()).OrderId);
+    }
+
+    [Fact]
+    public async Task Compensation_CommitsItsCompensationCommands_AndRemovesTheSaga()
+    {
+        // Compensation ends in RemoveAsync too; its compensation commands must commit with it.
+        var sagaPrefix = $"saga-{Guid.NewGuid():N}";
+        var outboxPrefix = $"saga-outbox-{Guid.NewGuid():N}";
+        using var host = BuildHost(sagaPrefix, outboxPrefix);
+        var ledger = new CommandLedger();
+        CommandLedger.Current = ledger;
+
+        var orderId = new OrderId(8201);
+        await PublishAsync(host.Services, new OrderPlaced(orderId, 5m));
+        await PublishAsync(host.Services, new StockReserved(orderId));
+        await PublishAsync(host.Services, new PaymentDeclined(orderId));
+
+        var pending = await PendingTypeNamesAsync(outboxPrefix);
+        Assert.Contains(typeof(RefundPaymentCommand).FullName!, pending, StringComparer.Ordinal);
+        Assert.Contains(typeof(CancelReservationCommand).FullName!, pending, StringComparer.Ordinal);
+        var db = _fx.Multiplexer.GetDatabase();
+        Assert.False(await db.KeyExistsAsync($"{sagaPrefix}:OrderFulfillmentSaga:{orderId}"));
+
+        await RunWorkerUntilDispatchedAsync(host, expected: pending.Length);
+
+        Assert.Single(ledger.CommandsOfType<RefundPaymentCommand>());
+        Assert.Single(ledger.CommandsOfType<CancelReservationCommand>());
     }
 
     [Fact]

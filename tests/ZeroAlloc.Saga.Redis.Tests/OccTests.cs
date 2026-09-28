@@ -63,6 +63,67 @@ public sealed class OccTests : IAsyncLifetime
             async () => await storeB.SaveAsync(orderId, sagaB, default).ConfigureAwait(false));
     }
 
+    private RedisSagaStore<OrderFulfillmentSaga, OrderId> NewStore(RedisSagaStoreOptions options)
+        => new(_fx.Multiplexer.GetDatabase(), options, NullLogger<RedisSagaStore<OrderFulfillmentSaga, OrderId>>.Instance);
+
+    [Fact]
+    public async Task Remove_OfALoadedSaga_DeletedBehindOurBack_IsAConflict()
+    {
+        // RemoveAsync commits the attempt's enlisted outbox writes, #194. If another writer ended
+        // the saga after this store loaded it, committing them would dispatch commands for a saga
+        // that is already over, so a key that vanished since the load is a conflict.
+        var options = new RedisSagaStoreOptions { KeyPrefix = $"saga-occ-{Guid.NewGuid():N}" };
+        var storeA = NewStore(options);
+        var storeB = NewStore(options);
+        var orderId = new OrderId(111);
+
+        var saga = await storeA.LoadOrCreateAsync(orderId, default);
+        saga.Fsm.TryFire(OrderFulfillmentSagaFsm.Trigger.OrderPlaced);
+        saga.ReserveStock(new OrderPlaced(orderId, 10m));
+        await storeA.SaveAsync(orderId, saga, default);
+
+        await storeB.LoadOrCreateAsync(orderId, default);
+        await storeA.RemoveAsync(orderId, default);
+
+        await Assert.ThrowsAsync<RedisSagaConcurrencyException>(
+            async () => await storeB.RemoveAsync(orderId, default).ConfigureAwait(false));
+    }
+
+    [Fact]
+    public async Task Remove_AfterLoadingNoSaga_WhenAnotherWriterCreatedIt_IsAConflict_AndKeepsTheirSaga()
+    {
+        // This store saw no saga, so its remove may not delete one another writer created since.
+        var options = new RedisSagaStoreOptions { KeyPrefix = $"saga-occ-{Guid.NewGuid():N}" };
+        var storeA = NewStore(options);
+        var storeB = NewStore(options);
+        var orderId = new OrderId(112);
+
+        await storeB.LoadOrCreateAsync(orderId, default);
+
+        var saga = await storeA.LoadOrCreateAsync(orderId, default);
+        saga.Fsm.TryFire(OrderFulfillmentSagaFsm.Trigger.OrderPlaced);
+        saga.ReserveStock(new OrderPlaced(orderId, 10m));
+        await storeA.SaveAsync(orderId, saga, default);
+
+        await Assert.ThrowsAsync<RedisSagaConcurrencyException>(
+            async () => await storeB.RemoveAsync(orderId, default).ConfigureAwait(false));
+        Assert.True(await _fx.Multiplexer.GetDatabase().KeyExistsAsync($"{options.KeyPrefix}:OrderFulfillmentSaga:{orderId}"));
+    }
+
+    [Fact]
+    public async Task Remove_AfterLoadingNoSaga_WhenThereIsStillNone_Succeeds()
+    {
+        // The single-step shape: the saga starts and completes in one attempt and is never saved.
+        var options = new RedisSagaStoreOptions { KeyPrefix = $"saga-occ-{Guid.NewGuid():N}" };
+        var store = NewStore(options);
+        var orderId = new OrderId(113);
+
+        await store.LoadOrCreateAsync(orderId, default);
+        await store.RemoveAsync(orderId, default);
+
+        Assert.False(await _fx.Multiplexer.GetDatabase().KeyExistsAsync($"{options.KeyPrefix}:OrderFulfillmentSaga:{orderId}"));
+    }
+
     [Fact]
     public async Task HandlerRetryLoop_RecoversFromTransientConflict()
     {

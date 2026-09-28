@@ -23,10 +23,10 @@ Three pieces, all per-DI-scope:
    transaction.
 
 2. **`IRedisSagaTransactionContributor`** — extension point on
-   `ZeroAlloc.Saga.Redis`. `RedisSagaStore.SaveAsync` resolves all registered
-   contributors at save time and calls `Contribute(transaction)` after queueing
-   its own `HSET` for the saga state. The transaction is the one that's about
-   to be `EXEC`-ed.
+   `ZeroAlloc.Saga.Redis`. `RedisSagaStore.SaveAsync` and `RemoveAsync` both call
+   `Contribute(transaction)` on every registered contributor after queueing their
+   own write: the `HSET` for the saga state, or the `DEL` of the saga key. The
+   transaction is the one that's about to be `EXEC`-ed.
 
 3. **`RedisOutboxTransactionContributor`** — the bridge. Drains the
    `RedisSagaUnitOfWork`'s buffer and queues the corresponding outbox-row
@@ -91,6 +91,11 @@ For every saga step:
      `RedisSagaUnitOfWork` (empty buffer), fresh saga state — so the previous
      attempt's outbox writes are discarded. Same atomicity contract as the
      `Saga.EfCore + Saga.Outbox.EfCore` shape, just with Redis primitives.
+   - On the step that completes the saga, and when compensation finishes, the
+     handler calls `_store.RemoveAsync(...)` instead. It runs the same way with a
+     `DEL` of the saga key in place of the `HSET`, so the last step's and the
+     compensation commands commit with the removal. It does so even when the key
+     does not exist, as for a saga that one event both starts and completes.
 
 ## Cross-process race
 

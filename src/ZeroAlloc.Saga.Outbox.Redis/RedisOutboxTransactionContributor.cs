@@ -7,9 +7,9 @@ namespace ZeroAlloc.Saga.Outbox.Redis;
 /// <summary>
 /// Bridges <see cref="RedisSagaUnitOfWork"/> into the Redis saga store's MULTI/EXEC
 /// via the <see cref="IRedisSagaTransactionContributor"/> hook. On every saga
-/// <c>SaveAsync</c>, drains the unit-of-work's buffered outbox-row writes and queues
-/// the corresponding <c>HSET</c> + <c>ZADD</c> commands on the transaction so they
-/// commit atomically with the saga state save.
+/// <c>SaveAsync</c> and <c>RemoveAsync</c>, drains the unit-of-work's buffered outbox-row
+/// writes and queues the corresponding <c>HSET</c> + <c>ZADD</c> commands on the
+/// transaction so they commit atomically with the saga state save or removal.
 /// </summary>
 public sealed class RedisOutboxTransactionContributor : IRedisSagaTransactionContributor
 {

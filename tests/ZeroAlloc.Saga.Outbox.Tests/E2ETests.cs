@@ -65,6 +65,7 @@ public sealed class E2ETests
                 // Per-command JSON serializers consumed by both the OutboxSagaCommandDispatcher
                 // (write path) and the generator-emitted SagaCommandRegistry (dispatch path).
                 services.AddTestSerializers();
+                services.AddWelcomeSagaFixture();
                 services.AddSaga()
                     .WithEfCoreStore<OutboxE2EDbContext>(opts =>
                     {
@@ -73,7 +74,8 @@ public sealed class E2ETests
                         opts.UseExponentialBackoff = false;
                     })
                     .WithOutbox()
-                    .WithOrderFulfillmentSaga();
+                    .WithOrderFulfillmentSaga()
+                    .WithWelcomeSaga();
                 // Apply test-supplied overrides AFTER per-saga registrations so
                 // decorators replacing ISagaStore<> see the full registration in place.
                 extra?.Invoke(services);
@@ -88,6 +90,40 @@ public sealed class E2ETests
     {
         using var scope = sp.CreateScope();
         await scope.ServiceProvider.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
+    }
+
+    // IMediator.Publish has one overload per notification type, so each event needs its own helper.
+    private static async Task PublishAsync(IServiceProvider sp, StockReserved evt)
+    {
+        using var scope = sp.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
+    }
+
+    private static async Task PublishAsync(IServiceProvider sp, PaymentCharged evt)
+    {
+        using var scope = sp.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
+    }
+
+    private static async Task PublishAsync(IServiceProvider sp, PaymentDeclined evt)
+    {
+        using var scope = sp.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
+    }
+
+    private static async Task PublishAsync(IServiceProvider sp, CustomerRegistered evt)
+    {
+        using var scope = sp.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
+    }
+
+    private static async Task<(int Sagas, OutboxMessageEntity[] Outbox)> ReadRowsAsync(IServiceProvider sp)
+    {
+        using var scope = sp.CreateScope();
+        var ctx = scope.ServiceProvider.GetRequiredService<OutboxE2EDbContext>();
+        var sagas = await ctx.Set<SagaInstanceEntity>().AsNoTracking().CountAsync().ConfigureAwait(false);
+        var outbox = await ctx.Set<OutboxMessageEntity>().AsNoTracking().ToArrayAsync().ConfigureAwait(false);
+        return (sagas, outbox);
     }
 
     /// <summary>
@@ -174,6 +210,88 @@ public sealed class E2ETests
 #pragma warning restore HLQ005
             Assert.Equal(OutboxMessageStatus.Succeeded, outboxes[0].Status);
         }
+    }
+
+    [Fact]
+    public async Task SingleStepSaga_StartedAndCompletedByOneEvent_CommitsItsOutboxRow()
+    {
+        // Regression for #194. The one event both starts and completes the saga, so the handler
+        // removes a saga that was never saved instead of saving it. The outbox row it enlisted
+        // must still commit: the store's RemoveAsync used to return before SaveChangesAsync when
+        // no saga row existed, and the command was silently lost.
+        await using var fx = new SqliteFixture();
+        await fx.EnsureCreatedAsync();
+        using var host = BuildHost(fx);
+        var ledger = new CommandLedger();
+        CommandLedger.Current = ledger;
+
+        var customerId = new CustomerId(8001);
+        await PublishAsync(host.Services, new CustomerRegistered(customerId));
+
+        var (sagas, outbox) = await ReadRowsAsync(host.Services);
+        Assert.Equal(0, sagas);
+        var row = Assert.Single(outbox);
+        Assert.Equal(typeof(SendWelcomeCommand).FullName, row.TypeName);
+        Assert.Equal(OutboxMessageStatus.Pending, row.Status);
+
+        await RunWorkerUntilDispatchedAsync(host, expected: 1);
+
+        Assert.Equal(customerId, Assert.Single(ledger.CommandsOfType<SendWelcomeCommand>()).CustomerId);
+    }
+
+    [Fact]
+    public async Task LastStep_OfAMultiStepSaga_CommitsItsOutboxRow_AndRemovesTheSaga()
+    {
+        // The completing step of a saga whose row exists: RemoveAsync deletes the row and commits
+        // the last step's outbox row in the same SaveChangesAsync.
+        await using var fx = new SqliteFixture();
+        await fx.EnsureCreatedAsync();
+        using var host = BuildHost(fx);
+        var ledger = new CommandLedger();
+        CommandLedger.Current = ledger;
+
+        var orderId = new OrderId(8101);
+        await PublishAsync(host.Services, new OrderPlaced(orderId, 5m));
+        await PublishAsync(host.Services, new StockReserved(orderId));
+        await PublishAsync(host.Services, new PaymentCharged(orderId));
+
+        var (sagas, outbox) = await ReadRowsAsync(host.Services);
+        Assert.Equal(0, sagas);
+        Assert.Equal(
+            [typeof(ChargeCustomerCommand).FullName, typeof(ReserveStockCommand).FullName, typeof(ShipOrderCommand).FullName],
+            outbox.Select(r => r.TypeName).Order(StringComparer.Ordinal),
+            StringComparer.Ordinal);
+
+        await RunWorkerUntilDispatchedAsync(host, expected: 3);
+
+        Assert.Equal(orderId, Assert.Single(ledger.CommandsOfType<ShipOrderCommand>()).OrderId);
+    }
+
+    [Fact]
+    public async Task Compensation_CommitsItsCompensationCommands_AndRemovesTheSaga()
+    {
+        // Compensation also ends in RemoveAsync. The compensation commands it enlisted must commit
+        // with the removal.
+        await using var fx = new SqliteFixture();
+        await fx.EnsureCreatedAsync();
+        using var host = BuildHost(fx);
+        var ledger = new CommandLedger();
+        CommandLedger.Current = ledger;
+
+        var orderId = new OrderId(8201);
+        await PublishAsync(host.Services, new OrderPlaced(orderId, 5m));
+        await PublishAsync(host.Services, new StockReserved(orderId));
+        await PublishAsync(host.Services, new PaymentDeclined(orderId));
+
+        var (sagas, outbox) = await ReadRowsAsync(host.Services);
+        Assert.Equal(0, sagas);
+        Assert.Contains(outbox, r => string.Equals(r.TypeName, typeof(RefundPaymentCommand).FullName, StringComparison.Ordinal));
+        Assert.Contains(outbox, r => string.Equals(r.TypeName, typeof(CancelReservationCommand).FullName, StringComparison.Ordinal));
+
+        await RunWorkerUntilDispatchedAsync(host, expected: outbox.Length);
+
+        Assert.Single(ledger.CommandsOfType<RefundPaymentCommand>());
+        Assert.Single(ledger.CommandsOfType<CancelReservationCommand>());
     }
 
     [Fact]

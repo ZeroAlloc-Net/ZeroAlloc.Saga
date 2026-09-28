@@ -8,7 +8,8 @@ namespace ZeroAlloc.Saga.Outbox.Redis;
 
 /// <summary>
 /// Per-scope buffer for outbox-row writes that need to commit atomically with the
-/// next <see cref="ISagaStore{TSaga,TKey}.SaveAsync"/>.
+/// next <see cref="ISagaStore{TSaga,TKey}.SaveAsync"/> or
+/// <see cref="ISagaStore{TSaga,TKey}.RemoveAsync"/>.
 /// </summary>
 /// <remarks>
 /// <para>

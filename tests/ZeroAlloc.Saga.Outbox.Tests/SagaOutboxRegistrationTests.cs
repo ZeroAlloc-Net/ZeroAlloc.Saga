@@ -12,14 +12,15 @@ namespace ZeroAlloc.Saga.Outbox.Tests;
 
 public class SagaOutboxRegistrationTests
 {
-    // The step and compensation commands of the fixture's OrderFulfillmentSaga, as the outbox
-    // bridge writes them: Type.FullName.
+    // The step and compensation commands of the fixture assembly's sagas, OrderFulfillmentSaga
+    // and WelcomeSaga, as the outbox bridge writes them: Type.FullName, in ordinal order.
     private static readonly string[] FixtureCommandTypeNames =
     [
         typeof(CancelReservationCommand).FullName!,
         typeof(ChargeCustomerCommand).FullName!,
         typeof(RefundPaymentCommand).FullName!,
         typeof(ReserveStockCommand).FullName!,
+        typeof(SendWelcomeCommand).FullName!,
         typeof(ShipOrderCommand).FullName!,
     ];
 
