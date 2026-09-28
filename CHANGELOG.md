@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.1](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v4.0.0...ZeroAlloc.Saga-v4.0.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* check the loaded row version when the ORM saga store removes a saga ([9a683fc](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/9a683fca3c1442dd695c56426b6d775ee4a0bfe7))
+* commit enlisted outbox writes when a saga store removes a saga ([#195](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/195)) ([d32295c](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/d32295c611616640d95bd5b81c324eaeeda4a706)), closes [#194](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/194)
+* dispatch saga commands from every assembly that declares sagas ([#193](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/193)) ([827217a](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/827217ab1c6c1f04c6c3a4ecf8eb6f7ff2de27a0)), closes [#176](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/176)
+* fail at startup when the saga store cannot commit the outbox store's rows ([31640ca](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/31640cab335fd64a5f23dd149f5283437cd17b22))
+* report ZASAGA diagnostics at source locations #pragma can suppress ([#204](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/204)) ([dff7894](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/dff789435710b1fd973c6763c3fc855478c5d246))
+* treat a load that found no saga as a conflict check in the EF Core store ([31640ca](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/31640cab335fd64a5f23dd149f5283437cd17b22))
+
+
+### Documentation
+
+* state that the outbox bridge is at-least-once on the ORM store ([9a683fc](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/9a683fca3c1442dd695c56426b6d775ee4a0bfe7))
+
+
+### Tests
+
+* cover value types in the AOT smoke ([#201](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/201)) ([74ca852](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/74ca852482e39ebacac58405bdcd3cf45351e0e3))
+* run the test projects against ZeroAlloc.Mediator 6 ([#190](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/190)) ([505198b](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/505198bcdd39323d47ba90eed6712ae5aaae87a9))
+
 ## [4.0.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v3.1.1...ZeroAlloc.Saga-v4.0.0) (2026-09-27)
 
 

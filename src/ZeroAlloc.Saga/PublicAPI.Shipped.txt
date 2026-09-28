@@ -1,11 +1,17 @@
 #nullable enable
+abstract ZeroAlloc.Saga.SagaCommandSource.CommandTypes.get -> System.Collections.Generic.IReadOnlyList<System.Type!>!
+abstract ZeroAlloc.Saga.SagaCommandSource.CreateDispatcher(System.IServiceProvider! services) -> ZeroAlloc.Saga.ISagaCommandDispatcher!
 static ZeroAlloc.Saga.SagaBuilderMutationExtensions.SetDurableStore(this ZeroAlloc.Saga.ISagaBuilder! builder, string! storeName) -> void
+static ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.AddCommandSource(this ZeroAlloc.Saga.ISagaBuilder! builder, ZeroAlloc.Saga.SagaCommandSource! source) -> ZeroAlloc.Saga.ISagaBuilder!
+static ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.ForEachCommandSource(this ZeroAlloc.Saga.ISagaBuilder! builder, System.Action<ZeroAlloc.Saga.SagaCommandSource!>! callback) -> ZeroAlloc.Saga.ISagaBuilder!
 static ZeroAlloc.Saga.SagaServiceCollectionExtensions.AddSaga(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> ZeroAlloc.Saga.ISagaBuilder!
 static ZeroAlloc.Saga.SagaStoreRegistrar.Apply<TSaga, TKey>(ZeroAlloc.Saga.ISagaBuilder! builder) -> void
 static ZeroAlloc.Saga.SagaStoreRegistrar.OverrideStore<TSaga, TKey, TStore>(ZeroAlloc.Saga.ISagaBuilder! builder) -> void
 static ZeroAlloc.Saga.SagaStoreRegistrar.Reset() -> void
 static ZeroAlloc.Saga.SagaStoreRegistrar.SetRegistrar(System.Action<ZeroAlloc.Saga.ISagaBuilder!>! registrar) -> void
 static ZeroAlloc.Saga.SagaStoreRegistrar.SetTypedRegistrar(ZeroAlloc.Saga.ISagaStoreRegistrar! registrar) -> void
+virtual ZeroAlloc.Saga.SagaCommandSource.CanDispatchSerialized.get -> bool
+virtual ZeroAlloc.Saga.SagaCommandSource.DispatchSerializedAsync(string! typeName, System.ReadOnlyMemory<byte> payload, System.IServiceProvider! services, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
 ZeroAlloc.Saga.CorrelationKeyAttribute
 ZeroAlloc.Saga.CorrelationKeyAttribute.CorrelationKeyAttribute() -> void
 ZeroAlloc.Saga.InMemorySagaStore<TSaga, TKey>
@@ -47,6 +53,9 @@ ZeroAlloc.Saga.NotSagaStateAttribute.NotSagaStateAttribute() -> void
 ZeroAlloc.Saga.SagaAttribute
 ZeroAlloc.Saga.SagaAttribute.SagaAttribute() -> void
 ZeroAlloc.Saga.SagaBuilderMutationExtensions
+ZeroAlloc.Saga.SagaCommandSource
+ZeroAlloc.Saga.SagaCommandSource.SagaCommandSource() -> void
+ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions
 ZeroAlloc.Saga.SagaConcurrencyException
 ZeroAlloc.Saga.SagaConcurrencyException.Attempts.get -> int
 ZeroAlloc.Saga.SagaConcurrencyException.CorrelationKey.get -> string!
