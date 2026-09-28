@@ -29,8 +29,9 @@ namespace ZeroAlloc.Saga;
 /// <c>WithOutbox()</c> wraps <see cref="ZeroAlloc.Outbox.IOutboxStore"/>'s
 /// <c>EnqueueDeferredAsync</c> directly — sufficient when the
 /// <c>IOutboxStore</c> implementation already honors deferred-write semantics
-/// (<c>EfCoreOutboxStore</c> does; the InMemory backend's auto-commit fallback
-/// does not, but is documented as not-atomic for that combination).</para>
+/// (<c>EfCoreOutboxStore</c> does; the InMemory backend's and <c>OrmOutboxStore</c>'s
+/// auto-commit fallback does not, and is documented as not-atomic for those
+/// combinations).</para>
 /// </remarks>
 public interface ISagaUnitOfWork
 {

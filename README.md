@@ -5,10 +5,12 @@ Source-generated long-running process orchestration for the ZeroAlloc ecosystem.
 > **Status:** AOT compatible. The generator-emitted saga handler runs
 > each OCC retry attempt in a fresh `IServiceScope`, and the
 > `ZeroAlloc.Saga.Outbox` bridge commits every step command's dispatch
-> row atomically with the saga state save — together they eliminate
+> row atomically with the saga state save on the EF Core store, and on
+> the Redis store with `WithRedisOutbox()` — together they eliminate
 > Saga 1.1's "OCC retry can dispatch twice" caveat for both
-> cross-process races and same-process retries. Durable persistence via
-> `ZeroAlloc.Saga.EfCore` (single shared `SagaInstance` table,
+> cross-process races and same-process retries. On the ORM store the
+> bridge is at-least-once, so step command handlers must be idempotent.
+> Durable persistence via `ZeroAlloc.Saga.EfCore` (single shared `SagaInstance` table,
 > row-version OCC, retry-on-conflict) is unchanged. InMemory remains
 > the default backend; switch to EfCore with one fluent call, and opt
 > into the outbox bridge with `.WithOutbox()`. See
@@ -114,9 +116,9 @@ services.AddSaga()
 ```
 
 Mutually exclusive with `WithEfCoreStore<TContext>()`. Composition with
-`WithOutbox()` alone gives at-least-once dispatch; add `ZeroAlloc.Saga.Outbox.Redis` and
-`WithRedisOutbox()` for full atomic-commit guarantees, see above. Requires
-`StackExchange.Redis` 2.8+. See [`docs/persistence-redis.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/persistence-redis.md).
+`WithOutbox()` alone is at best at-least-once, and loses commands with an EF Core outbox store;
+add `ZeroAlloc.Saga.Outbox.Redis` and `WithRedisOutbox()` for full atomic-commit guarantees,
+see above. Requires `StackExchange.Redis` 2.8+. See [`docs/persistence-redis.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/persistence-redis.md).
 
 ### `ISagaUnitOfWork` abstraction (Phase 3a-2 stage 1)
 

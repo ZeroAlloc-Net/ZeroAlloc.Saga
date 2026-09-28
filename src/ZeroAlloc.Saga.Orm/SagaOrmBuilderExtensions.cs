@@ -31,6 +31,12 @@ public static class SagaOrmBuilderExtensions
     /// Create the schema with <see cref="SagaOrmMigrations"/> and the ORM's
     /// <c>MigrationRunner</c>; the store does not create tables on the fly.
     /// </para>
+    /// <para>
+    /// Combined with <c>WithOutbox()</c>, dispatch is at-least-once, not atomic:
+    /// the outbox row is written when the step dispatches, before the saga
+    /// state is saved, so an OCC retry can enqueue a command twice. Step command
+    /// handlers must be idempotent.
+    /// </para>
     /// </remarks>
     /// <example>
     /// <code>
