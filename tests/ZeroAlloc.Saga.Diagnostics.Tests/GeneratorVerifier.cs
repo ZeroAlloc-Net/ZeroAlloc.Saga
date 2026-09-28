@@ -47,6 +47,38 @@ internal static class GeneratorVerifier
         return Task.FromResult(new ImmutableArrayWrapper(result.Diagnostics));
     }
 
+    /// <summary>The file path <see cref="RunOnFile"/> gives the source tree.</summary>
+    public const string TestFilePath = "/src/Sagas.cs";
+
+    /// <summary>
+    /// Runs the generator on a source tree with the path <see cref="TestFilePath"/> and returns
+    /// the diagnostics the driver reports, with <c>#pragma warning disable</c> already applied, so a
+    /// test can assert both where a diagnostic points and whether it is suppressed.
+    /// </summary>
+    public static System.Collections.Immutable.ImmutableArray<Diagnostic> RunOnFile(
+        string source, IEnumerable<MetadataReference>? extraReferences = null)
+    {
+        var syntaxTree = CSharpSyntaxTree.ParseText(source, path: TestFilePath);
+        var compilation = CreateCompilation(new[] { syntaxTree }, extraReferences);
+
+        CSharpGeneratorDriver.Create(new ZeroAlloc.Saga.Generator.SagaGenerator())
+            .RunGeneratorsAndUpdateCompilation(compilation, out _, out var diagnostics);
+        return diagnostics;
+    }
+
+    /// <summary>Creates a compilation of the given trees with the references the other helpers use.</summary>
+    public static CSharpCompilation CreateCompilation(
+        IEnumerable<SyntaxTree> syntaxTrees, IEnumerable<MetadataReference>? extraReferences = null)
+    {
+        var allRefs = new List<MetadataReference>(References);
+        if (extraReferences is not null) allRefs.AddRange(extraReferences);
+        return CSharpCompilation.Create(
+            assemblyName: "Saga.Diag.Test",
+            syntaxTrees: syntaxTrees,
+            references: allRefs,
+            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
+    }
+
     /// <summary>
     /// Compiles a source string into an in-memory PE image and returns a
     /// <see cref="MetadataReference"/> to it. Used to materialize types

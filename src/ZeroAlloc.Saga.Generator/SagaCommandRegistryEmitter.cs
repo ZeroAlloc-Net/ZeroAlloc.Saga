@@ -1,5 +1,5 @@
 #nullable enable
-using System.Collections.Immutable;
+using ZeroAlloc.Saga.Generator.Diagnostics;
 using System.Text;
 using Microsoft.CodeAnalysis;
 
@@ -18,7 +18,7 @@ namespace ZeroAlloc.Saga.Generator;
 /// </summary>
 internal static class SagaCommandRegistryEmitter
 {
-    public static void Emit(SourceProductionContext spc, ImmutableArray<SagaExtractResult> sagaResults)
+    public static void Emit(SourceProductionContext spc, EquatableArray<SagaExtractResult> sagaResults)
     {
         var commandTypes = SagaCommandTypes.Collect(sagaResults);
 

@@ -16,10 +16,11 @@ internal sealed record SagaModel(
     string ClassName,
     string Accessibility,
     string CorrelationKeyTypeFqn,
-    IReadOnlyList<StepInfo> Steps,
-    IReadOnlyList<CorrelationInfo> Correlations,
-    IReadOnlyList<string> CompensateOnEventFqns,
-    IReadOnlyList<StateFieldInfo> StateFields)
+    EquatableArray<StepInfo> Steps,
+    EquatableArray<CorrelationInfo> Correlations,
+    EquatableArray<string> CompensateOnEventFqns,
+    EquatableArray<StateFieldInfo> StateFields,
+    LocationInfo? ClassNameLocation)
 {
     /// <summary>
     /// Extracts the saga model and any authoring-time diagnostics. The model is
@@ -34,12 +35,12 @@ internal sealed record SagaModel(
 
         if (ctx.TargetSymbol is not INamedTypeSymbol classSymbol)
         {
-            return new SagaExtractResult(null, diagnostics.ToImmutable());
+            return new SagaExtractResult(null, new EquatableArray<DiagnosticInfo>(diagnostics.ToImmutable()));
         }
         ct.ThrowIfCancellationRequested();
 
         var classDecl = ctx.TargetNode as ClassDeclarationSyntax;
-        var classNameLocation = classDecl?.Identifier.GetLocation() ?? classSymbol.Locations.FirstOrDefault();
+        var classNameLocation = LocationInfo.From(classDecl?.Identifier.GetLocation() ?? classSymbol.Locations.FirstOrDefault());
 
         // ── ZASAGA001: must be partial ──────────────────────────────────────
         var isPartial = classDecl?.Modifiers.Any(m => m.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.PartialKeyword)) ?? false;
@@ -115,7 +116,7 @@ internal sealed record SagaModel(
                 a.AttributeClass?.ToDisplayString() == "ZeroAlloc.Saga.CorrelationKeyAttribute");
             if (corrAttr is not null)
             {
-                var memberLoc = member.Locations.FirstOrDefault();
+                var memberLoc = LocationInfo.From(member.Locations.FirstOrDefault());
 
                 // ZASAGA006: must be 'TKey M(TEvent e)'
                 if (member.Parameters.Length != 1 || member.ReturnsVoid)
@@ -145,7 +146,7 @@ internal sealed record SagaModel(
                 }
 
                 var eventTypeFqn = StripGlobalPrefix(member.Parameters[0].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
-                correlations.Add(new CorrelationInfo(member.Name, eventTypeFqn));
+                correlations.Add(new CorrelationInfo(member.Name, eventTypeFqn, memberLoc));
 
                 // ZASAGA011: heuristic — body looks like it mutates state.
                 if (CorrelationKeyAppearsToMutate(member, ct))
@@ -163,7 +164,7 @@ internal sealed record SagaModel(
                 a.AttributeClass?.ToDisplayString() == "ZeroAlloc.Saga.StepAttribute");
             if (stepAttr is not null)
             {
-                var memberLoc = member.Locations.FirstOrDefault();
+                var memberLoc = LocationInfo.From(member.Locations.FirstOrDefault());
 
                 // ZASAGA008: shape must be 'TCommand M(TEvent e)'.
                 if (member.Parameters.Length != 1 || member.ReturnsVoid)
@@ -192,12 +193,20 @@ internal sealed record SagaModel(
                 var commandTypeFqn = StripGlobalPrefix(member.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
 
                 // Capture cross-assembly / partial info on the command type for
-                // ZASAGA016 / ZASAGA017. We do this here because we have the
-                // semantic model in hand; the diagnostic itself is gated later
-                // on whether ZeroAlloc.Serialisation is referenced.
+                // ZASAGA016 / ZASAGA017, and what the [ZeroAllocSerializable] extension
+                // needs, here where the semantic model is in hand. The diagnostics and
+                // the extension are gated later on whether ZeroAlloc.Serialisation is
+                // referenced, which keeps the compilation out of those outputs.
                 bool? cmdInOwnAssembly = null;
                 bool cmdIsPartial = false;
-                Location? cmdTypeLoc = memberLoc;
+                SerializableExtensionInfo? serializableExtension = null;
+                // The step's return type names the command, so it stands in for a command type
+                // declared outside this compilation, which has no source to point at.
+                var returnTypeSyntax = member.DeclaringSyntaxReferences
+                    .Select(r => r.GetSyntax(ct))
+                    .OfType<MethodDeclarationSyntax>()
+                    .FirstOrDefault()?.ReturnType;
+                var cmdTypeLoc = LocationInfo.From(returnTypeSyntax?.GetLocation()) ?? memberLoc;
                 if (member.ReturnType is INamedTypeSymbol cmdNamed)
                 {
                     cmdInOwnAssembly = SymbolEqualityComparer.Default.Equals(
@@ -211,13 +220,15 @@ internal sealed record SagaModel(
                             var declNode = declRef.GetSyntax(ct);
                             if (declNode is TypeDeclarationSyntax tds)
                             {
-                                cmdTypeLoc = tds.Identifier.GetLocation();
+                                cmdTypeLoc = LocationInfo.From(tds.Identifier.GetLocation());
                                 if (tds.Modifiers.Any(m => m.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.PartialKeyword)))
                                 {
                                     cmdIsPartial = true;
                                 }
                             }
                         }
+
+                        serializableExtension = SerializableExtensionInfo.From(cmdNamed);
                     }
                 }
 
@@ -227,7 +238,8 @@ internal sealed record SagaModel(
                     Location: memberLoc,
                     CommandTypeIsInOwnAssembly: cmdInOwnAssembly,
                     CommandTypeIsPartial: cmdIsPartial,
-                    CommandTypeLocation: cmdTypeLoc));
+                    CommandTypeLocation: cmdTypeLoc,
+                    SerializableExtension: serializableExtension));
             }
         }
 
@@ -321,7 +333,7 @@ internal sealed record SagaModel(
         // If we cannot determine a correlation key type or have no steps, no model.
         if (correlationKeyType is null || steps.Count == 0)
         {
-            return new SagaExtractResult(null, diagnostics.ToImmutable());
+            return new SagaExtractResult(null, new EquatableArray<DiagnosticInfo>(diagnostics.ToImmutable()));
         }
 
         // Sort steps by Order to get a stable forward sequence.
@@ -337,8 +349,14 @@ internal sealed record SagaModel(
         // Reports ZASAGA014 for unsupported field types.
         var stateFields = ExtractStateFields(classSymbol, classNameLocation, diagnostics, ct);
 
-        var model = new SagaModel(ns, name, accessibility, correlationKeyType, steps, correlations, compensateOn, stateFields);
-        return new SagaExtractResult(model, diagnostics.ToImmutable());
+        var model = new SagaModel(
+            ns, name, accessibility, correlationKeyType,
+            EquatableArray<StepInfo>.From(steps),
+            EquatableArray<CorrelationInfo>.From(correlations),
+            EquatableArray<string>.From(compensateOn),
+            EquatableArray<StateFieldInfo>.From(stateFields),
+            classNameLocation);
+        return new SagaExtractResult(model, new EquatableArray<DiagnosticInfo>(diagnostics.ToImmutable()));
     }
 
     /// <summary>
@@ -349,7 +367,7 @@ internal sealed record SagaModel(
     /// </summary>
     private static IReadOnlyList<StateFieldInfo> ExtractStateFields(
         INamedTypeSymbol classSymbol,
-        Location? classNameLocation,
+        LocationInfo? classNameLocation,
         ImmutableArray<DiagnosticInfo>.Builder diagnostics,
         CancellationToken ct)
     {
@@ -372,7 +390,7 @@ internal sealed record SagaModel(
                 {
                     if (prop.SetMethod is null) continue;
                     if (prop.IsIndexer) continue;
-                    var loc = prop.Locations.FirstOrDefault() ?? classNameLocation;
+                    var loc = LocationInfo.From(prop.Locations.FirstOrDefault()) ?? classNameLocation;
                     var info = ClassifyType(prop.Type, prop.Name, classSymbol.Name, loc, diagnostics);
                     if (info is not null) result.Add(info);
                     break;
@@ -385,7 +403,7 @@ internal sealed record SagaModel(
                     if (field.AssociatedSymbol is IPropertySymbol) continue;
                     if (field.DeclaredAccessibility != Microsoft.CodeAnalysis.Accessibility.Public &&
                         field.DeclaredAccessibility != Microsoft.CodeAnalysis.Accessibility.Internal) continue;
-                    var loc = field.Locations.FirstOrDefault() ?? classNameLocation;
+                    var loc = LocationInfo.From(field.Locations.FirstOrDefault()) ?? classNameLocation;
                     var info = ClassifyType(field.Type, field.Name, classSymbol.Name, loc, diagnostics);
                     if (info is not null) result.Add(info);
                     break;
@@ -411,7 +429,7 @@ internal sealed record SagaModel(
         ITypeSymbol type,
         string memberName,
         string className,
-        Location? location,
+        LocationInfo? location,
         ImmutableArray<DiagnosticInfo>.Builder diagnostics)
     {
         var typeFqn = StripGlobalPrefix(type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
@@ -630,7 +648,7 @@ internal sealed record StepInfo(
     string? CompensateMethodName,
     string? CompensateOnEventTypeFqn,
     string? CompensateCommandTypeFqn = null,
-    Location? Location = null,
+    LocationInfo? Location = null,
     /// <summary>
     /// True if the [Step] method's return-type symbol resolves to a type declared
     /// in the current compilation's assembly. Null when the symbol could not be
@@ -645,10 +663,52 @@ internal sealed record StepInfo(
     bool CommandTypeIsPartial = false,
     /// <summary>
     /// Location of the command type's identifier — used as the diagnostic location
-    /// for ZASAGA016. Falls back to the [Step] method's location when the command
-    /// type's syntax is not in the compilation.
+    /// for ZASAGA016. When the command type is declared in a referenced assembly it
+    /// is the [Step] method's return type instead, which ZASAGA017 reports at.
     /// </summary>
-    Location? CommandTypeLocation = null);
+    LocationInfo? CommandTypeLocation = null,
+    /// <summary>
+    /// What the [ZeroAllocSerializable] partial extension of the command type needs.
+    /// Null when the command type is not declared in the current compilation.
+    /// </summary>
+    SerializableExtensionInfo? SerializableExtension = null);
+
+/// <summary>
+/// The shape of a step command type declared in the current compilation, captured so the
+/// [ZeroAllocSerializable] extension is emitted from the cached model, not the compilation.
+/// </summary>
+internal sealed record SerializableExtensionInfo(
+    string? Namespace,
+    string Name,
+    string TypeKeyword,
+    bool HasSerializableAttribute)
+{
+    private const string SerializableAttributeFqn = "ZeroAlloc.Serialisation.ZeroAllocSerializableAttribute";
+
+    public static SerializableExtensionInfo From(INamedTypeSymbol type)
+    {
+        // C# attribute merging requires the same type-keyword sequence on every
+        // partial declaration ("partial record struct" / "partial record" /
+        // "partial struct" / "partial class"). The compiler resolves "partial
+        // record" against the original positional-record declaration.
+        var typeKeyword = (type.IsRecord, type.IsValueType) switch
+        {
+            (true, true) => "record struct",
+            (true, false) => "record",
+            (false, true) => "struct",
+            (false, false) => "class",
+        };
+
+        var hasAttribute = type.GetAttributes().Any(a =>
+            string.Equals(a.AttributeClass?.ToDisplayString(), SerializableAttributeFqn, System.StringComparison.Ordinal));
+
+        return new SerializableExtensionInfo(
+            type.ContainingNamespace.IsGlobalNamespace ? null : type.ContainingNamespace.ToDisplayString(),
+            type.Name,
+            typeKeyword,
+            hasAttribute);
+    }
+}
 
 /// <summary>
 /// Information about a single saga state member (field or property) the
@@ -665,7 +725,7 @@ internal sealed record StateFieldInfo(
     StateFieldKind? InnerKind,
     /// <summary>For TypedId: the kind of the .Value primitive.</summary>
     StateFieldKind? TypedIdValuePrimitiveKind,
-    Location? Location)
+    LocationInfo? Location)
 {
     /// <summary>
     /// For TypedId-shaped value types reachable via a single positional record
@@ -698,11 +758,12 @@ internal enum StateFieldKind
 
 internal sealed record CorrelationInfo(
     string MethodName,
-    string EventTypeFqn);
+    string EventTypeFqn,
+    LocationInfo? Location = null);
 
 /// <summary>
 /// Carries the optional model plus any diagnostics surfaced during extraction.
 /// </summary>
 internal sealed record SagaExtractResult(
     SagaModel? Model,
-    ImmutableArray<DiagnosticInfo> Diagnostics);
+    EquatableArray<DiagnosticInfo> Diagnostics);

@@ -1,9 +1,8 @@
 #nullable enable
 using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
+using ZeroAlloc.Saga.Generator.Diagnostics;
 
 namespace ZeroAlloc.Saga.Generator;
 
@@ -24,15 +23,14 @@ namespace ZeroAlloc.Saga.Generator;
 /// </summary>
 internal static class SerializableExtensionEmitter
 {
+    /// <summary>
+    /// Called only when <c>ZeroAlloc.Serialisation.ZeroAllocSerializableAttribute</c> resolves in
+    /// the compilation; everything else it needs is captured in the saga models.
+    /// </summary>
     public static void Emit(
         SourceProductionContext spc,
-        ImmutableArray<SagaExtractResult> sagaResults,
-        Compilation compilation)
+        EquatableArray<SagaExtractResult> sagaResults)
     {
-        var serialisableAttr = compilation.GetTypeByMetadataName(
-            "ZeroAlloc.Serialisation.ZeroAllocSerializableAttribute");
-        if (serialisableAttr is null) return;
-
         // De-dupe by command type FQN so a single command used by multiple steps
         // / sagas only produces a single generated partial.
         var seen = new HashSet<string>(System.StringComparer.Ordinal);
@@ -42,58 +40,25 @@ internal static class SerializableExtensionEmitter
             if (model is null) continue;
             foreach (var step in model.Steps)
             {
-                EmitFor(
-                    spc,
-                    step.CommandTypeFqn,
-                    step.CommandTypeIsInOwnAssembly,
-                    step.CommandTypeIsPartial,
-                    compilation,
-                    serialisableAttr,
-                    seen);
+                EmitFor(spc, step, seen);
             }
         }
     }
 
     private static void EmitFor(
         SourceProductionContext spc,
-        string commandFqn,
-        bool? isInOwnAssembly,
-        bool isPartial,
-        Compilation compilation,
-        INamedTypeSymbol serialisableAttr,
+        StepInfo step,
         HashSet<string> seen)
     {
+        var commandFqn = step.CommandTypeFqn;
         if (!seen.Add(commandFqn)) return;
-        if (isInOwnAssembly != true) return;  // ZASAGA017 covers cross-assembly
-        if (!isPartial) return;               // ZASAGA016 covers non-partial
-
-        var symbol = compilation.GetTypeByMetadataName(commandFqn);
-        if (symbol is null) return;
+        if (step.CommandTypeIsInOwnAssembly != true) return;  // ZASAGA017 covers cross-assembly
+        if (!step.CommandTypeIsPartial) return;               // ZASAGA016 covers non-partial
+        if (step.SerializableExtension is not { } shape) return;
 
         // User-applied attribute wins — skip emission entirely so their
         // chosen format isn't overridden.
-        if (symbol.GetAttributes().Any(a =>
-                SymbolEqualityComparer.Default.Equals(a.AttributeClass, serialisableAttr)))
-        {
-            return;
-        }
-
-        // Determine the type-keyword sequence based on the symbol's shape.
-        // C# attribute merging requires the same type-keyword sequence on every
-        // partial declaration ("partial record struct" / "partial record" /
-        // "partial struct" / "partial class"). The compiler resolves "partial
-        // record" against the original positional-record declaration.
-        var typeKindKeyword = (symbol.IsRecord, symbol.IsValueType) switch
-        {
-            (true, true) => "record struct",
-            (true, false) => "record",
-            (false, true) => "struct",
-            (false, false) => "class",
-        };
-
-        var ns = symbol.ContainingNamespace.IsGlobalNamespace
-            ? null
-            : symbol.ContainingNamespace.ToDisplayString();
+        if (shape.HasSerializableAttribute) return;
 
         // Hint name uses the FQN with '.' replaced so types in different
         // namespaces with the same simple name don't collide.
@@ -104,13 +69,13 @@ internal static class SerializableExtensionEmitter
         sb.AppendLine("#nullable enable");
         sb.AppendLine("using ZeroAlloc.Serialisation;");
         sb.AppendLine();
-        if (ns is not null)
+        if (shape.Namespace is not null)
         {
-            sb.Append("namespace ").Append(ns).AppendLine(";");
+            sb.Append("namespace ").Append(shape.Namespace).AppendLine(";");
             sb.AppendLine();
         }
         sb.AppendLine("[ZeroAllocSerializable(SerializationFormat.SystemTextJson)]");
-        sb.Append("partial ").Append(typeKindKeyword).Append(' ').Append(symbol.Name).AppendLine(";");
+        sb.Append("partial ").Append(shape.TypeKeyword).Append(' ').Append(shape.Name).AppendLine(";");
 
         spc.AddSource($"{safeName}.SagaSerializable.g.cs", sb.ToString());
     }

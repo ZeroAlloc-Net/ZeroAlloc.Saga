@@ -17,10 +17,13 @@ internal sealed record DiagnosticInfo(
     EquatableArray<string> MessageArgs)
 {
     public static DiagnosticInfo Create(DiagnosticDescriptor descriptor, Location? location, params string[] args)
+        => Create(descriptor, LocationInfo.From(location), args);
+
+    public static DiagnosticInfo Create(DiagnosticDescriptor descriptor, LocationInfo? location, params string[] args)
     {
         return new DiagnosticInfo(
             descriptor,
-            LocationInfo.From(location),
+            location,
             EquatableArray<string>.From(args));
     }
 
@@ -31,29 +34,39 @@ internal sealed record DiagnosticInfo(
 }
 
 /// <summary>
-/// Equality-friendly capture of a <see cref="Microsoft.CodeAnalysis.Location"/>
-/// for the source-generator pipeline.
+/// A diagnostic location the pipeline can cache: the syntax tree and the span within it.
 /// </summary>
-internal sealed record LocationInfo(string FilePath, TextSpan TextSpan, LinePositionSpan LineSpan)
+/// <remarks>
+/// <para>
+/// The tree is kept, not just its file path, because the rebuilt diagnostic must be a source
+/// location. <c>Location.Create(filePath, span, lineSpan)</c> gives an external-file location
+/// with no <see cref="Location.SourceTree"/>, and the compiler then ignores
+/// <c>#pragma warning disable</c> for it, so a ZASAGA warning could not be suppressed at its site.
+/// </para>
+/// <para>
+/// Keeping the tree does not defeat caching. <see cref="SyntaxTree"/> compares by reference, and
+/// a compilation reuses the tree instance of every file that did not change, so the location
+/// compares equal across runs until its own file is edited, when the model is rebuilt anyway. A
+/// tree belongs to no one compilation, and only the tree of the latest run is held.
+/// </para>
+/// </remarks>
+internal sealed record LocationInfo(SyntaxTree Tree, TextSpan Span)
 {
-    public static LocationInfo? From(Location? location)
-    {
-        if (location is null) return null;
-        var lineSpan = location.GetLineSpan();
-        return new LocationInfo(
-            location.SourceTree?.FilePath ?? string.Empty,
-            location.SourceSpan,
-            lineSpan.Span);
-    }
+    public Location ToLocation() => Location.Create(Tree, Span);
 
-    public Location ToLocation() => Microsoft.CodeAnalysis.Location.Create(FilePath, TextSpan, LineSpan);
+    /// <summary>
+    /// Null for <see cref="Location.None"/>, a missing location, or one outside source, which
+    /// report as <see cref="Location.None"/>. Every location the generator reports is in source.
+    /// </summary>
+    public static LocationInfo? From(Location? location) =>
+        location?.SourceTree is { } tree ? new LocationInfo(tree, location.SourceSpan) : null;
 }
 
 /// <summary>
 /// Immutable-array wrapper with structural equality so it composes with the
 /// incremental-generator cache.
 /// </summary>
-internal readonly struct EquatableArray<T> : System.IEquatable<EquatableArray<T>>
+internal readonly struct EquatableArray<T> : System.IEquatable<EquatableArray<T>>, IReadOnlyList<T>
 {
     private readonly ImmutableArray<T> _values;
 
@@ -61,6 +74,19 @@ internal readonly struct EquatableArray<T> : System.IEquatable<EquatableArray<T>
 
     public static EquatableArray<T> From(System.Collections.Generic.IEnumerable<T> source)
         => new(ImmutableArray.CreateRange(source));
+
+    public int Count => _values.IsDefault ? 0 : _values.Length;
+
+    public T this[int index] => _values[index];
+
+    public ImmutableArray<T>.Enumerator GetEnumerator()
+        => (_values.IsDefault ? ImmutableArray<T>.Empty : _values).GetEnumerator();
+
+    IEnumerator<T> IEnumerable<T>.GetEnumerator()
+        => ((IEnumerable<T>)(_values.IsDefault ? ImmutableArray<T>.Empty : _values)).GetEnumerator();
+
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
+        => ((IEnumerable<T>)this).GetEnumerator();
 
     public T[] ToArray() => _values.IsDefault ? System.Array.Empty<T>() : System.Linq.Enumerable.ToArray(_values);
 
