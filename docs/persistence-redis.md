@@ -52,6 +52,12 @@ observed version means "the key did not exist when loaded" — the next save
 treats it as an INSERT (still goes through `WATCH` + `MULTI` so a concurrent
 INSERT race surfaces as `RedisSagaConcurrencyException`).
 
+`RemoveAsync` follows the same flow with a `DEL` in place of the `HSET`, and
+checks the observed version the same way: a key another writer changed,
+deleted or created since the load raises `RedisSagaConcurrencyException`
+instead of being deleted or skipped. Its `MULTI` carries the transaction
+contributors' writes too, such as the outbox rows of `WithRedisOutbox()`.
+
 ## Wiring
 
 ```csharp

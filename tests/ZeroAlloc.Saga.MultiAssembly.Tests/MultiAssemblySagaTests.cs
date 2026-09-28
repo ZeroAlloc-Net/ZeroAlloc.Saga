@@ -75,17 +75,21 @@ public sealed class MultiAssemblySagaTests
         var billing = BillingLedger.Current = new BillingLedger();
         var shipping = ShippingLedger.Current = new ShippingLedger();
 
+        // Each saga runs to completion: its first step saves the saga row, and its last step removes
+        // it. Both commit the step's outbox row, #194.
         await BillingFixture.PublishAsync(host.Services, new InvoiceRequested(new InvoiceId(11)));
         await ShippingFixture.PublishAsync(host.Services, new ShipmentRequested(new ShipmentId(12)));
+        await BillingFixture.PublishAsync(host.Services, new InvoicePaid(new InvoiceId(11)));
+        await ShippingFixture.PublishAsync(host.Services, new ShipmentDelivered(new ShipmentId(12)));
 
         await host.StartAsync();
         try
         {
             var deadline = DateTime.UtcNow + WorkerTimeout;
-            while (counter.Finished < 2)
+            while (counter.Finished < 4)
             {
                 if (DateTime.UtcNow > deadline)
-                    Assert.Fail($"The outbox worker did not finish both rows within {WorkerTimeout.TotalSeconds} seconds: {counter.Dispatched} dispatched, {counter.DeadLettered} dead-lettered.");
+                    Assert.Fail($"The outbox worker did not finish all four rows within {WorkerTimeout.TotalSeconds} seconds: {counter.Dispatched} dispatched, {counter.DeadLettered} dead-lettered.");
                 await Task.Delay(20);
             }
         }
@@ -97,11 +101,14 @@ public sealed class MultiAssemblySagaTests
         Assert.True(counter.DeadLettered == 0, $"A saga command was dead-lettered: {counter.LastDeadLetterError}");
         Assert.Equal(new InvoiceId(11), Assert.Single(billing.CommandsOfType<IssueInvoiceCommand>()).Id);
         Assert.Equal(new ShipmentId(12), Assert.Single(shipping.CommandsOfType<BookCarrierCommand>()).Id);
+        Assert.Equal(new InvoiceId(11), Assert.Single(billing.CommandsOfType<CloseInvoiceCommand>()).Id);
+        Assert.Equal(new ShipmentId(12), Assert.Single(shipping.CommandsOfType<CloseShipmentCommand>()).Id);
 
         using var scope = host.Services.CreateScope();
-        var rows = await scope.ServiceProvider.GetRequiredService<MultiAssemblyDbContext>()
-            .Set<OutboxMessageEntity>().AsNoTracking().ToListAsync();
-        Assert.Equal(2, rows.Count);
+        var context = scope.ServiceProvider.GetRequiredService<MultiAssemblyDbContext>();
+        Assert.Equal(0, await context.Set<SagaInstanceEntity>().AsNoTracking().CountAsync());
+        var rows = await context.Set<OutboxMessageEntity>().AsNoTracking().ToListAsync();
+        Assert.Equal(4, rows.Count);
         Assert.All(rows, row => Assert.Equal(OutboxMessageStatus.Succeeded, row.Status));
     }
 }

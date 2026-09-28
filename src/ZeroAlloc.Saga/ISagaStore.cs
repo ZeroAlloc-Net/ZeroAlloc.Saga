@@ -33,5 +33,13 @@ public interface ISagaStore<TSaga, TKey>
     /// Removes the saga associated with <paramref name="key"/>, if any.
     /// Called when a saga reaches a terminal state.
     /// </summary>
+    /// <remarks>
+    /// Like <see cref="SaveAsync"/>, this ends a handler attempt, so a store that shares a
+    /// transactional context with an <see cref="ISagaUnitOfWork"/> must commit the writes
+    /// enlisted in the same DI scope, such as the outbox row of the step that completed the
+    /// saga, in the same transaction as the removal. It must do so whether or not an instance
+    /// exists: a saga that one event both starts and completes is never saved, but its step
+    /// command still has to commit.
+    /// </remarks>
     ValueTask RemoveAsync(TKey key, CancellationToken ct);
 }

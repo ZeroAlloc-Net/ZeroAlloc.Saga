@@ -10,8 +10,9 @@ namespace ZeroAlloc.Saga.Redis;
 /// <remarks>
 /// All registered contributors are resolved from the same DI scope as the
 /// <see cref="RedisSagaStore{TSaga,TKey}"/>. For each <see cref="ISagaStore{TSaga,TKey}.SaveAsync"/>
-/// call, after the store opens its <see cref="ITransaction"/> and queues the saga state
-/// HSET, every contributor is invoked once with that transaction. <c>EXEC</c> then commits
+/// and <see cref="ISagaStore{TSaga,TKey}.RemoveAsync"/> call, after the store opens its
+/// <see cref="ITransaction"/> and queues its own write, the saga state HSET or the key DEL,
+/// every contributor is invoked once with that transaction. <c>EXEC</c> then commits
 /// all queued commands atomically. If <c>EXEC</c> aborts (WATCH detected concurrent change),
 /// the contributor's writes roll back together with the saga update — exactly the contract
 /// <c>Saga.Outbox</c>'s atomic-dispatch story relies on.

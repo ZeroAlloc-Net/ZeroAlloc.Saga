@@ -87,11 +87,11 @@ public sealed class EfCoreSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
         ArgumentNullException.ThrowIfNull(saga);
 
         var persistable = (ISagaPersistableState)saga;
-        // GetEntityAsync hits EF's ChangeTracker cache (no DB roundtrip)
-        // because the DbContext is request-scoped and TryLoadAsync was the
-        // last op that materialised this row inside LoadOrCreateAsync. The
-        // cached entry is returned with the original RowVersion in EF's
-        // snapshot, which is what we need for the OCC check on save.
+        // GetEntityAsync returns the row this scope loaded from EF's change
+        // tracker, with its original RowVersion in EF's snapshot, which is what
+        // the OCC check on save needs. A row deleted by another writer since the
+        // load therefore still updates here, and the update's RowVersion
+        // predicate reports the conflict.
         var entity = await GetEntityAsync(key, ct).ConfigureAwait(false);
         var newState = persistable.Snapshot();
         var newFsmState = persistable.CurrentFsmStateName;
@@ -127,6 +127,43 @@ public sealed class EfCoreSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
             _log.LogDebug("Updating saga row {SagaType}/{Key}", s_sagaTypeKey, key);
         }
 
+        await CommitAsync(key, ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Removing ends a handler attempt just as saving does, so this commits
+    /// everything the attempt enlisted in the scoped <see cref="DbContext"/>,
+    /// such as the outbox row of the step that completed the saga, whether or
+    /// not a saga row exists. A saga that one event both starts and completes
+    /// was never saved, so there is no row to delete, but its command still has
+    /// to commit. A row this scope loaded is deleted against the RowVersion it
+    /// was loaded with, so a row another writer changed or deleted since is a
+    /// conflict, and the attempt's enlisted writes are discarded with it.
+    /// </remarks>
+    public async ValueTask RemoveAsync(TKey key, CancellationToken ct)
+    {
+        var entity = await GetEntityAsync(key, ct).ConfigureAwait(false);
+        if (entity is not null)
+        {
+            _context.Set<SagaInstanceEntity>().Remove(entity);
+            _log.LogDebug("Removing saga row {SagaType}/{Key}", s_sagaTypeKey, key);
+        }
+        else
+        {
+            _log.LogDebug("No saga row to remove for {SagaType}/{Key}", s_sagaTypeKey, key);
+        }
+
+        await CommitAsync(key, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The one place this store commits. Both <see cref="SaveAsync"/> and
+    /// <see cref="RemoveAsync"/> end in it unconditionally, so no path through
+    /// either can drop work enlisted in the scoped <see cref="DbContext"/>.
+    /// </summary>
+    private async Task CommitAsync(TKey key, CancellationToken ct)
+    {
         try
         {
             await _context.SaveChangesAsync(ct).ConfigureAwait(false);
@@ -142,21 +179,17 @@ public sealed class EfCoreSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
         }
     }
 
-    /// <inheritdoc />
-    public async ValueTask RemoveAsync(TKey key, CancellationToken ct)
+    private ValueTask<SagaInstanceEntity?> GetEntityAsync(TKey key, CancellationToken ct)
     {
-        var entity = await GetEntityAsync(key, ct).ConfigureAwait(false);
-        if (entity is null) return;
-        _context.Set<SagaInstanceEntity>().Remove(entity);
-        await _context.SaveChangesAsync(ct).ConfigureAwait(false);
-        _log.LogDebug("Removed saga row {SagaType}/{Key}", s_sagaTypeKey, key);
-    }
-
-    private Task<SagaInstanceEntity?> GetEntityAsync(TKey key, CancellationToken ct)
-    {
+        // FindAsync returns the instance this DbContext already tracks for the
+        // key, and queries only when it tracks none. Once a scope has loaded a
+        // row, a later save or remove works on that instance and its original
+        // RowVersion, even if another writer has deleted the row since: the
+        // UPDATE or DELETE then affects no row and raises the conflict. A fresh
+        // query would instead return null for the deleted row and turn the
+        // save into an insert, or the remove into a silent no-op.
+        // Key order matches the composite key AddSagas() configures.
         var keyStr = key.ToString() ?? string.Empty;
-        return _context.Set<SagaInstanceEntity>()
-            .AsTracking()
-            .FirstOrDefaultAsync(e => e.SagaType == s_sagaTypeKey && e.CorrelationKey == keyStr, ct);
+        return _context.Set<SagaInstanceEntity>().FindAsync([s_sagaTypeKey, keyStr], ct);
     }
 }

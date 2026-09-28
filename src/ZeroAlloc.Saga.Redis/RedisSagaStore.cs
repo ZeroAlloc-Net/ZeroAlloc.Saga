@@ -19,7 +19,7 @@ namespace ZeroAlloc.Saga.Redis;
 /// <remarks>
 /// Per-instance <c>_observedVersions</c> dictionary tracks the version observed at the
 /// most recent <see cref="LoadOrCreateAsync"/> per correlation key, so the eventual
-/// <see cref="SaveAsync"/> can verify nothing else has touched the key. Cleared on
+/// <see cref="SaveAsync"/> or <see cref="RemoveAsync"/> can verify nothing else has touched the key. Cleared on
 /// successful save / remove. The store is registered as Scoped — the scope-per-attempt
 /// retry loop in the generator-emitted handler creates a fresh store (and fresh
 /// observed-version map) per attempt, mirroring the EfCore backend's per-scope semantics.
@@ -116,30 +116,13 @@ public sealed class RedisSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
                 throw new RedisSagaConcurrencyException(redisKey);
             }
 
-            // StackExchange.Redis 2.x ITransaction is a client-side queue: commands
-            // accumulate in the local batch object until ExecuteAsync flushes them
-            // as MULTI/…/EXEC. If a contributor throws below before ExecuteAsync runs,
-            // the unflushed batch is simply discarded with the abandoned ITransaction —
-            // there is no server-side state to clean up, and the WATCH is released by
-            // the UNWATCH in the finally block.
             var tran = _db.CreateTransaction();
             _ = tran.HashSetAsync(redisKey, [
                 new HashEntry("state", stateBytes),
                 new HashEntry("version", newVersion),
                 new HashEntry("fsmState", fsmStateName),
             ]);
-            // Drain transaction contributors (e.g. ZeroAlloc.Saga.Outbox.Redis's
-            // outbox-row writes) into the same MULTI batch so EXEC commits them
-            // atomically with the saga state save.
-            foreach (var c in _contributors)
-            {
-                c.Contribute(tran);
-            }
-            var committed = await tran.ExecuteAsync().ConfigureAwait(false);
-            if (!committed)
-            {
-                throw new RedisSagaConcurrencyException(redisKey);
-            }
+            await CommitAsync(tran, redisKey).ConfigureAwait(false);
         }
         finally
         {
@@ -152,31 +135,38 @@ public sealed class RedisSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Removing ends a handler attempt just as saving does, so the delete runs in a
+    /// <c>MULTI/EXEC</c> that also carries every transaction contributor's writes, such as
+    /// the outbox row of the step that completed the saga. That holds whether or not the
+    /// key exists: a saga that one event both starts and completes was never saved, but its
+    /// command still has to commit. When this store loaded the key, the version it observed
+    /// must still be current, including "no saga": a key another writer deleted or created
+    /// since is a conflict, and the contributors' writes are discarded with the delete.
+    /// </remarks>
     public async ValueTask RemoveAsync(TKey key, CancellationToken ct)
     {
         var redisKey = BuildKey(key);
-        var observedVersion = _observedVersions.TryGetValue(redisKey, out var v) ? v : null;
 
         await _db.ExecuteAsync("WATCH", (RedisKey)redisKey).ConfigureAwait(false);
         try
         {
-            var currentVersion = (string?)await _db.HashGetAsync(redisKey, "version").ConfigureAwait(false);
-            // For Remove, accept "key already gone" as a no-op rather than raising;
-            // the saga handler treats post-Complete idempotently. Only raise on a
-            // genuine "someone changed it" mismatch.
-            if (currentVersion is not null && observedVersion is not null
-                && !string.Equals(currentVersion, observedVersion, StringComparison.Ordinal))
+            // Without an observation, as when RemoveAsync is called without a prior load,
+            // there is nothing to compare against and the delete is unconditional.
+            if (_observedVersions.TryGetValue(redisKey, out var observedVersion))
             {
-                throw new RedisSagaConcurrencyException(redisKey);
+                var currentVersion = (string?)await _db.HashGetAsync(redisKey, "version").ConfigureAwait(false);
+                if (!string.Equals(currentVersion, observedVersion, StringComparison.Ordinal))
+                {
+                    _log.LogDebug("RedisSagaStore: version mismatch on remove of {Key}: expected={Expected}, actual={Actual}",
+                        redisKey, observedVersion ?? "<none>", currentVersion ?? "<none>");
+                    throw new RedisSagaConcurrencyException(redisKey);
+                }
             }
 
             var tran = _db.CreateTransaction();
             _ = tran.KeyDeleteAsync(redisKey);
-            var committed = await tran.ExecuteAsync().ConfigureAwait(false);
-            if (!committed)
-            {
-                throw new RedisSagaConcurrencyException(redisKey);
-            }
+            await CommitAsync(tran, redisKey).ConfigureAwait(false);
         }
         finally
         {
@@ -184,6 +174,34 @@ public sealed class RedisSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
         }
 
         _observedVersions.TryRemove(redisKey, out _);
+    }
+
+    /// <summary>
+    /// The one place this store executes a transaction. Both <see cref="SaveAsync"/> and
+    /// <see cref="RemoveAsync"/> queue their own write on <paramref name="tran"/> and end here,
+    /// so every contributor's writes join the same <c>MULTI/EXEC</c> on either path.
+    /// </summary>
+    private async Task CommitAsync(ITransaction tran, string redisKey)
+    {
+        // StackExchange.Redis 2.x ITransaction is a client-side queue: commands
+        // accumulate in the local batch object until ExecuteAsync flushes them
+        // as MULTI/…/EXEC. If a contributor throws below before ExecuteAsync runs,
+        // the unflushed batch is simply discarded with the abandoned ITransaction —
+        // there is no server-side state to clean up, and the caller's WATCH is
+        // released by the UNWATCH in its finally block.
+        //
+        // Drain transaction contributors (e.g. ZeroAlloc.Saga.Outbox.Redis's
+        // outbox-row writes) into the same MULTI batch so EXEC commits them
+        // atomically with the saga write.
+        foreach (var c in _contributors)
+        {
+            c.Contribute(tran);
+        }
+        var committed = await tran.ExecuteAsync().ConfigureAwait(false);
+        if (!committed)
+        {
+            throw new RedisSagaConcurrencyException(redisKey);
+        }
     }
 
     private string BuildKey(TKey key)

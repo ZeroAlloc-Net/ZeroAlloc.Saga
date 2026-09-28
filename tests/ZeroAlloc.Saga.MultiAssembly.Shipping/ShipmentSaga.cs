@@ -47,8 +47,8 @@ public partial class ShipmentSaga
         return new BookCarrierCommand(e.Id);
     }
 
-    // A second step keeps the saga open after the first, so its state row is saved and the first
-    // step's outbox row commits with it.
+    // Two steps, so the saga takes both paths that commit a step's outbox row: the first step saves
+    // the saga, and the last removes it.
     [Step(Order = 2)]
     public CloseShipmentCommand Close(ShipmentDelivered e) => new(e.Id);
 }
@@ -106,6 +106,15 @@ public static class ShippingFixture
     }
 
     public static async Task PublishAsync(IServiceProvider services, ShipmentRequested evt)
+    {
+        var scope = services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            await scope.ServiceProvider.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
+        }
+    }
+
+    public static async Task PublishAsync(IServiceProvider services, ShipmentDelivered evt)
     {
         var scope = services.CreateAsyncScope();
         await using (scope.ConfigureAwait(false))

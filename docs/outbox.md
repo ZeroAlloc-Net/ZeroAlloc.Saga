@@ -36,7 +36,11 @@ With the outbox bridge:
    shared scoped `DbContext` but does **not** call `SaveChangesAsync`.
 2. The saga store's `SaveAsync` calls `SaveChangesAsync` on the same
    scoped `DbContext`, committing both the saga update and the outbox
-   row in one round-trip.
+   row in one round-trip. On the step that completes the saga, and when
+   compensation finishes, the handler calls `RemoveAsync` instead, which
+   commits the outbox rows with the row deletion the same way. It commits
+   them even when no saga row exists, as for a saga that one event both
+   starts and completes.
 3. ZeroAlloc.Outbox's `OutboxWorkerService`, registered by `AddOutbox()`, claims pending
    entries under a lease. For each saga command type, `WithOutbox()` registered an
    `IOutboxTypeDispatcher` that deserialises the command through the generator-emitted
