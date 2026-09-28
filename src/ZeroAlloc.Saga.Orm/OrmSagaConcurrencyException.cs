@@ -13,9 +13,10 @@ namespace ZeroAlloc.Saga.Orm;
 /// match nothing, and silently lose the update it should have retried.
 /// </para>
 /// <para>
-/// Two situations produce one: an <c>UPDATE ... WHERE RowVersion = @expected</c>
-/// that affects zero rows, and an <c>INSERT</c> that loses a race to another
-/// writer creating the same instance.
+/// Three situations produce one: an <c>UPDATE</c> or <c>DELETE</c> with
+/// <c>WHERE RowVersion = @expected</c> that affects zero rows, an <c>INSERT</c>
+/// that loses a race to another writer creating the same instance, and a remove
+/// of a saga this store loaded as absent that another writer has since created.
 /// </para>
 /// </remarks>
 // Auxiliary ctors are intentionally omitted: this type is only ever constructed

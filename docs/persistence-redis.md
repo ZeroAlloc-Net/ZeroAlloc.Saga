@@ -92,9 +92,15 @@ claims from. Register the worker with `AddOutbox()`. See
 [`docs/outbox-redis.md`](outbox-redis.md).
 
 Without `WithRedisOutbox()`, `WithOutbox()` falls back to `OutboxStoreSagaUnitOfWork`, which
-writes through the configured `IOutboxStore`. That is atomic with an EF Core outbox store sharing
-the saga store's `DbContext`, which a Redis saga store cannot. Dispatch is then at-least-once,
-and step command handlers must be idempotent (`ZASAGA015`).
+writes through the configured `IOutboxStore`'s `EnqueueDeferredAsync`. What that does depends on
+the outbox store:
+
+- A store that writes the row immediately gives at-least-once dispatch, and step command
+  handlers must be idempotent (`ZASAGA015`).
+- An EF Core outbox store only stages the row in its `DbContext`, for a `SaveChangesAsync` that
+  the Redis saga store never calls. The command is lost. Don't pair the Redis saga store with
+  `AddOutbox().WithEfCore<TContext>()`. A startup check for that pairing is tracked in
+  [ZeroAlloc.Saga#199](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/199).
 
 ## `RedisSagaStoreOptions`
 
