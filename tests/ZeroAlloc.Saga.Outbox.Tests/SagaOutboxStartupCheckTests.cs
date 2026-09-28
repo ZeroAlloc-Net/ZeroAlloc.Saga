@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using ZeroAlloc.Outbox;
 using ZeroAlloc.Outbox.EfCore;
+using ZeroAlloc.Saga.EfCore;
 using ZeroAlloc.Saga.Outbox.Tests.Fixtures;
 
 namespace ZeroAlloc.Saga.Outbox.Tests;
@@ -16,10 +17,15 @@ namespace ZeroAlloc.Saga.Outbox.Tests;
 /// registered, and no other dispatcher may claim a saga command's type name. None of this fails
 /// at registration, so AddOutbox and AddSaga can be called in either order.
 /// </summary>
+[Collection(SagaStoreRegistrarCollection.Name)]
 public sealed class SagaOutboxStartupCheckTests
 {
+    // The documented EF Core pairing, so each test fails only on what it is about. The pairing
+    // itself is covered by StorePairingTests.
     private static IHost BuildHost(SqliteFixture fx, Action<IServiceCollection> configure)
-        => new HostBuilder()
+    {
+        SagaStoreRegistrar.Reset();
+        return new HostBuilder()
             .ConfigureServices(services =>
             {
                 services.AddLogging();
@@ -27,6 +33,7 @@ public sealed class SagaOutboxStartupCheckTests
                 configure(services);
             })
             .Build();
+    }
 
     private static void AddDocumentedOutbox(IServiceCollection services)
         => services.AddOutbox(o => o.PollingInterval = TimeSpan.FromMilliseconds(50))
@@ -39,7 +46,7 @@ public sealed class SagaOutboxStartupCheckTests
         using var host = BuildHost(fx, services =>
         {
             services.AddScoped<IOutboxStore, EfCoreOutboxStore<OutboxE2EDbContext>>();
-            services.AddSaga().WithOutbox().WithOrderFulfillmentSaga();
+            services.AddSaga().WithEfCoreStore<OutboxE2EDbContext>().WithOutbox().WithOrderFulfillmentSaga();
         });
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => host.StartAsync());
@@ -56,7 +63,7 @@ public sealed class SagaOutboxStartupCheckTests
         using var host = BuildHost(fx, services =>
         {
             services.AddOutbox();
-            services.AddSaga().WithOutbox().WithOrderFulfillmentSaga();
+            services.AddSaga().WithEfCoreStore<OutboxE2EDbContext>().WithOutbox().WithOrderFulfillmentSaga();
         });
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => host.StartAsync());
@@ -74,7 +81,7 @@ public sealed class SagaOutboxStartupCheckTests
         using var host = BuildHost(fx, services =>
         {
             AddDocumentedOutbox(services);
-            services.AddSaga().WithOutbox();
+            services.AddSaga().WithEfCoreStore<OutboxE2EDbContext>().WithOutbox();
         });
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => host.StartAsync());
@@ -92,7 +99,7 @@ public sealed class SagaOutboxStartupCheckTests
         using var host = BuildHost(fx, services =>
         {
             AddDocumentedOutbox(services);
-            services.AddSaga().WithOutbox().WithOrderFulfillmentSaga().AddCommandSource(new NonSerializingSource());
+            services.AddSaga().WithEfCoreStore<OutboxE2EDbContext>().WithOutbox().WithOrderFulfillmentSaga().AddCommandSource(new NonSerializingSource());
         });
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => host.StartAsync());
@@ -109,7 +116,7 @@ public sealed class SagaOutboxStartupCheckTests
         using var host = BuildHost(fx, services =>
         {
             AddDocumentedOutbox(services);
-            services.AddSaga().WithOutbox().WithOrderFulfillmentSaga();
+            services.AddSaga().WithEfCoreStore<OutboxE2EDbContext>().WithOutbox().WithOrderFulfillmentSaga();
             services.AddScoped<IOutboxTypeDispatcher>(_ => new ForeignDispatcher(typeName));
         });
 
@@ -128,7 +135,7 @@ public sealed class SagaOutboxStartupCheckTests
         using var host = BuildHost(fx, services =>
         {
             if (outboxFirst) AddDocumentedOutbox(services);
-            services.AddSaga().WithOutbox().WithOrderFulfillmentSaga();
+            services.AddSaga().WithEfCoreStore<OutboxE2EDbContext>().WithOutbox().WithOrderFulfillmentSaga();
             if (!outboxFirst) AddDocumentedOutbox(services);
         });
 
@@ -148,7 +155,7 @@ public sealed class SagaOutboxStartupCheckTests
             services.AddOptions<OutboxOptions>().Configure(o => o.PollingInterval = TimeSpan.FromMilliseconds(50));
             services.AddSingleton<IHostedService>(sp => ActivatorUtilities.CreateInstance<OutboxWorkerService>(sp));
             services.AddScoped<IOutboxStore, EfCoreOutboxStore<OutboxE2EDbContext>>();
-            services.AddSaga().WithOutbox().WithOrderFulfillmentSaga();
+            services.AddSaga().WithEfCoreStore<OutboxE2EDbContext>().WithOutbox().WithOrderFulfillmentSaga();
         });
 
         await host.StartAsync();
@@ -165,7 +172,7 @@ public sealed class SagaOutboxStartupCheckTests
         using var host = BuildHost(fx, services =>
         {
             AddDocumentedOutbox(services);
-            services.AddSaga().WithOutbox().WithOrderFulfillmentSaga();
+            services.AddSaga().WithEfCoreStore<OutboxE2EDbContext>().WithOutbox().WithOrderFulfillmentSaga();
             DecorateDispatchersInPlace(services);
         });
 
@@ -176,6 +183,16 @@ public sealed class SagaOutboxStartupCheckTests
         Assert.All(
             scope.ServiceProvider.GetServices<IOutboxTypeDispatcher>(),
             d => Assert.IsType<DecoratingDispatcher>(d));
+    }
+
+    [Fact]
+    public void The_Store_Type_Names_The_Pairing_Check_Recognises_Match_The_Real_Types()
+    {
+        // The check cannot reference ZeroAlloc.Saga.EfCore or ZeroAlloc.Outbox.EfCore, so it
+        // recognises their types by name. A rename in either must fail here, not in production.
+        Assert.Equal(SagaOutboxStartupCheck.EfCoreSagaStoreOptionsTypeName, typeof(EfCoreSagaStoreOptions).FullName);
+        Assert.Equal(SagaOutboxStartupCheck.EfCoreOutboxStoreTypeName, typeof(EfCoreOutboxStore<>).FullName);
+        Assert.Equal(SagaOutboxStartupCheck.DbContextTypeName, typeof(DbContext).FullName);
     }
 
     // Mirrors OutboxTelemetryBuilderExtensions.WithTelemetry: each descriptor is swapped for a

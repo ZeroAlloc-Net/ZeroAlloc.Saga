@@ -66,7 +66,19 @@ Order matters within the saga builder: call `WithRedisOutbox` AFTER both `WithRe
 `WithOutbox`. `WithRedisOutbox` registers `RedisSagaUnitOfWork` as the canonical `ISagaUnitOfWork`
 (overriding the default passthrough that `WithOutbox` registered), and replaces `IOutboxStore`
 with `RedisOutboxStore`, so the worker claims from the same Redis key-space the saga store
-writes to. `AddOutbox()` can come before or after `AddSaga()`. The options, the
+writes to. Don't register another `IOutboxStore` after it, such as
+`AddOutbox().WithEfCore<TContext>()`: the worker would claim from that store and never dispatch a
+saga command. A startup check that `WithRedisOutbox` registers fails the host start in that
+case:
+
+> ZeroAlloc.Saga.Outbox.Redis.WithRedisOutbox(): the saga store WithRedisStore() writes each saga
+> command to the Redis outbox, the store RedisOutboxStore, but ZeroAlloc.Outbox's worker claims
+> from the outbox store EfCoreOutboxStore\<AppDbContext>, registered after WithRedisOutbox(). The
+> worker would never dispatch a saga command. Remove that registration: WithRedisOutbox()
+> supplies the outbox store, so call services.AddOutbox() without WithEfCore\<TContext>() or
+> WithOrm().
+
+See [Supported pairings](outbox.md#supported-pairings). `AddOutbox()` can come before or after `AddSaga()`. The options, the
 one-dispatcher-per-type-name rule and the startup check are described in
 [`docs/outbox.md`](outbox.md).
 

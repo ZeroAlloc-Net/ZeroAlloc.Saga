@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -35,6 +36,18 @@ public sealed class EfCoreSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
     private readonly DbContext _context;
     private readonly ILogger _log;
 
+    // The keys this store loaded and found no row for. EF's change tracker
+    // remembers a row that was loaded, with the RowVersion the OCC check needs,
+    // but it keeps nothing for a load that found no row. Without this set, a
+    // later save or remove would query again, pick up a row another writer
+    // created since, and overwrite or delete it. Redis and the ORM store treat
+    // "found no row" as an observation in the same way.
+    //
+    // A key in neither this set nor the change tracker was never loaded, and
+    // keeps the unconditional behaviour. The store is scoped like the DbContext
+    // it wraps, so the set lives exactly as long as that change tracker.
+    private readonly HashSet<TKey> _loadedAbsent = new();
+
     /// <summary>
     /// Constructs the store. The <paramref name="context"/> is expected to be
     /// the user's <c>TContext</c> resolved through the DI container; the
@@ -59,7 +72,14 @@ public sealed class EfCoreSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
     public async ValueTask<TSaga?> TryLoadAsync(TKey key, CancellationToken ct)
     {
         var entity = await GetEntityAsync(key, ct).ConfigureAwait(false);
-        if (entity is null) return null;
+        if (entity is null)
+        {
+            _loadedAbsent.Add(key);
+            return null;
+        }
+
+        // The change tracker now holds the row and its RowVersion.
+        _loadedAbsent.Remove(key);
 
         var saga = new TSaga();
         var persistable = (ISagaPersistableState)saga;
@@ -93,6 +113,7 @@ public sealed class EfCoreSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
         // load therefore still updates here, and the update's RowVersion
         // predicate reports the conflict.
         var entity = await GetEntityAsync(key, ct).ConfigureAwait(false);
+        ThrowIfCreatedSinceLoadedAbsent(key, entity);
         var newState = persistable.Snapshot();
         var newFsmState = persistable.CurrentFsmStateName;
         var now = DateTimeOffset.UtcNow;
@@ -111,6 +132,8 @@ public sealed class EfCoreSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
                 // on INSERT and includes it in subsequent UPDATE WHERE clauses.
                 RowVersion = Guid.NewGuid().ToByteArray(),
             });
+            // A row another writer inserts before this commit collides on the
+            // key, and CommitAsync reports that as a conflict.
             _log.LogDebug("Inserting new saga row {SagaType}/{Key}", s_sagaTypeKey, key);
         }
         else
@@ -128,6 +151,8 @@ public sealed class EfCoreSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
         }
 
         await CommitAsync(key, ct).ConfigureAwait(false);
+        // The row is this scope's own now, tracked with its RowVersion.
+        _loadedAbsent.Remove(key);
     }
 
     /// <inheritdoc />
@@ -139,11 +164,18 @@ public sealed class EfCoreSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
     /// was never saved, so there is no row to delete, but its command still has
     /// to commit. A row this scope loaded is deleted against the RowVersion it
     /// was loaded with, so a row another writer changed or deleted since is a
-    /// conflict, and the attempt's enlisted writes are discarded with it.
+    /// conflict, and the attempt's enlisted writes are discarded with it. When
+    /// this scope loaded the key and found no row, a row another writer created
+    /// since is a conflict too, and is kept.
     /// </remarks>
+    /// <exception cref="EfCoreSagaConcurrencyException">
+    /// Another writer changed, deleted or created the row since this scope
+    /// loaded the key. The generated handler retries, as it does for a save.
+    /// </exception>
     public async ValueTask RemoveAsync(TKey key, CancellationToken ct)
     {
         var entity = await GetEntityAsync(key, ct).ConfigureAwait(false);
+        ThrowIfCreatedSinceLoadedAbsent(key, entity);
         if (entity is not null)
         {
             _context.Set<SagaInstanceEntity>().Remove(entity);
@@ -155,6 +187,31 @@ public sealed class EfCoreSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
         }
 
         await CommitAsync(key, ct).ConfigureAwait(false);
+        // Gone as of this commit, which is an observation too.
+        _loadedAbsent.Add(key);
+    }
+
+    /// <summary>
+    /// Raises the conflict for a key this scope loaded and found no row for,
+    /// when a row exists now. That row is another writer's: they created the
+    /// saga after this scope's load. Saving over it or deleting it would lose
+    /// their progress, so the attempt fails and the retry loads their saga.
+    /// </summary>
+    private void ThrowIfCreatedSinceLoadedAbsent(TKey key, SagaInstanceEntity? entity)
+    {
+        if (entity is null || !_loadedAbsent.Contains(key))
+            return;
+
+        var correlationKey = key.ToString() ?? string.Empty;
+        _log.LogDebug(
+            "Saga row {SagaType}/{Key} was created by another writer after this scope found none",
+            s_sagaTypeKey, key);
+        throw new EfCoreSagaConcurrencyException(
+            s_sagaTypeKey,
+            correlationKey,
+            new DbUpdateConcurrencyException(
+                $"This scope loaded saga '{s_sagaTypeKey}' with correlation key '{correlationKey}' " +
+                "and found no row, and another writer has created the row since."));
     }
 
     /// <summary>

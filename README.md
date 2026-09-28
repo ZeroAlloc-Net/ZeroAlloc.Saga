@@ -116,7 +116,7 @@ services.AddSaga()
 ```
 
 Mutually exclusive with `WithEfCoreStore<TContext>()`. Composition with
-`WithOutbox()` alone is at best at-least-once, and loses commands with an EF Core outbox store;
+`WithOutbox()` alone is at best at-least-once, and fails at startup with an EF Core outbox store;
 add `ZeroAlloc.Saga.Outbox.Redis` and `WithRedisOutbox()` for full atomic-commit guarantees,
 see above. Requires `StackExchange.Redis` 2.8+. See [`docs/persistence-redis.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/persistence-redis.md).
 

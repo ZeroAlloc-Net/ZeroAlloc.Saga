@@ -98,9 +98,13 @@ the outbox store:
 - A store that writes the row immediately gives at-least-once dispatch, and step command
   handlers must be idempotent (`ZASAGA015`).
 - An EF Core outbox store only stages the row in its `DbContext`, for a `SaveChangesAsync` that
-  the Redis saga store never calls. The command is lost. Don't pair the Redis saga store with
-  `AddOutbox().WithEfCore<TContext>()`. A startup check for that pairing is tracked in
-  [ZeroAlloc.Saga#199](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/199).
+  the Redis saga store never calls, so every command would be lost. `WithOutbox()`'s startup
+  check therefore fails the host start when the Redis saga store is paired with
+  `AddOutbox().WithEfCore<TContext>()`.
+
+With `WithRedisOutbox()`, don't register another outbox store after it: the worker would claim
+from that store instead of the Redis outbox, and `WithRedisOutbox()`'s own startup check fails
+the host start. See [Supported pairings](outbox.md#supported-pairings).
 
 ## `RedisSagaStoreOptions`
 

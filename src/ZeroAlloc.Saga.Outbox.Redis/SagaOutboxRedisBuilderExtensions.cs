@@ -1,6 +1,7 @@
 using System;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using StackExchange.Redis;
 using ZeroAlloc.Outbox;
 using ZeroAlloc.Saga.Redis;
@@ -23,7 +24,10 @@ public static class SagaOutboxRedisBuilderExtensions
     /// Call AFTER both <c>WithRedisStore()</c> and <c>WithOutbox()</c> — this extension
     /// replaces the default <see cref="ISagaUnitOfWork"/> registered by <c>WithOutbox()</c>
     /// with a Redis-aware buffer, so a saga step's outbox-row write commits atomically
-    /// with the next saga state save inside a single Redis MULTI/EXEC.
+    /// with the next saga state save inside a single Redis MULTI/EXEC. Register the worker with
+    /// <c>AddOutbox()</c> alone: when the host starts, a check fails the start if another
+    /// <see cref="IOutboxStore"/> registered after this call would replace
+    /// <see cref="RedisOutboxStore"/> as the store the worker claims from.
     /// </summary>
     /// <param name="builder">The saga builder.</param>
     /// <param name="configure">Optional configurator for <see cref="RedisOutboxOptions"/>.</param>
@@ -74,6 +78,11 @@ public static class SagaOutboxRedisBuilderExtensions
             new RedisOutboxStore(
                 sp.GetRequiredService<IDatabase>(),
                 sp.GetRequiredService<RedisOutboxOptions>())));
+
+        // Fails the host start if an IOutboxStore registered after this call replaces the one
+        // above, since the worker would then never claim a saga command.
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, RedisOutboxStartupCheck>(
+            sp => new RedisOutboxStartupCheck(sp)));
 
         return builder;
     }

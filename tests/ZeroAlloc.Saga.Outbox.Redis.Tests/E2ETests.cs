@@ -396,6 +396,59 @@ public sealed class E2ETests : IAsyncLifetime
         }
     }
 
+    [Fact]
+    public async Task Start_With_RedisStore_And_WithRedisOutbox_Succeeds()
+    {
+        // The supported Redis pairing: the worker claims from the RedisOutboxStore that
+        // WithRedisOutbox() registers, the store the unit of work writes to. #199
+        using var host = BuildHost("saga-pair-ok", "outbox-pair-ok");
+
+        await host.StartAsync();
+        await host.StopAsync();
+    }
+
+    [Fact]
+    public async Task Start_With_Another_Outbox_Store_Registered_After_WithRedisOutbox_Throws()
+    {
+        // WithRedisOutbox() writes each saga command into the Redis outbox inside the saga
+        // store's MULTI/EXEC. An IOutboxStore registered after it, such as
+        // AddOutbox().WithEfCore<TContext>(), becomes the store the worker claims from, so no
+        // saga command would ever be dispatched. #199
+        using var host = BuildHost("saga-pair-bad", "outbox-pair-bad",
+            extra: services => services.AddScoped<IOutboxStore, StrayOutboxStore>());
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => host.StartAsync());
+
+        Assert.StartsWith("ZeroAlloc.Saga.Outbox.Redis.WithRedisOutbox(): ", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("StrayOutboxStore", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("RedisOutboxStore", ex.Message, StringComparison.Ordinal);
+    }
+
+    // Stands in for any other IOutboxStore; the check must reject it before the worker runs.
+    private sealed class StrayOutboxStore : IOutboxStore
+    {
+        public ValueTask EnqueueAsync(string typeName, ReadOnlyMemory<byte> payload, System.Data.Common.DbTransaction? transaction, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public ValueTask<System.Collections.Generic.IReadOnlyList<OutboxEntry>> ClaimPendingAsync(int batchSize, OutboxLease lease, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public ValueTask<bool> RenewLeaseAsync(OutboxMessageId id, OutboxLease lease, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public ValueTask<int> ReleaseLeasesAsync(System.Collections.Generic.IReadOnlyList<OutboxMessageId> ids, OutboxLease lease, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public ValueTask<bool> MarkSucceededAsync(OutboxMessageId id, OutboxLease lease, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public ValueTask<bool> MarkFailedAsync(OutboxMessageId id, int retryCount, DateTimeOffset nextRetryAt, OutboxLease lease, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public ValueTask<bool> DeadLetterAsync(OutboxMessageId id, string error, OutboxLease lease, CancellationToken ct)
+            => throw new NotSupportedException();
+    }
+
     /// <summary>
     /// Test-only contributor that triggers a real WATCH abort on its first invocation.
     /// Writes to the saga's watched key via a sibling Redis connection, then immediately

@@ -104,6 +104,15 @@ row-version column). The store rotates `RowVersion` to a fresh
 value in the `WHERE` clause, so a stale write affects zero rows and
 surfaces as `DbUpdateConcurrencyException`.
 
+A load that finds no row is an observation too, as on the Redis and ORM stores. If another
+writer creates the saga after that load, for example because two events that both start it are
+handled at once, the save or remove that follows raises `EfCoreSagaConcurrencyException` and
+their row is kept. The save does not overwrite their saga with this attempt's state, and the
+remove does not delete it. When there is still no row, the save inserts one, and the remove
+deletes nothing and still commits what the attempt enlisted, such as its outbox rows.
+`RemoveAsync` deletes a loaded row against the `RowVersion` it was loaded with, so a row another
+writer changed or deleted since is a conflict as well.
+
 The generator-emitted notification handler catches that exception and
 retries the entire load → step → save loop. After
 `MaxRetryAttempts` consecutive conflicts the handler gives up and
@@ -127,8 +136,11 @@ in the same transaction as the state save — the dispatch row commits
 or rolls back atomically with the saga update. Combined with the
 generator-emitted scope-per-attempt retry loop, this guarantees that
 every step command is dispatched **exactly once** across both
-cross-process races and same-process OCC retries. See
-[`docs/outbox.md`](outbox.md). The idempotency guidance above remains
+cross-process races and same-process OCC retries. Pair it with
+`AddOutbox().WithEfCore<TContext>()` on the same `TContext` as `WithEfCoreStore<TContext>()`.
+The EF Core outbox store only stages its rows for this store's `SaveChangesAsync`, so with any
+other saga store, or another `DbContext`, the host fails at startup. See
+[`docs/outbox.md`](outbox.md) and its [Supported pairings](outbox.md#supported-pairings). The idempotency guidance above remains
 good practice for residual at-least-once cases (handler crashes
 between save and message-bus ack, the worker dies after dispatch but
 before `MarkSucceededAsync`).

@@ -18,6 +18,9 @@
     <PackageReference Include="ZeroAlloc.Mediator" VersionOverride="6.0.*" />
     <PackageReference Include="ZeroAlloc.Mediator.Generator" VersionOverride="6.0.*" PrivateAssets="all" />
     <PackageReference Include="ZeroAlloc.Outbox.EfCore" />
+    <!-- StorePairingTests: the ORM outbox store, and a connection for it. -->
+    <PackageReference Include="ZeroAlloc.Outbox.Orm" />
+    <PackageReference Include="AdoNet.Async.Adapters" />
     <PackageReference Include="ZeroAlloc.Serialisation" />
   </ItemGroup>
   <ItemGroup>
@@ -26,6 +29,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\ZeroAlloc.Saga.Outbox\ZeroAlloc.Saga.Outbox.csproj" />
     <ProjectReference Include="..\..\src\ZeroAlloc.Saga.EfCore\ZeroAlloc.Saga.EfCore.csproj" />
+    <ProjectReference Include="..\..\src\ZeroAlloc.Saga.Orm\ZeroAlloc.Saga.Orm.csproj" />
+    <ProjectReference Include="..\..\src\ZeroAlloc.Saga.Redis\ZeroAlloc.Saga.Redis.csproj" />
     <ProjectReference Include="..\..\src\ZeroAlloc.Saga.Generator\ZeroAlloc.Saga.Generator.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false"

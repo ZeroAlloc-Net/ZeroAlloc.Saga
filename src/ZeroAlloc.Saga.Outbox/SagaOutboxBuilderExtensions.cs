@@ -27,8 +27,12 @@ public static class SagaOutboxBuilderExtensions
     /// after <c>AddSaga()</c>. Its <see cref="OutboxWorkerService"/> claims, dispatches, retries and
     /// dead-letters saga commands, configured through <see cref="OutboxOptions"/>. When the host
     /// starts, before any hosted service, a check fails the start if no
-    /// <see cref="OutboxWorkerService"/> or no <see cref="IOutboxStore"/> is registered, or if
-    /// another <see cref="IOutboxTypeDispatcher"/> claims a saga command's type name.
+    /// <see cref="OutboxWorkerService"/> or no <see cref="IOutboxStore"/> is registered, if the
+    /// saga store cannot commit what the outbox store stages, or if another
+    /// <see cref="IOutboxTypeDispatcher"/> claims a saga command's type name. ZeroAlloc.Outbox's
+    /// EF Core store, <c>AddOutbox().WithEfCore&lt;TContext&gt;()</c>, only stages its rows, so it
+    /// needs the EF Core saga store, <c>WithEfCoreStore&lt;TContext&gt;()</c>, on the same
+    /// <c>TContext</c>.
     /// </para>
     /// <para>
     /// The saga command types come from the <see cref="SagaCommandSource"/> of every assembly whose
