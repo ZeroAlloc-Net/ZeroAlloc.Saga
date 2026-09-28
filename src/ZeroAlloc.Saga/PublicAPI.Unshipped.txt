@@ -1,10 +1,1 @@
 #nullable enable
-abstract ZeroAlloc.Saga.SagaCommandSource.CommandTypes.get -> System.Collections.Generic.IReadOnlyList<System.Type!>!
-abstract ZeroAlloc.Saga.SagaCommandSource.CreateDispatcher(System.IServiceProvider! services) -> ZeroAlloc.Saga.ISagaCommandDispatcher!
-static ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.AddCommandSource(this ZeroAlloc.Saga.ISagaBuilder! builder, ZeroAlloc.Saga.SagaCommandSource! source) -> ZeroAlloc.Saga.ISagaBuilder!
-static ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.ForEachCommandSource(this ZeroAlloc.Saga.ISagaBuilder! builder, System.Action<ZeroAlloc.Saga.SagaCommandSource!>! callback) -> ZeroAlloc.Saga.ISagaBuilder!
-virtual ZeroAlloc.Saga.SagaCommandSource.CanDispatchSerialized.get -> bool
-virtual ZeroAlloc.Saga.SagaCommandSource.DispatchSerializedAsync(string! typeName, System.ReadOnlyMemory<byte> payload, System.IServiceProvider! services, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
-ZeroAlloc.Saga.SagaCommandSource
-ZeroAlloc.Saga.SagaCommandSource.SagaCommandSource() -> void
-ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions
