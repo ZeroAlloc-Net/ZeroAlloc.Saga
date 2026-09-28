@@ -15,7 +15,9 @@ namespace ZeroAlloc.Saga.Outbox;
 ///   <item><description><c>EfCoreOutboxStore</c> (when paired with
 ///   <c>WithEfCoreStore&lt;TContext&gt;()</c>) Adds a tracked entity to the
 ///   shared scoped <c>DbContext</c>; <see cref="ISagaStore{TSaga,TKey}.SaveAsync"/>'s
-///   <c>SaveChangesAsync</c> commits both atomically.</description></item>
+///   <c>SaveChangesAsync</c> commits both atomically. With any other saga store nothing saves
+///   that <c>DbContext</c>, so the startup check <c>WithOutbox()</c> registers fails the host
+///   start rather than let every command be lost.</description></item>
 ///   <item><description>InMemory <see cref="IOutboxStore"/> implementations that
 ///   auto-commit via the default-interface-method fallback do NOT guarantee
 ///   atomicity — the outbox row is persisted before the saga state save.

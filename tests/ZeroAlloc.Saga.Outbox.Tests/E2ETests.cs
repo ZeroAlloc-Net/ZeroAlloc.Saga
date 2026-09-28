@@ -30,6 +30,7 @@ namespace ZeroAlloc.Saga.Outbox.Tests;
 /// The fixture's single SqliteConnection is not thread-safe, so a test touches the database only
 /// while the worker is stopped.
 /// </remarks>
+[Collection(SagaStoreRegistrarCollection.Name)]
 public sealed class E2ETests
 {
     private static readonly TimeSpan WorkerTimeout = TimeSpan.FromSeconds(15);

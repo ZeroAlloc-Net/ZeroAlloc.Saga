@@ -136,8 +136,11 @@ in the same transaction as the state save — the dispatch row commits
 or rolls back atomically with the saga update. Combined with the
 generator-emitted scope-per-attempt retry loop, this guarantees that
 every step command is dispatched **exactly once** across both
-cross-process races and same-process OCC retries. See
-[`docs/outbox.md`](outbox.md). The idempotency guidance above remains
+cross-process races and same-process OCC retries. Pair it with
+`AddOutbox().WithEfCore<TContext>()` on the same `TContext` as `WithEfCoreStore<TContext>()`.
+The EF Core outbox store only stages its rows for this store's `SaveChangesAsync`, so with any
+other saga store, or another `DbContext`, the host fails at startup. See
+[`docs/outbox.md`](outbox.md) and its [Supported pairings](outbox.md#supported-pairings). The idempotency guidance above remains
 good practice for residual at-least-once cases (handler crashes
 between save and message-bus ack, the worker dies after dispatch but
 before `MarkSucceededAsync`).
