@@ -31,7 +31,7 @@ backend bridges (EfCore, Redis, etc.) get `ZASAGA1xx`, `ZASAGA2xx`, …
 | [ZASAGA013](#zasaga013) | warning | — |
 | [ZASAGA014](#zasaga014) | error | — |
 | [ZASAGA015](#zasaga015) | info | — |
-| [ZASAGA016](#zasaga016) | warning | — |
+| [ZASAGA016](#zasaga016) | retired | — |
 | [ZASAGA017](#zasaga017) | info | — |
 | [ZASAGA018](#zasaga018) | removed in 4.0 | — |
 
@@ -274,21 +274,29 @@ Suppress with `#pragma warning disable ZASAGA015` if that is intended.
 
 ## ZASAGA016
 
-**`Step command type must be partial when ZeroAlloc.Serialisation is referenced`** (warning)
+**`Retired`**
 
-With ZeroAlloc.Serialisation referenced, the generator adds
-`[ZeroAllocSerializable]` to each step's command type through a partial
-declaration. Declare the command type `partial` so that declaration can
-attach.
+`ZASAGA016` asked for step command types to be declared `partial` when ZeroAlloc.Serialisation
+is referenced, so the generator could add `[ZeroAllocSerializable]` to them through a generated
+partial declaration. That attribute never took effect: Roslyn runs every source generator against
+the same input compilation, so ZeroAlloc.Serialisation's generator never saw it and generated no
+serializer. The generated declaration and the diagnostic were removed
+([#207](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/207)). Step command types no longer need `partial`.
+
+Apply `[ZeroAllocSerializable]` to each outbox step command yourself, or register an
+`ISerializer<T>` for it. See
+[Serializers for step commands](outbox.md#serializers-for-step-commands). This ID is retired and
+must not be reused for a future diagnostic.
 
 ## ZASAGA017
 
 **`Step command type is in a referenced assembly`** (info)
 
-A partial declaration can only extend a type in the same compilation, so the
-generator can't add `[ZeroAllocSerializable]` to a command type declared in a
-referenced assembly. Apply `[ZeroAllocSerializable]` on the type's own
-declaration.
+The outbox serialises each step command with the `ISerializer<T>` registered for its type, and
+the Saga generator does not create serializers. For a command type declared in a referenced
+assembly, apply `[ZeroAllocSerializable]` to its declaration in that assembly, so
+ZeroAlloc.Serialisation generates the serializer there, or register an `ISerializer<T>` for it
+yourself. See [Serializers for step commands](outbox.md#serializers-for-step-commands).
 
 ## ZASAGA018
 

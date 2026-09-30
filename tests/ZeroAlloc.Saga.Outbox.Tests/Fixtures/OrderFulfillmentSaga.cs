@@ -19,21 +19,19 @@ public sealed record StockReserved(OrderId OrderId) : INotification;
 public sealed record PaymentCharged(OrderId OrderId) : INotification;
 public sealed record PaymentDeclined(OrderId OrderId) : INotification;
 
-// Step commands (saga outputs). Each is declared partial AND user-applies
-// [ZeroAllocSerializable(SystemTextJson)] so the saga generator's
-// SerializableExtensionEmitter skips its (broken-against-2.1.0) auto-emission.
-// Hand-rolled JSON serializers are registered separately in AddTestSerializers
-// — they win over any generator-emitted ISerializer<T> via DI registration order.
+// Step commands (saga outputs). Each carries a user-applied [ZeroAllocSerializable], as the
+// outbox docs describe. The tests register hand-written JSON serializers in AddTestSerializers,
+// the other documented way to supply an ISerializer<T>.
 [ZeroAllocSerializable(SerializationFormat.SystemTextJson)]
-public sealed partial record ReserveStockCommand(OrderId OrderId, decimal Total) : IRequest;
+public sealed record ReserveStockCommand(OrderId OrderId, decimal Total) : IRequest;
 [ZeroAllocSerializable(SerializationFormat.SystemTextJson)]
-public sealed partial record ChargeCustomerCommand(OrderId OrderId, decimal Total) : IRequest;
+public sealed record ChargeCustomerCommand(OrderId OrderId, decimal Total) : IRequest;
 [ZeroAllocSerializable(SerializationFormat.SystemTextJson)]
-public sealed partial record ShipOrderCommand(OrderId OrderId) : IRequest;
+public sealed record ShipOrderCommand(OrderId OrderId) : IRequest;
 [ZeroAllocSerializable(SerializationFormat.SystemTextJson)]
-public sealed partial record CancelReservationCommand(OrderId OrderId) : IRequest;
+public sealed record CancelReservationCommand(OrderId OrderId) : IRequest;
 [ZeroAllocSerializable(SerializationFormat.SystemTextJson)]
-public sealed partial record RefundPaymentCommand(OrderId OrderId) : IRequest;
+public sealed record RefundPaymentCommand(OrderId OrderId) : IRequest;
 
 // Required for SystemTextJson AOT-safe source-generated path: a
 // JsonSerializerContext-derived class lists every [JsonSerializable] type
@@ -140,13 +138,9 @@ public sealed class RefundPaymentHandler : IRequestHandler<RefundPaymentCommand,
 }
 
 /// <summary>
-/// Trivial reflection-free <see cref="ISerializer{T}"/> built on
-/// <see cref="JsonSerializer"/>. Registered manually for each step command so
-/// <see cref="OutboxSagaCommandDispatcher"/>'s
-/// <c>services.GetRequiredService&lt;ISerializer&lt;TCmd&gt;&gt;()</c> resolves
-/// without requiring the auto-emitted <c>[ZeroAllocSerializable]</c> path
-/// (whose <c>SerializationFormat.Json</c> enum value was renamed before
-/// Serialisation 2.1.0 and would not compile here).
+/// Trivial <see cref="ISerializer{T}"/> built on <see cref="JsonSerializer"/>. Registered
+/// manually for each step command so <see cref="OutboxSagaCommandDispatcher"/>'s
+/// <c>services.GetRequiredService&lt;ISerializer&lt;TCmd&gt;&gt;()</c> resolves.
 /// </summary>
 public sealed class JsonCommandSerializer<T> : ISerializer<T>
 {

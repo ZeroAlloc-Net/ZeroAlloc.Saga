@@ -183,8 +183,8 @@ services.AddSaga()
 
 Requires `ZeroAlloc.Outbox` 3.0.1+ and `ZeroAlloc.Serialisation` 2.1.0+. EF Core users also need
 `ZeroAlloc.Outbox.EfCore` 3.0.1 or later; Saga's floor on `ZeroAlloc.Outbox` does not raise it.
-See [`docs/outbox.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox.md) for the full setup, marker
-diagnostics (`ZASAGA016`/`ZASAGA017`), and dispatch options. Upgrading from 3.x: see
+See [`docs/outbox.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox.md) for the full setup, the
+`ISerializer<T>` each step command needs, `ZASAGA017`, and dispatch options. Upgrading from 3.x: see
 [`docs/migrating-to-v4.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/migrating-to-v4.md).
 
 ### `ZeroAlloc.Saga` runtime
@@ -196,13 +196,11 @@ diagnostics (`ZASAGA016`/`ZASAGA017`), and dispatch options. Upgrading from 3.x:
 - **`SagaCommandRegistry`** generator-emitted in consumer assemblies —
   central deserialise+dispatch lookup keyed by `typeof(T).FullName`,
   resolves `ISerializer<T>` from DI.
-- **`ZASAGA016` / `ZASAGA017`** new diagnostics (with code-fix for the
-  former) nudge step command types toward the `partial` /
-  same-assembly shape the auto-`[ZeroAllocSerializable]` extension
-  needs.
-- **Auto-`[ZeroAllocSerializable]`** — when `ZeroAlloc.Serialisation`
-  is referenced, the generator applies the attribute to step command
-  types via a partial extension so consumers don't have to remember.
+- **`ZASAGA016` / `ZASAGA017`** new diagnostics, and an auto-`[ZeroAllocSerializable]`
+  partial extension on step command types. The extension and `ZASAGA016` were later
+  removed, because ZeroAlloc.Serialisation's generator never saw the generated attribute
+  ([#207](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/207)). Apply
+  `[ZeroAllocSerializable]` or register an `ISerializer<T>` for each outbox step command.
 
 ## What's new in v1.1
 

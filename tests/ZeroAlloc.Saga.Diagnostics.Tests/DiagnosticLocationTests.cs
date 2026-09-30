@@ -57,7 +57,7 @@ public class DiagnosticLocationTests
         }
         """;
 
-    public static TheoryData<string, string, bool> Cases() => new()
+    public static TheoryData<string, string> Cases() => new()
     {
         // ZASAGA001: the class identifier.
         { "ZASAGA001", Header + """
@@ -67,7 +67,7 @@ public class DiagnosticLocationTests
                 [CorrelationKey] public OrderId Correlation(OrderPlaced e) => e.OrderId;
                 [Step(Order = 1)] public ReserveCommand Reserve(OrderPlaced e) => new(e.OrderId);
             }
-            """, false },
+            """ },
         // ZASAGA002: the class identifier.
         { "ZASAGA002", Header + """
             [Saga]
@@ -76,7 +76,7 @@ public class DiagnosticLocationTests
                 [CorrelationKey] public OrderId Correlation(OrderPlaced e) => e.OrderId;
                 [Step(Order = 1)] public ReserveCommand Reserve(OrderPlaced e) => new(e.OrderId);
             }
-            """, false },
+            """ },
         // ZASAGA003: the class identifier.
         { "ZASAGA003", Header + """
             [Saga]
@@ -86,7 +86,7 @@ public class DiagnosticLocationTests
                 [CorrelationKey] public OrderId Correlation(OrderPlaced e) => e.OrderId;
                 [Step(Order = 1)] public ReserveCommand Reserve(OrderPlaced e) => new(e.OrderId);
             }
-            """, false },
+            """ },
         // ZASAGA004: the step whose event has no [CorrelationKey].
         { "ZASAGA004", Header + """
             [Saga]
@@ -96,7 +96,7 @@ public class DiagnosticLocationTests
                 [Step(Order = 1)] public ReserveCommand Reserve(OrderPlaced e) => new(e.OrderId);
                 [Step(Order = 2)] public ChargeCommand [|Charge|](StockReserved e) => new(e.OrderId);
             }
-            """, false },
+            """ },
         // ZASAGA005: the [CorrelationKey] method whose key type differs from the first.
         { "ZASAGA005", Header + """
             [Saga]
@@ -106,7 +106,7 @@ public class DiagnosticLocationTests
                 [CorrelationKey] public CustomerId [|CorrelationOther|](StockReserved e) => new("x");
                 [Step(Order = 1)] public ReserveCommand Reserve(OrderPlaced e) => new(e.OrderId);
             }
-            """, false },
+            """ },
         // ZASAGA006: the [CorrelationKey] method.
         { "ZASAGA006", Header + """
             [Saga]
@@ -115,7 +115,7 @@ public class DiagnosticLocationTests
                 [CorrelationKey] public OrderId [|Correlation|]() => default;
                 [Step(Order = 1)] public ReserveCommand Reserve(OrderPlaced e) => new(e.OrderId);
             }
-            """, false },
+            """ },
         // ZASAGA007: the class identifier.
         { "ZASAGA007", Header + """
             [Saga]
@@ -126,7 +126,7 @@ public class DiagnosticLocationTests
                 [Step(Order = 1)] public ReserveCommand Reserve(OrderPlaced e) => new(e.OrderId);
                 [Step(Order = 5)] public ChargeCommand Charge(StockReserved e) => new(e.OrderId);
             }
-            """, false },
+            """ },
         // ZASAGA008: the step method.
         { "ZASAGA008", Header + """
             [Saga]
@@ -135,7 +135,7 @@ public class DiagnosticLocationTests
                 [CorrelationKey] public OrderId Correlation(OrderPlaced e) => e.OrderId;
                 [Step(Order = 1)] public void [|Reserve|](OrderPlaced e, int extra) { }
             }
-            """, false },
+            """ },
         // ZASAGA009: the step method naming the missing compensation.
         { "ZASAGA009", Header + """
             [Saga]
@@ -146,7 +146,7 @@ public class DiagnosticLocationTests
                 [Step(Order = 1, Compensate = "DoesNotExist", CompensateOn = typeof(PaymentDeclined))]
                 public ReserveCommand [|Reserve|](OrderPlaced e) => new(e.OrderId);
             }
-            """, false },
+            """ },
         // ZASAGA010: the step method whose CompensateOn event has no [CorrelationKey].
         { "ZASAGA010", Header + """
             [Saga]
@@ -157,7 +157,7 @@ public class DiagnosticLocationTests
                 public ReserveCommand [|Reserve|](OrderPlaced e) => new(e.OrderId);
                 public RefundCommand Refund() => new(default);
             }
-            """, false },
+            """ },
         // ZASAGA011: the [CorrelationKey] method that mutates state.
         { "ZASAGA011", Header + """
             [Saga]
@@ -172,7 +172,7 @@ public class DiagnosticLocationTests
                 }
                 [Step(Order = 1)] public ReserveCommand Reserve(OrderPlaced e) => new(e.OrderId);
             }
-            """, false },
+            """ },
         // ZASAGA012: the step method whose compensation can never run.
         { "ZASAGA012", Header + """
             [Saga]
@@ -183,7 +183,7 @@ public class DiagnosticLocationTests
                 public ReserveCommand [|Reserve|](OrderPlaced e) => new(e.OrderId);
                 public RefundCommand Refund() => new(default);
             }
-            """, false },
+            """ },
         // ZASAGA013: the [CorrelationKey] method of the second saga, the one that conflicts.
         { "ZASAGA013", Header + """
             [Saga]
@@ -199,7 +199,7 @@ public class DiagnosticLocationTests
                 [CorrelationKey] public CustomerId [|Correlation|](OrderPlaced e) => new("x");
                 [Step(Order = 1)] public ReserveCommand Reserve(OrderPlaced e) => new(e.OrderId);
             }
-            """, false },
+            """ },
         // ZASAGA014: the state member whose type is unsupported.
         { "ZASAGA014", Header + """
             [Saga]
@@ -209,7 +209,7 @@ public class DiagnosticLocationTests
                 [CorrelationKey] public OrderId Correlation(OrderPlaced e) => e.OrderId;
                 [Step(Order = 1)] public ReserveCommand Reserve(OrderPlaced e) => new(e.OrderId);
             }
-            """, false },
+            """ },
         // ZASAGA015: the saga class identifier.
         { "ZASAGA015", Header + """
             [Saga]
@@ -218,29 +218,17 @@ public class DiagnosticLocationTests
                 [CorrelationKey] public OrderId Correlation(OrderPlaced e) => e.OrderId;
                 [Step(Order = 1)] public ReserveCommand Reserve(OrderPlaced e) => new(e.OrderId);
             }
-            """ + DurableBackendShim, false },
-        // ZASAGA016: the identifier of the command type that is not partial.
-        { "ZASAGA016", Header + """
-            public readonly record struct [|ReserveCmd|](OrderId OrderId) : IRequest<Unit>;
-
-            [Saga]
-            public partial class TwoStepSaga
-            {
-                [CorrelationKey] public OrderId Correlation(OrderPlaced e) => e.OrderId;
-                [Step(Order = 1)] public ReserveCmd Reserve(OrderPlaced e) => new(e.OrderId);
-            }
-            """, true },
+            """ + DurableBackendShim },
     };
 
     [Theory]
     [MemberData(nameof(Cases))]
-    public void Diagnostic_IsReportedAtItsSubject(string id, string marked, bool referencesSerialisation)
+    public void Diagnostic_IsReportedAtItsSubject(string id, string marked)
     {
         var (source, spans) = Unmark(marked);
         var expected = Assert.Single(spans);
 
-        var diagnostics = GeneratorVerifier.RunOnFile(
-            source, referencesSerialisation ? new[] { SerialisationStub } : null);
+        var diagnostics = GeneratorVerifier.RunOnFile(source);
 
         var diagnostic = Assert.Single(diagnostics, d => string.Equals(d.Id, id, StringComparison.Ordinal));
         AssertAt(diagnostic.Location, source, expected);
