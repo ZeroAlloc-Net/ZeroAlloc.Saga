@@ -1,3 +1,1 @@
 #nullable enable
-static ZeroAlloc.Saga.Outbox.Orm.SagaOutboxOrmBuilderExtensions.WithOrmOutbox(this ZeroAlloc.Saga.ISagaBuilder! builder) -> ZeroAlloc.Saga.ISagaBuilder!
-ZeroAlloc.Saga.Outbox.Orm.SagaOutboxOrmBuilderExtensions

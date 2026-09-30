@@ -1,3 +1,1 @@
 #nullable enable
-ZeroAlloc.Saga.Orm.IOrmSagaTransactionContributor
-ZeroAlloc.Saga.Orm.IOrmSagaTransactionContributor.ContributeAsync(System.Data.Async.IAsyncDbTransaction! transaction, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
