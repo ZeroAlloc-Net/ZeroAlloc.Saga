@@ -239,7 +239,8 @@ internal sealed record SagaModel(
                     CommandTypeIsInOwnAssembly: cmdInOwnAssembly,
                     CommandTypeIsPartial: cmdIsPartial,
                     CommandTypeLocation: cmdTypeLoc,
-                    SerializableExtension: serializableExtension));
+                    SerializableExtension: serializableExtension,
+                    CommandTypeIsReferenceType: member.ReturnType.IsReferenceType));
             }
         }
 
@@ -298,7 +299,11 @@ internal sealed record SagaModel(
                     // per-compilation MediatorSagaCommandDispatcher emits a
                     // dispatch arm for it.
                     var compCmdFqn = StripGlobalPrefix(target!.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
-                    steps[idx] = step with { CompensateCommandTypeFqn = compCmdFqn };
+                    steps[idx] = step with
+                    {
+                        CompensateCommandTypeFqn = compCmdFqn,
+                        CompensateCommandTypeIsReferenceType = target.ReturnType.IsReferenceType,
+                    };
                 }
             }
 
@@ -671,7 +676,16 @@ internal sealed record StepInfo(
     /// What the [ZeroAllocSerializable] partial extension of the command type needs.
     /// Null when the command type is not declared in the current compilation.
     /// </summary>
-    SerializableExtensionInfo? SerializableExtension = null);
+    SerializableExtensionInfo? SerializableExtension = null,
+    /// <summary>
+    /// True if the command type is a reference type. The command registry null-checks a
+    /// deserialized command only then: a struct command cannot be compared to null.
+    /// </summary>
+    bool CommandTypeIsReferenceType = false,
+    /// <summary>
+    /// <see cref="CommandTypeIsReferenceType"/> for <see cref="CompensateCommandTypeFqn"/>.
+    /// </summary>
+    bool CompensateCommandTypeIsReferenceType = false);
 
 /// <summary>
 /// The shape of a step command type declared in the current compilation, captured so the

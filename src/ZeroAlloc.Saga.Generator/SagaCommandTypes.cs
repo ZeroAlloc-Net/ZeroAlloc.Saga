@@ -13,7 +13,7 @@ namespace ZeroAlloc.Saga.Generator;
 /// </summary>
 internal static class SagaCommandTypes
 {
-    public static List<string> Collect(EquatableArray<SagaExtractResult> sagaResults)
+    public static List<SagaCommandType> Collect(EquatableArray<SagaExtractResult> sagaResults)
         => sagaResults
             .Select(r => r.Model)
             .Where(m => m is not null)
@@ -21,11 +21,23 @@ internal static class SagaCommandTypes
             {
                 // Saga handlers route compensations through the same ISagaCommandDispatcher,
                 // so a compensation command needs a dispatch arm and a registry entry too.
+                var step = new SagaCommandType(st.CommandTypeFqn, st.CommandTypeIsReferenceType);
                 if (st.CompensateCommandTypeFqn is not null)
-                    return new[] { st.CommandTypeFqn, st.CompensateCommandTypeFqn };
-                return new[] { st.CommandTypeFqn };
+                    return new[] { step, new SagaCommandType(st.CompensateCommandTypeFqn, st.CompensateCommandTypeIsReferenceType) };
+                return new[] { step };
             }))
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(x => x, StringComparer.Ordinal)
+            // A type name identifies the type, so every entry with the same name agrees on
+            // IsReferenceType and keeping the first one loses nothing.
+            .GroupBy(t => t.Fqn, StringComparer.Ordinal)
+            .Select(g => g.First())
+            .OrderBy(t => t.Fqn, StringComparer.Ordinal)
             .ToList();
 }
+
+/// <summary>A saga command type, by fully qualified name without the <c>global::</c> prefix.</summary>
+/// <param name="Fqn">The fully qualified type name.</param>
+/// <param name="IsReferenceType">
+/// True for a reference-type command, such as a record class. Only such a command can be null, so only it
+/// needs a null check; comparing a struct command to null does not compile.
+/// </param>
+internal sealed record SagaCommandType(string Fqn, bool IsReferenceType);

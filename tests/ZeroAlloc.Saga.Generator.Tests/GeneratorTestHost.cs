@@ -16,17 +16,29 @@ internal static class GeneratorTestHost
 
     public static GeneratorDriver Run(string source)
     {
-        var syntaxTree = CSharpSyntaxTree.ParseText(source);
-        var compilation = CSharpCompilation.Create(
-            assemblyName: "Saga.Snapshot",
-            syntaxTrees: new[] { syntaxTree },
-            references: References,
-            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
-
         var driver = CSharpGeneratorDriver.Create(new SagaGenerator())
-            .RunGenerators(compilation);
+            .RunGenerators(CreateCompilation(source));
         return driver;
     }
+
+    /// <summary>
+    /// Runs <see cref="SagaGenerator"/> and returns the compilation with the generated sources
+    /// added, so a test can assert the generated code compiles. The source must declare what
+    /// the Mediator and Serialisation generators would otherwise emit, such as <c>IMediator</c>.
+    /// </summary>
+    public static Compilation RunAndCompile(string source)
+    {
+        CSharpGeneratorDriver.Create(new SagaGenerator())
+            .RunGeneratorsAndUpdateCompilation(CreateCompilation(source), out var output, out _);
+        return output;
+    }
+
+    private static CSharpCompilation CreateCompilation(string source)
+        => CSharpCompilation.Create(
+            assemblyName: "Saga.Snapshot",
+            syntaxTrees: new[] { CSharpSyntaxTree.ParseText(source) },
+            references: References,
+            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
 
     private static IReadOnlyList<MetadataReference> BuildReferences()
     {
@@ -50,6 +62,13 @@ internal static class GeneratorTestHost
         // ZeroAlloc.Saga (attributes) and ZeroAlloc.Mediator (INotification, IRequest).
         AddAssembly(refs, typeof(ZeroAlloc.Saga.SagaAttribute).Assembly);
         AddAssembly(refs, typeof(ZeroAlloc.Mediator.INotification).Assembly);
+
+        // What the generated handlers, builder extensions and registry call into, so
+        // RunAndCompile can compile the generated code.
+        AddAssembly(refs, typeof(Microsoft.Extensions.DependencyInjection.IServiceCollection).Assembly);
+        AddAssembly(refs, typeof(Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions).Assembly);
+        AddAssembly(refs, typeof(Microsoft.Extensions.Logging.ILogger).Assembly);
+        AddAssembly(refs, typeof(Microsoft.Extensions.Logging.LoggerExtensions).Assembly);
 
         return refs;
     }
