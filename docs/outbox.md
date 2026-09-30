@@ -452,8 +452,11 @@ Requirements:
 
 Both schemas number their migrations from 1, and the ORM's `MigrationRunner` keeps one history
 table per database, so running `SagaOrmMigrations` and `OutboxOrmMigrations` through two runners on
-one database fails with a version conflict. Run them through one `IMigrationSource` that moves the
-second source's versions out of the way, for example by adding 1000 to each.
+one database fails with a version conflict. Until the ORM can keep the two apart
+([ZeroAlloc.ORM#306](https://github.com/ZeroAlloc-Net/ZeroAlloc.ORM/issues/306)), run them through
+one `IMigrationSource` that moves the second source's versions out of the way, for example by
+adding 1000 to each. Pick the offset once per database and never change it: the history table
+records the offset versions.
 
 Without `WithOrmOutbox()`, `WithOrmStore().WithOutbox()` with `AddOutbox().WithOrm()` still works,
 but it is at-least-once: `WithOutbox()`'s default unit of work enlists each command through
