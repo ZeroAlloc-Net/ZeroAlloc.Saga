@@ -38,3 +38,11 @@ Rule ID   | Category                 | Severity | Notes
 ----------|--------------------------|----------|------------------------------------------------------------------------------
 ZASAGA016 | ZeroAlloc.Saga.Authoring | Warning  | Step command type must be partial when ZeroAlloc.Serialisation is referenced
 ZASAGA017 | ZeroAlloc.Saga.Authoring | Info     | Step command type is in a referenced assembly
+
+## Release 4.1.0
+
+### Removed Rules
+
+Rule ID   | Category                 | Severity | Notes
+----------|--------------------------|----------|------------------------------------------------------------------------------
+ZASAGA016 | ZeroAlloc.Saga.Authoring | Warning  | Step command type must be partial when ZeroAlloc.Serialisation is referenced

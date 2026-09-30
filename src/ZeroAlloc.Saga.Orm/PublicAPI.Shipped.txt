@@ -3,6 +3,8 @@ static ZeroAlloc.Saga.Orm.SagaOrmBuilderExtensions.WithOrmStore(this ZeroAlloc.S
 static ZeroAlloc.Saga.Orm.SagaOrmMigrations.Postgres.get -> ZeroAlloc.ORM.Migrations.IMigrationSource!
 static ZeroAlloc.Saga.Orm.SagaOrmMigrations.Sqlite.get -> ZeroAlloc.ORM.Migrations.IMigrationSource!
 static ZeroAlloc.Saga.Orm.SagaOrmMigrations.SqlServer.get -> ZeroAlloc.ORM.Migrations.IMigrationSource!
+ZeroAlloc.Saga.Orm.IOrmSagaTransactionContributor
+ZeroAlloc.Saga.Orm.IOrmSagaTransactionContributor.ContributeAsync(System.Data.Async.IAsyncDbTransaction! transaction, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
 ZeroAlloc.Saga.Orm.OrmSagaConcurrencyException
 ZeroAlloc.Saga.Orm.OrmSagaConcurrencyException.CorrelationKey.get -> string!
 ZeroAlloc.Saga.Orm.OrmSagaConcurrencyException.OrmSagaConcurrencyException(string! sagaType, string! correlationKey, System.Exception? inner = null) -> void
