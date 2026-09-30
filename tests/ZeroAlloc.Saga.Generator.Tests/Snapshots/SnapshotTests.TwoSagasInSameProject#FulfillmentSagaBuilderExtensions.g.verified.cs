@@ -25,7 +25,7 @@ public static class FulfillmentSagaBuilderExtensions
         builder.Services.TryAddSingleton<SagaLockManager<global::Sample.OrderId>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<FulfillmentSaga>, FulfillmentSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<FulfillmentSaga, global::Sample.OrderId>, SagaManager<FulfillmentSaga, global::Sample.OrderId>>();
-        global::ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.AddCommandSource(builder, global::ZeroAlloc.Saga.Generated.GeneratedSagaCommandSource.Instance);
+        global::ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.AddCommandSource(builder, global::ZeroAlloc.Saga.Generated.GeneratedSagaCommandSource.Instance, typeof(FulfillmentSaga));
 
         builder.Services.AddTransient<INotificationHandler<global::Sample.OrderPlaced>, FulfillmentSaga_OrderPlaced_Handler>();
         return builder;

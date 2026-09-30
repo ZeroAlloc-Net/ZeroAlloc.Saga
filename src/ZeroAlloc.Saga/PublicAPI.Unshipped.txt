@@ -1,2 +1,5 @@
 #nullable enable
-virtual ZeroAlloc.Saga.SagaCommandSource.GetCommandTypesWithoutSerializer(System.IServiceProvider! services) -> System.Collections.Generic.IReadOnlyList<System.Type!>!
+static ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.AddCommandSource(this ZeroAlloc.Saga.ISagaBuilder! builder, ZeroAlloc.Saga.SagaCommandSource! source, System.Type! sagaType) -> ZeroAlloc.Saga.ISagaBuilder!
+static ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.ForEachSaga(this ZeroAlloc.Saga.ISagaBuilder! builder, System.Action<ZeroAlloc.Saga.SagaCommandSource!, System.Type!>! callback) -> ZeroAlloc.Saga.ISagaBuilder!
+virtual ZeroAlloc.Saga.SagaCommandSource.GetCommandTypes(System.Type! sagaType) -> System.Collections.Generic.IReadOnlyList<System.Type!>!
+virtual ZeroAlloc.Saga.SagaCommandSource.HasSerializer(System.Type! commandType, System.IServiceProvider! services) -> bool?

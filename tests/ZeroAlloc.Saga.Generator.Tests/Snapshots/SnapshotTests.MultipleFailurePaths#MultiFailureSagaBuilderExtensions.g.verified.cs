@@ -25,7 +25,7 @@ public static class MultiFailureSagaBuilderExtensions
         builder.Services.TryAddSingleton<SagaLockManager<global::Sample.OrderId>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<MultiFailureSaga>, MultiFailureSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<MultiFailureSaga, global::Sample.OrderId>, SagaManager<MultiFailureSaga, global::Sample.OrderId>>();
-        global::ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.AddCommandSource(builder, global::ZeroAlloc.Saga.Generated.GeneratedSagaCommandSource.Instance);
+        global::ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.AddCommandSource(builder, global::ZeroAlloc.Saga.Generated.GeneratedSagaCommandSource.Instance, typeof(MultiFailureSaga));
 
         builder.Services.AddTransient<INotificationHandler<global::Sample.OrderPlaced>, MultiFailureSaga_OrderPlaced_Handler>();
         builder.Services.AddTransient<INotificationHandler<global::Sample.StockReserved>, MultiFailureSaga_StockReserved_Handler>();

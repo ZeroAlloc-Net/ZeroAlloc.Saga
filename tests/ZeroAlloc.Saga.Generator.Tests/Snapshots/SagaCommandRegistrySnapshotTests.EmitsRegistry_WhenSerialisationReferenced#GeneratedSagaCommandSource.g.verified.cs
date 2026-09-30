@@ -26,11 +26,24 @@ internal sealed class GeneratedSagaCommandSource : SagaCommandSource
         typeof(global::Sample.ReserveCmd),
     };
 
+    // Sample.TwoStepSaga
+    private static readonly Type[] s_sagaCommandTypes0 =
+    {
+        typeof(global::Sample.ChargeCmd),
+        typeof(global::Sample.ReserveCmd),
+    };
+
     private GeneratedSagaCommandSource()
     {
     }
 
     public override IReadOnlyList<Type> CommandTypes => s_commandTypes;
+
+    public override IReadOnlyList<Type> GetCommandTypes(Type sagaType)
+    {
+        if (sagaType == typeof(global::Sample.TwoStepSaga)) return s_sagaCommandTypes0;
+        return Array.Empty<Type>();
+    }
 
     public override ISagaCommandDispatcher CreateDispatcher(IServiceProvider services)
         => new MediatorSagaCommandDispatcher(services.GetRequiredService<IMediator>());
@@ -44,13 +57,12 @@ internal sealed class GeneratedSagaCommandSource : SagaCommandSource
         CancellationToken ct)
         => SagaCommandRegistry.DispatchAsync(typeName, payload, services, services.GetRequiredService<IMediator>(), ct);
 
-    public override IReadOnlyList<Type> GetCommandTypesWithoutSerializer(IServiceProvider services)
+    public override bool? HasSerializer(Type commandType, IServiceProvider services)
     {
-        List<Type>? missing = null;
-        if (services.GetService<global::ZeroAlloc.Serialisation.ISerializer<global::Sample.ChargeCmd>>() is null)
-            (missing ??= new List<Type>()).Add(typeof(global::Sample.ChargeCmd));
-        if (services.GetService<global::ZeroAlloc.Serialisation.ISerializer<global::Sample.ReserveCmd>>() is null)
-            (missing ??= new List<Type>()).Add(typeof(global::Sample.ReserveCmd));
-        return (IReadOnlyList<Type>?)missing ?? Array.Empty<Type>();
+        if (commandType == typeof(global::Sample.ChargeCmd))
+            return services.GetService<global::ZeroAlloc.Serialisation.ISerializer<global::Sample.ChargeCmd>>() is not null;
+        if (commandType == typeof(global::Sample.ReserveCmd))
+            return services.GetService<global::ZeroAlloc.Serialisation.ISerializer<global::Sample.ReserveCmd>>() is not null;
+        return null;
     }
 }

@@ -25,7 +25,7 @@ public static class ExcludedFieldSagaBuilderExtensions
         builder.Services.TryAddSingleton<SagaLockManager<int>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<ExcludedFieldSaga>, ExcludedFieldSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<ExcludedFieldSaga, int>, SagaManager<ExcludedFieldSaga, int>>();
-        global::ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.AddCommandSource(builder, global::ZeroAlloc.Saga.Generated.GeneratedSagaCommandSource.Instance);
+        global::ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.AddCommandSource(builder, global::ZeroAlloc.Saga.Generated.GeneratedSagaCommandSource.Instance, typeof(ExcludedFieldSaga));
 
         builder.Services.AddTransient<INotificationHandler<global::Sample.Started>, ExcludedFieldSaga_Started_Handler>();
         return builder;

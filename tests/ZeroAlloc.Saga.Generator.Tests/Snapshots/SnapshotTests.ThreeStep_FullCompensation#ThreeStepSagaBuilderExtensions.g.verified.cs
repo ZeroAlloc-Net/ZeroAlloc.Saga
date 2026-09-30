@@ -25,7 +25,7 @@ public static class ThreeStepSagaBuilderExtensions
         builder.Services.TryAddSingleton<SagaLockManager<global::Sample.OrderId>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<ThreeStepSaga>, ThreeStepSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<ThreeStepSaga, global::Sample.OrderId>, SagaManager<ThreeStepSaga, global::Sample.OrderId>>();
-        global::ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.AddCommandSource(builder, global::ZeroAlloc.Saga.Generated.GeneratedSagaCommandSource.Instance);
+        global::ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.AddCommandSource(builder, global::ZeroAlloc.Saga.Generated.GeneratedSagaCommandSource.Instance, typeof(ThreeStepSaga));
 
         builder.Services.AddTransient<INotificationHandler<global::Sample.OrderPlaced>, ThreeStepSaga_OrderPlaced_Handler>();
         builder.Services.AddTransient<INotificationHandler<global::Sample.StockReserved>, ThreeStepSaga_StockReserved_Handler>();

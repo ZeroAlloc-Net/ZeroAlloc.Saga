@@ -1,5 +1,6 @@
 #nullable enable
 using ZeroAlloc.Saga.Generator.Diagnostics;
+using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
 
@@ -52,12 +53,37 @@ internal static class SagaCommandSourceEmitter
             sb.Append("        typeof(").Append(TypeNameHelper.GlobalQualified(commandType.Fqn)).AppendLine("),");
         }
         sb.AppendLine("    };");
+
+        // Each saga's own step and compensation commands, so integrations can act on the sagas
+        // the application registers rather than on every saga of the assembly.
+        var sagas = SagaCommandTypes.CollectPerSaga(sagaResults);
+        for (var i = 0; i < sagas.Count; i++)
+        {
+            sb.AppendLine();
+            sb.Append("    // ").AppendLine(sagas[i].SagaFqn);
+            sb.Append("    private static readonly Type[] s_sagaCommandTypes").Append(i).AppendLine(" =");
+            sb.AppendLine("    {");
+            foreach (var fqn in sagas[i].CommandTypeFqns)
+                sb.Append("        typeof(").Append(TypeNameHelper.GlobalQualified(fqn)).AppendLine("),");
+            sb.AppendLine("    };");
+        }
+
         sb.AppendLine();
         sb.AppendLine("    private GeneratedSagaCommandSource()");
         sb.AppendLine("    {");
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    public override IReadOnlyList<Type> CommandTypes => s_commandTypes;");
+        sb.AppendLine();
+        sb.AppendLine("    public override IReadOnlyList<Type> GetCommandTypes(Type sagaType)");
+        sb.AppendLine("    {");
+        for (var i = 0; i < sagas.Count; i++)
+        {
+            sb.Append("        if (sagaType == typeof(").Append(TypeNameHelper.GlobalQualified(sagas[i].SagaFqn))
+              .Append(")) return s_sagaCommandTypes").Append(i).AppendLine(";");
+        }
+        sb.AppendLine("        return Array.Empty<Type>();");
+        sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    public override ISagaCommandDispatcher CreateDispatcher(IServiceProvider services)");
         sb.AppendLine("        => new MediatorSagaCommandDispatcher(services.GetRequiredService<IMediator>());");
@@ -75,16 +101,15 @@ internal static class SagaCommandSourceEmitter
             sb.AppendLine();
             // One closed-generic lookup per command type, so the check needs no MakeGenericType
             // and stays AOT-safe.
-            sb.AppendLine("    public override IReadOnlyList<Type> GetCommandTypesWithoutSerializer(IServiceProvider services)");
+            sb.AppendLine("    public override bool? HasSerializer(Type commandType, IServiceProvider services)");
             sb.AppendLine("    {");
-            sb.AppendLine("        List<Type>? missing = null;");
             foreach (var commandType in commandTypes)
             {
                 var typeExpr = TypeNameHelper.GlobalQualified(commandType.Fqn);
-                sb.Append("        if (services.GetService<global::ZeroAlloc.Serialisation.ISerializer<").Append(typeExpr).AppendLine(">>() is null)");
-                sb.Append("            (missing ??= new List<Type>()).Add(typeof(").Append(typeExpr).AppendLine("));");
+                sb.Append("        if (commandType == typeof(").Append(typeExpr).AppendLine("))");
+                sb.Append("            return services.GetService<global::ZeroAlloc.Serialisation.ISerializer<").Append(typeExpr).AppendLine(">>() is not null;");
             }
-            sb.AppendLine("        return (IReadOnlyList<Type>?)missing ?? Array.Empty<Type>();");
+            sb.AppendLine("        return null;");
             sb.AppendLine("    }");
         }
         sb.AppendLine("}");

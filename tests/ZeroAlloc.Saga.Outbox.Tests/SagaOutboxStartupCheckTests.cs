@@ -145,11 +145,47 @@ public sealed class SagaOutboxStartupCheckTests
         Assert.Contains($"'{typeof(ShipOrderCommand).FullName}'", ex.Message, StringComparison.Ordinal);
         Assert.Contains($"'{typeof(CancelReservationCommand).FullName}'", ex.Message, StringComparison.Ordinal);
         Assert.Contains($"'{typeof(RefundPaymentCommand).FullName}'", ex.Message, StringComparison.Ordinal);
-        // The generated source lists every saga command of the assembly, and WithOutbox() registers
-        // a dispatcher for each, so WelcomeSaga's command is checked although only
-        // OrderFulfillmentSaga is registered here.
-        Assert.Contains($"'{typeof(SendWelcomeCommand).FullName}'", ex.Message, StringComparison.Ordinal);
+        // WelcomeSaga is declared in the same assembly but not registered, so its command is not
+        // checked.
+        Assert.DoesNotContain(typeof(SendWelcomeCommand).FullName!, ex.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(typeof(ReserveStockCommand).FullName!, ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Start_With_Part_Of_A_Saga_Assembly_Registered_Needs_Only_Those_Sagas_Serializers()
+    {
+        // This assembly declares OrderFulfillmentSaga and WelcomeSaga. Only the first is
+        // registered, and SendWelcomeCommand has no serializer: the host still starts.
+        await using var fx = new SqliteFixture();
+        await fx.EnsureCreatedAsync();
+        using var host = BuildHost(fx, services =>
+        {
+            AddDocumentedOutbox(services);
+            services.AddSaga().WithEfCoreStore<OutboxE2EDbContext>().WithOutbox().WithOrderFulfillmentSaga();
+            services.AddTestSerializers();
+        });
+
+        await host.StartAsync();
+        await host.StopAsync();
+    }
+
+    [Fact]
+    public async Task Start_With_Both_Sagas_Registered_Lists_Only_The_Missing_Serializer()
+    {
+        await using var fx = new SqliteFixture();
+        using var host = BuildHost(fx, services =>
+        {
+            AddDocumentedOutbox(services);
+            services.AddSaga().WithEfCoreStore<OutboxE2EDbContext>().WithOutbox()
+                .WithOrderFulfillmentSaga().WithWelcomeSaga();
+            services.AddTestSerializers();
+        });
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => host.StartAsync());
+
+        Assert.Equal(
+            SagaOutboxStartupCheck.MissingSerializerMessage([typeof(SendWelcomeCommand)]),
+            ex.Message);
     }
 
     [Fact]
@@ -167,7 +203,6 @@ public sealed class SagaOutboxStartupCheckTests
             services.AddScoped<ZeroAlloc.Serialisation.ISerializer<ShipOrderCommand>, JsonCommandSerializer<ShipOrderCommand>>();
             services.AddScoped<ZeroAlloc.Serialisation.ISerializer<CancelReservationCommand>, JsonCommandSerializer<CancelReservationCommand>>();
             services.AddScoped<ZeroAlloc.Serialisation.ISerializer<RefundPaymentCommand>, JsonCommandSerializer<RefundPaymentCommand>>();
-            services.AddScoped<ZeroAlloc.Serialisation.ISerializer<SendWelcomeCommand>, JsonCommandSerializer<SendWelcomeCommand>>();
         });
 
         await host.StartAsync();
@@ -187,7 +222,6 @@ public sealed class SagaOutboxStartupCheckTests
             services.AddSaga().WithEfCoreStore<OutboxE2EDbContext>().WithOutbox().WithOrderFulfillmentSaga()
                 .AddCommandSource(new NonProbingSerializingSource());
             services.AddTestSerializers();
-            services.AddWelcomeSagaFixture();
         });
 
         await host.StartAsync();
@@ -207,7 +241,6 @@ public sealed class SagaOutboxStartupCheckTests
             services.AddSaga().WithEfCoreStore<OutboxE2EDbContext>().WithOutbox().WithOrderFulfillmentSaga();
             if (!outboxFirst) AddDocumentedOutbox(services);
             services.AddTestSerializers();
-            services.AddWelcomeSagaFixture();
         });
 
         await host.StartAsync();
@@ -228,7 +261,6 @@ public sealed class SagaOutboxStartupCheckTests
             services.AddScoped<IOutboxStore, EfCoreOutboxStore<OutboxE2EDbContext>>();
             services.AddSaga().WithEfCoreStore<OutboxE2EDbContext>().WithOutbox().WithOrderFulfillmentSaga();
             services.AddTestSerializers();
-            services.AddWelcomeSagaFixture();
         });
 
         await host.StartAsync();
@@ -248,7 +280,6 @@ public sealed class SagaOutboxStartupCheckTests
             services.AddSaga().WithEfCoreStore<OutboxE2EDbContext>().WithOutbox().WithOrderFulfillmentSaga();
             DecorateDispatchersInPlace(services);
             services.AddTestSerializers();
-            services.AddWelcomeSagaFixture();
         });
 
         await host.StartAsync();

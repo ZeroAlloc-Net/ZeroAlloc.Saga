@@ -23,6 +23,7 @@ internal sealed class SagaOutboxRegistration
     private readonly List<string> _typeNames = [];
     private readonly List<string> _assembliesWithoutSerialisation = [];
     private readonly List<SagaCommandSource> _serializingSources = [];
+    private readonly Dictionary<SagaCommandSource, List<Type>> _sagasBySource = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>The saga command type names, as <c>Type.FullName</c>.</summary>
     public IReadOnlyList<string> TypeNames => _typeNames;
@@ -41,6 +42,39 @@ internal sealed class SagaOutboxRegistration
     /// an <c>ISerializer&lt;T&gt;</c>.
     /// </summary>
     public IReadOnlyList<SagaCommandSource> SerializingSources => _serializingSources;
+
+    /// <summary>Records a saga the application registered, with the source that declares it.</summary>
+    public void AddSaga(SagaCommandSource source, Type sagaType)
+    {
+        if (!_sagasBySource.TryGetValue(source, out var sagas))
+            _sagasBySource[source] = sagas = [];
+        if (!sagas.Contains(sagaType))
+            sagas.Add(sagaType);
+    }
+
+    /// <summary>
+    /// The command types of <paramref name="source"/> that the registered sagas use: the
+    /// commands of each saga recorded for it, or all of its command types when none was recorded,
+    /// as for a source added without a saga type.
+    /// </summary>
+    public IReadOnlyList<Type> CommandTypesInUse(SagaCommandSource source)
+    {
+        if (!_sagasBySource.TryGetValue(source, out var sagas))
+            return source.CommandTypes;
+
+        var types = new List<Type>();
+        var seen = new HashSet<Type>();
+        foreach (var sagaType in sagas)
+        {
+            foreach (var type in source.GetCommandTypes(sagaType))
+            {
+                if (seen.Add(type))
+                    types.Add(type);
+            }
+        }
+
+        return types;
+    }
 
     /// <summary>
     /// Records <paramref name="source"/> and returns the type names to register an outbox

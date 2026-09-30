@@ -25,7 +25,7 @@ public static class EnumFieldSagaBuilderExtensions
         builder.Services.TryAddSingleton<SagaLockManager<int>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<EnumFieldSaga>, EnumFieldSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<EnumFieldSaga, int>, SagaManager<EnumFieldSaga, int>>();
-        global::ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.AddCommandSource(builder, global::ZeroAlloc.Saga.Generated.GeneratedSagaCommandSource.Instance);
+        global::ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.AddCommandSource(builder, global::ZeroAlloc.Saga.Generated.GeneratedSagaCommandSource.Instance, typeof(EnumFieldSaga));
 
         builder.Services.AddTransient<INotificationHandler<global::Sample.Started>, EnumFieldSaga_Started_Handler>();
         return builder;

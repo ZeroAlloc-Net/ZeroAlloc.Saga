@@ -139,6 +139,62 @@ public sealed class CommandSourceRegistrationTests
             StringComparer.Ordinal);
     }
 
+    [Fact]
+    public void ForEachSaga_SeesEachRegisteredSagaOnce_AddedBeforeAndAfterIt()
+    {
+        var seen = new List<(string Source, Type Saga)>();
+        var services = new ServiceCollection();
+        services.AddSaga()
+            .WithInvoiceSaga()
+            .ForEachSaga((source, saga) => seen.Add((source.GetType().Assembly.GetName().Name!, saga)))
+            .WithShipmentSaga()
+            .WithInvoiceSaga();
+
+        Assert.Equal(
+            [("ZeroAlloc.Saga.MultiAssembly.Billing", typeof(InvoiceSaga)), ("ZeroAlloc.Saga.MultiAssembly.Shipping", typeof(ShipmentSaga))],
+            seen);
+    }
+
+    [Fact]
+    public void GeneratedSource_ListsEachSagasOwnCommands()
+    {
+        var billing = BillingSource();
+
+        Assert.Equal(
+            [typeof(CloseInvoiceCommand), typeof(IssueInvoiceCommand)],
+            billing.GetCommandTypes(typeof(InvoiceSaga)));
+        Assert.Empty(billing.GetCommandTypes(typeof(ShipmentSaga)));
+    }
+
+    [Fact]
+    public async Task GeneratedSource_ProbesEachOfItsCommandTypesForASerializer()
+    {
+        var billing = BillingSource();
+        var services = new ServiceCollection();
+        services.AddSingleton<ZeroAlloc.Serialisation.ISerializer<IssueInvoiceCommand>>(new NullSerializer<IssueInvoiceCommand>());
+        await using var sp = services.BuildServiceProvider();
+
+        Assert.True(billing.HasSerializer(typeof(IssueInvoiceCommand), sp));
+        Assert.False(billing.HasSerializer(typeof(CloseInvoiceCommand), sp));
+        // Not one of its types: the source cannot tell.
+        Assert.Null(billing.HasSerializer(typeof(BookCarrierCommand), sp));
+    }
+
+    private static SagaCommandSource BillingSource()
+    {
+        var services = new ServiceCollection();
+        services.AddSaga().WithInvoiceSaga();
+        return Assert.IsAssignableFrom<SagaCommandSource>(
+            Assert.Single(services, d => d.ServiceType == typeof(SagaCommandSource)).ImplementationInstance);
+    }
+
+    private sealed class NullSerializer<T> : ZeroAlloc.Serialisation.ISerializer<T>
+    {
+        public void Serialize(System.Buffers.IBufferWriter<byte> writer, T value) => throw new NotSupportedException();
+
+        public T Deserialize(ReadOnlySpan<byte> buffer) => throw new NotSupportedException();
+    }
+
     private sealed record StrayCommand : IRequest;
 
     private sealed class ClaimsIssueInvoiceSource : SagaCommandSource

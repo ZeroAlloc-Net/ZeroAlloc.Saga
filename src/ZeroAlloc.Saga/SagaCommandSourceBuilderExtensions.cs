@@ -17,9 +17,10 @@ namespace ZeroAlloc.Saga;
 public static class SagaCommandSourceBuilderExtensions
 {
     /// <summary>
-    /// Adds the saga command source of one assembly. Generator-emitted <c>With{Saga}()</c> calls
-    /// this; adding the same source, or another instance of the same source type, again is a
-    /// no-op, so every saga of an assembly can call it.
+    /// Adds the saga command source of one assembly without recording a saga. Adding the same
+    /// source, or another instance of the same source type, again is a no-op, so every saga of an
+    /// assembly can call it. Generator-emitted <c>With{Saga}()</c> calls the overload that takes the
+    /// saga type; <c>With{Saga}()</c> from an older Saga generator calls this one.
     /// </summary>
     /// <remarks>
     /// The first call also registers the default <see cref="ISagaCommandDispatcher"/>, unless one
@@ -61,11 +62,89 @@ public static class SagaCommandSourceBuilderExtensions
         services.TryAddScoped<ISagaCommandDispatcher>(SagaCommandRouting.CreateDefaultDispatcher);
 
         // A snapshot: a callback may itself register another callback.
-        if (Callbacks(services, create: false) is { } callbacks)
+        if (State(services, create: false) is { } state)
         {
-            foreach (var callback in callbacks.ToArray())
+            foreach (var callback in state.SourceCallbacks.ToArray())
                 callback(source);
         }
+
+        return builder;
+    }
+
+    /// <summary>
+    /// Adds the saga command source of one assembly, as the two-argument overload does, and records
+    /// <paramref name="sagaType"/> as a registered saga of that source. Generator-emitted
+    /// <c>With{Saga}()</c> calls this, so integrations can act on the commands of the sagas the
+    /// application registered rather than on every saga of the assembly. Recording the same saga
+    /// again is a no-op.
+    /// </summary>
+    /// <remarks>
+    /// Callbacks registered with <see cref="ForEachSaga"/> run for the saga the first time it is
+    /// recorded.
+    /// </remarks>
+    /// <param name="builder">The saga builder.</param>
+    /// <param name="source">The source of the assembly that declares <paramref name="sagaType"/>.</param>
+    /// <param name="sagaType">The saga being registered.</param>
+    /// <returns>The same builder, for chaining.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The source lists a command type that a source from another assembly already lists.
+    /// </exception>
+    public static ISagaBuilder AddCommandSource(this ISagaBuilder builder, SagaCommandSource source, Type sagaType)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(sagaType);
+
+        AddCommandSource(builder, source);
+
+        // AddCommandSource keeps the first instance of a source type, so record against that one.
+        var registered = source;
+        foreach (var existing in RegisteredSources(builder.Services))
+        {
+            if (ReferenceEquals(existing, source) || existing.GetType() == source.GetType())
+            {
+                registered = existing;
+                break;
+            }
+        }
+
+        var state = State(builder.Services, create: true)!;
+        foreach (var (s, t) in state.Sagas)
+        {
+            if (ReferenceEquals(s, registered) && t == sagaType)
+                return builder;
+        }
+
+        state.Sagas.Add((registered, sagaType));
+        foreach (var callback in state.SagaCallbacks.ToArray())
+            callback(registered, sagaType);
+
+        return builder;
+    }
+
+    /// <summary>
+    /// Runs <paramref name="callback"/> for every saga already recorded on
+    /// <paramref name="builder"/>'s service collection through
+    /// <see cref="AddCommandSource(ISagaBuilder, SagaCommandSource, Type)"/>, and for every one
+    /// recorded later, with the source of the assembly that declares it.
+    /// </summary>
+    /// <remarks>
+    /// A source added through the two-argument overload, such as one registered by a
+    /// <c>With{Saga}()</c> from an older Saga generator, records no saga, so this does not run for
+    /// it. Use <see cref="ForEachCommandSource"/> to see every source.
+    /// </remarks>
+    /// <param name="builder">The saga builder.</param>
+    /// <param name="callback">Called once per saga, with its source and its type.</param>
+    /// <returns>The same builder, for chaining.</returns>
+    public static ISagaBuilder ForEachSaga(this ISagaBuilder builder, Action<SagaCommandSource, Type> callback)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(callback);
+
+        var state = State(builder.Services, create: true)!;
+        state.SagaCallbacks.Add(callback);
+        foreach (var (source, sagaType) in state.Sagas.ToArray())
+            callback(source, sagaType);
 
         return builder;
     }
@@ -85,7 +164,7 @@ public static class SagaCommandSourceBuilderExtensions
         ArgumentNullException.ThrowIfNull(callback);
 
         var services = builder.Services;
-        Callbacks(services, create: true)!.Add(callback);
+        State(services, create: true)!.SourceCallbacks.Add(callback);
         foreach (var source in RegisteredSources(services))
             callback(source);
 
@@ -116,32 +195,36 @@ public static class SagaCommandSourceBuilderExtensions
         return sources;
     }
 
-    private static List<Action<SagaCommandSource>>? Callbacks(IServiceCollection services, bool create)
+    private static SagaCommandSourceState? State(IServiceCollection services, bool create)
     {
         foreach (var descriptor in services)
         {
-            if (descriptor.ServiceType == typeof(SagaCommandSourceCallbacks)
-                && descriptor.ImplementationInstance is SagaCommandSourceCallbacks callbacks)
+            if (descriptor.ServiceType == typeof(SagaCommandSourceState)
+                && descriptor.ImplementationInstance is SagaCommandSourceState state)
             {
-                return callbacks.Items;
+                return state;
             }
         }
 
         if (!create)
             return null;
 
-        var created = new SagaCommandSourceCallbacks();
+        var created = new SagaCommandSourceState();
         services.AddSingleton(created);
-        return created.Items;
+        return created;
     }
 
     /// <summary>
-    /// Builder-time state: the <see cref="ForEachCommandSource"/> callbacks of one service
-    /// collection. Kept in the collection itself so every <see cref="ISagaBuilder"/> over it shares
-    /// them.
+    /// Builder-time state of one service collection: the <see cref="ForEachCommandSource"/> and
+    /// <see cref="ForEachSaga"/> callbacks, and the sagas recorded so far. Kept in the collection
+    /// itself so every <see cref="ISagaBuilder"/> over it shares them.
     /// </summary>
-    private sealed class SagaCommandSourceCallbacks
+    private sealed class SagaCommandSourceState
     {
-        public List<Action<SagaCommandSource>> Items { get; } = [];
+        public List<Action<SagaCommandSource>> SourceCallbacks { get; } = [];
+
+        public List<Action<SagaCommandSource, Type>> SagaCallbacks { get; } = [];
+
+        public List<(SagaCommandSource Source, Type SagaType)> Sagas { get; } = [];
     }
 }

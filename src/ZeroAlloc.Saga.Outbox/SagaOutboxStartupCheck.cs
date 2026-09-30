@@ -25,11 +25,11 @@ namespace ZeroAlloc.Saga.Outbox;
 /// outbox because it does not reference ZeroAlloc.Serialisation, when no
 /// <see cref="OutboxWorkerService"/> is registered, when no <see cref="IOutboxStore"/> resolves,
 /// when the saga store cannot commit what the outbox store stages, when another
-/// <see cref="IOutboxTypeDispatcher"/> claims a saga command's type name, or when a saga command
-/// type has no <c>ISerializer&lt;T&gt;</c>. The worker keeps one dispatcher per type name, the
-/// last one registered, so the other one would never run. A missing serializer would otherwise
-/// fail only when a saga first dispatches that command, which for a compensation command may be
-/// long after the host started.
+/// <see cref="IOutboxTypeDispatcher"/> claims a saga command's type name, or when a step or
+/// compensation command of a registered saga has no <c>ISerializer&lt;T&gt;</c>. The worker keeps
+/// one dispatcher per type name, the last one registered, so the other one would never run. A
+/// missing serializer would otherwise fail only when a saga first dispatches that command, which
+/// for a compensation command may be long after the host started.
 /// </para>
 /// <para>
 /// The store pairing matters because of <see cref="OutboxStoreSagaUnitOfWork"/>, the unit of work
@@ -256,17 +256,21 @@ internal sealed class SagaOutboxStartupCheck : IHostedLifecycleService
         return $"{(tick < 0 ? name : name[..tick])}<{arguments}>";
     }
 
-    // Lists every command type without a serializer in one message, so the application can fix
-    // them all at once. Each source probes its own types with closed-generic lookups: no
-    // MakeGenericType, so the check is AOT-safe.
+    // Lists every command of the registered sagas that has no serializer, in one message, so the
+    // application can fix them all at once. A saga of the same assembly that the application does
+    // not register is not checked. Each source probes its own types with closed-generic lookups:
+    // no MakeGenericType, so the check is AOT-safe. A source that cannot tell, such as one from an
+    // older Saga generator, answers null and is skipped.
     private void ThrowOnMissingSerializers(IServiceProvider scoped)
     {
         List<Type>? missing = null;
         foreach (var source in _registration.SerializingSources)
         {
-            var types = source.GetCommandTypesWithoutSerializer(scoped);
-            if (types.Count > 0)
-                (missing ??= []).AddRange(types);
+            foreach (var type in _registration.CommandTypesInUse(source))
+            {
+                if (source.HasSerializer(type, scoped) == false)
+                    (missing ??= []).Add(type);
+            }
         }
 
         if (missing is not null)
