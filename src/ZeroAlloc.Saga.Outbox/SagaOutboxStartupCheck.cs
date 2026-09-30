@@ -24,9 +24,12 @@ namespace ZeroAlloc.Saga.Outbox;
 /// It throws when no saga is registered, when an assembly's sagas cannot be dispatched from the
 /// outbox because it does not reference ZeroAlloc.Serialisation, when no
 /// <see cref="OutboxWorkerService"/> is registered, when no <see cref="IOutboxStore"/> resolves,
-/// when the saga store cannot commit what the outbox store stages, or when another
-/// <see cref="IOutboxTypeDispatcher"/> claims a saga command's type name. The worker keeps one
-/// dispatcher per type name, the last one registered, so the other one would never run.
+/// when the saga store cannot commit what the outbox store stages, when another
+/// <see cref="IOutboxTypeDispatcher"/> claims a saga command's type name, or when a step or
+/// compensation command of a registered saga has no <c>ISerializer&lt;T&gt;</c>. The worker keeps
+/// one dispatcher per type name, the last one registered, so the other one would never run. A
+/// missing serializer would otherwise fail only when a saga first dispatches that command, which
+/// for a compensation command may be long after the host started.
 /// </para>
 /// <para>
 /// The store pairing matters because of <see cref="OutboxStoreSagaUnitOfWork"/>, the unit of work
@@ -99,6 +102,14 @@ internal sealed class SagaOutboxStartupCheck : IHostedLifecycleService
         "WithRedisOutbox() when it is WithRedisStore(), or with AddOutbox().WithOrm().\n" +
         SupportedSetups;
 
+    internal static string MissingSerializerMessage(IReadOnlyList<Type> commandTypes) =>
+        "ZeroAlloc.Saga.Outbox.WithOutbox(): no ISerializer<T> is registered for the saga command type " +
+        string.Join(", ", commandTypes.Select(t => $"'{t.FullName}'")) +
+        ". The outbox serializes every step and compensation command, so each needs one. Apply " +
+        "[ZeroAllocSerializable] to the command type and call the Add{Type}Serializer() that " +
+        "ZeroAlloc.Serialisation generates for it, or register an ISerializer<T> yourself. See " +
+        "https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox.md#serializers-for-step-commands";
+
     private readonly IServiceProvider _services;
     private readonly SagaOutboxRegistration _registration;
 
@@ -128,6 +139,7 @@ internal sealed class SagaOutboxStartupCheck : IHostedLifecycleService
 
             ThrowOnUnsupportedPairing(scope.ServiceProvider, store);
             ThrowOnConflictingDispatchers(scope.ServiceProvider);
+            ThrowOnMissingSerializers(scope.ServiceProvider);
         }
     }
 
@@ -242,6 +254,27 @@ internal sealed class SagaOutboxStartupCheck : IHostedLifecycleService
         var tick = name.IndexOf('`', StringComparison.Ordinal);
         var arguments = string.Join(", ", type.GetGenericArguments().Select(FriendlyName));
         return $"{(tick < 0 ? name : name[..tick])}<{arguments}>";
+    }
+
+    // Lists every command of the registered sagas that has no serializer, in one message, so the
+    // application can fix them all at once. A saga of the same assembly that the application does
+    // not register is not checked. Each source probes its own types with closed-generic lookups:
+    // no MakeGenericType, so the check is AOT-safe. A source that cannot tell, such as one from an
+    // older Saga generator, answers null and is skipped.
+    private void ThrowOnMissingSerializers(IServiceProvider scoped)
+    {
+        List<Type>? missing = null;
+        foreach (var source in _registration.SerializingSources)
+        {
+            foreach (var type in _registration.CommandTypesInUse(source))
+            {
+                if (source.HasSerializer(type, scoped) == false)
+                    (missing ??= []).Add(type);
+            }
+        }
+
+        if (missing is not null)
+            throw new InvalidOperationException(MissingSerializerMessage(missing));
     }
 
     // Counts dispatchers per type name. A decorator that replaces a registration in place, as

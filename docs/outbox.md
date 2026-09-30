@@ -226,6 +226,18 @@ which the host calls on every such service before it starts any `IHostedService`
 
 - Two `IOutboxTypeDispatcher`s claim the same saga command type name — see below.
 
+- A step or compensation command of a registered saga has no registered `ISerializer<T>`. The
+  message lists every such type at once, so all of them can be fixed together. See
+  [Serializers for step commands](#serializers-for-step-commands):
+
+  > ZeroAlloc.Saga.Outbox.WithOutbox(): no ISerializer\<T> is registered for the saga command type
+  > 'Shop.ChargeCustomerCommand', 'Shop.RefundPaymentCommand'. The outbox serializes every step and
+  > compensation command, so each needs one. [...]
+
+  Only the sagas registered with their `With{Saga}()` are checked. A saga declared in the same
+  assembly that the application does not register needs no serializers. A saga assembly built
+  with a Saga generator older than this check is not checked.
+
 The missing-worker and missing-store messages also print the supported EF Core, Redis and ORM
 setups.
 
@@ -341,8 +353,9 @@ not create serializers. Supply one for each command type in either of two ways:
   services.AddSingleton<ISerializer<ReserveStockCommand>, ReserveStockSerializer>();
   ```
 
-A command type with no serializer registered fails when the dispatcher resolves
-`ISerializer<T>` for it, at the first dispatch of that command. `samples/AotSmokeOutbox` uses
+`WithOutbox()`'s [startup check](#startup-check) fails the host start when a command of a
+registered saga has no serializer registered, and lists every such type. The generated command source probes each
+type with a closed-generic lookup, so the check needs no reflection and runs under native AOT. `samples/AotSmokeOutbox` uses
 `[ZeroAllocSerializable]` for every command and runs under native AOT in CI.
 
 The command type does not need to be `partial`. Earlier versions of the Saga generator added

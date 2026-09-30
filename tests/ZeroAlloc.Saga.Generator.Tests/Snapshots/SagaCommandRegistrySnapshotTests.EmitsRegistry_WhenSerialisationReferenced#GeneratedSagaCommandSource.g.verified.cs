@@ -26,11 +26,24 @@ internal sealed class GeneratedSagaCommandSource : SagaCommandSource
         typeof(global::Sample.ReserveCmd),
     };
 
+    // Sample.TwoStepSaga
+    private static readonly Type[] s_sagaCommandTypes0 =
+    {
+        typeof(global::Sample.ChargeCmd),
+        typeof(global::Sample.ReserveCmd),
+    };
+
     private GeneratedSagaCommandSource()
     {
     }
 
     public override IReadOnlyList<Type> CommandTypes => s_commandTypes;
+
+    public override IReadOnlyList<Type> GetCommandTypes(Type sagaType)
+    {
+        if (sagaType == typeof(global::Sample.TwoStepSaga)) return s_sagaCommandTypes0;
+        return Array.Empty<Type>();
+    }
 
     public override ISagaCommandDispatcher CreateDispatcher(IServiceProvider services)
         => new MediatorSagaCommandDispatcher(services.GetRequiredService<IMediator>());
@@ -43,4 +56,13 @@ internal sealed class GeneratedSagaCommandSource : SagaCommandSource
         IServiceProvider services,
         CancellationToken ct)
         => SagaCommandRegistry.DispatchAsync(typeName, payload, services, services.GetRequiredService<IMediator>(), ct);
+
+    public override bool? HasSerializer(Type commandType, IServiceProvider services)
+    {
+        if (commandType == typeof(global::Sample.ChargeCmd))
+            return services.GetService<global::ZeroAlloc.Serialisation.ISerializer<global::Sample.ChargeCmd>>() is not null;
+        if (commandType == typeof(global::Sample.ReserveCmd))
+            return services.GetService<global::ZeroAlloc.Serialisation.ISerializer<global::Sample.ReserveCmd>>() is not null;
+        return null;
+    }
 }

@@ -42,6 +42,9 @@ public sealed class StorePairingTests
                 // Never opened: the check does not query, and the worker's failed polls are
                 // logged and retried until the test stops the host.
                 services.AddScoped<IAsyncDbConnection>(_ => new SqliteConnection("Data Source=:memory:").AsAsync());
+                // Every command of the registered saga has a serializer, so each test fails only on
+                // the pairing. SagaOutboxStartupCheckTests covers the serializer check.
+                services.AddTestSerializers();
                 configure(services);
             })
             .Build();

@@ -69,8 +69,11 @@ internal static class BuilderExtensionsEmitter
         // alongside this file. AddCommandSource is idempotent per assembly, registers the default
         // ISagaCommandDispatcher once, and routes commands to the right assembly when sagas are
         // declared in more than one (#176). ZeroAlloc.Saga.Outbox.WithOutbox() replaces that
-        // default and registers an outbox dispatcher for every source.
-        sb.AppendLine("        global::ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.AddCommandSource(builder, global::ZeroAlloc.Saga.Generated.GeneratedSagaCommandSource.Instance);");
+        // default and registers an outbox dispatcher for every source. Passing the saga type
+        // records it as registered, so the outbox startup check covers only the commands of the
+        // sagas the application registers (#211).
+        sb.Append("        global::ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.AddCommandSource(builder, global::ZeroAlloc.Saga.Generated.GeneratedSagaCommandSource.Instance, typeof(")
+          .Append(model.ClassName).AppendLine("));");
         sb.AppendLine();
 
         var allEvents = model.Steps.Select(s => s.EventTypeFqn)

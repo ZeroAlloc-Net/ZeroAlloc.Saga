@@ -125,6 +125,109 @@ public sealed class SagaOutboxStartupCheckTests
         Assert.Contains(typeName, ex.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Start_With_Missing_Serializers_Throws_Listing_Every_Missing_Command_Type_At_Once()
+    {
+        // Step and compensation commands alike: the outbox serializes each one, so a missing
+        // ISerializer<T> would otherwise surface only when a saga first reaches that command.
+        await using var fx = new SqliteFixture();
+        using var host = BuildHost(fx, services =>
+        {
+            AddDocumentedOutbox(services);
+            services.AddSaga().WithEfCoreStore<OutboxE2EDbContext>().WithOutbox().WithOrderFulfillmentSaga();
+            services.AddSingleton<ZeroAlloc.Serialisation.ISerializer<ReserveStockCommand>, JsonCommandSerializer<ReserveStockCommand>>();
+        });
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => host.StartAsync());
+
+        Assert.Contains("ISerializer<T>", ex.Message, StringComparison.Ordinal);
+        Assert.Contains($"'{typeof(ChargeCustomerCommand).FullName}'", ex.Message, StringComparison.Ordinal);
+        Assert.Contains($"'{typeof(ShipOrderCommand).FullName}'", ex.Message, StringComparison.Ordinal);
+        Assert.Contains($"'{typeof(CancelReservationCommand).FullName}'", ex.Message, StringComparison.Ordinal);
+        Assert.Contains($"'{typeof(RefundPaymentCommand).FullName}'", ex.Message, StringComparison.Ordinal);
+        // WelcomeSaga is declared in the same assembly but not registered, so its command is not
+        // checked.
+        Assert.DoesNotContain(typeof(SendWelcomeCommand).FullName!, ex.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(typeof(ReserveStockCommand).FullName!, ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Start_With_Part_Of_A_Saga_Assembly_Registered_Needs_Only_Those_Sagas_Serializers()
+    {
+        // This assembly declares OrderFulfillmentSaga and WelcomeSaga. Only the first is
+        // registered, and SendWelcomeCommand has no serializer: the host still starts.
+        await using var fx = new SqliteFixture();
+        await fx.EnsureCreatedAsync();
+        using var host = BuildHost(fx, services =>
+        {
+            AddDocumentedOutbox(services);
+            services.AddSaga().WithEfCoreStore<OutboxE2EDbContext>().WithOutbox().WithOrderFulfillmentSaga();
+            services.AddTestSerializers();
+        });
+
+        await host.StartAsync();
+        await host.StopAsync();
+    }
+
+    [Fact]
+    public async Task Start_With_Both_Sagas_Registered_Lists_Only_The_Missing_Serializer()
+    {
+        await using var fx = new SqliteFixture();
+        using var host = BuildHost(fx, services =>
+        {
+            AddDocumentedOutbox(services);
+            services.AddSaga().WithEfCoreStore<OutboxE2EDbContext>().WithOutbox()
+                .WithOrderFulfillmentSaga().WithWelcomeSaga();
+            services.AddTestSerializers();
+        });
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => host.StartAsync());
+
+        Assert.Equal(
+            SagaOutboxStartupCheck.MissingSerializerMessage([typeof(SendWelcomeCommand)]),
+            ex.Message);
+    }
+
+    [Fact]
+    public async Task Start_With_Scoped_Serializers_Succeeds()
+    {
+        // The check resolves each serializer from a scope, as the dispatcher does.
+        await using var fx = new SqliteFixture();
+        await fx.EnsureCreatedAsync();
+        using var host = BuildHost(fx, services =>
+        {
+            AddDocumentedOutbox(services);
+            services.AddSaga().WithEfCoreStore<OutboxE2EDbContext>().WithOutbox().WithOrderFulfillmentSaga();
+            services.AddScoped<ZeroAlloc.Serialisation.ISerializer<ReserveStockCommand>, JsonCommandSerializer<ReserveStockCommand>>();
+            services.AddScoped<ZeroAlloc.Serialisation.ISerializer<ChargeCustomerCommand>, JsonCommandSerializer<ChargeCustomerCommand>>();
+            services.AddScoped<ZeroAlloc.Serialisation.ISerializer<ShipOrderCommand>, JsonCommandSerializer<ShipOrderCommand>>();
+            services.AddScoped<ZeroAlloc.Serialisation.ISerializer<CancelReservationCommand>, JsonCommandSerializer<CancelReservationCommand>>();
+            services.AddScoped<ZeroAlloc.Serialisation.ISerializer<RefundPaymentCommand>, JsonCommandSerializer<RefundPaymentCommand>>();
+        });
+
+        await host.StartAsync();
+        await host.StopAsync();
+    }
+
+    [Fact]
+    public async Task Start_With_A_Source_That_Does_Not_Probe_Serializers_Skips_It()
+    {
+        // A source built by a Saga generator older than this check does not override the probe,
+        // so the check cannot tell which serializers it needs. It must not fail such an app.
+        await using var fx = new SqliteFixture();
+        await fx.EnsureCreatedAsync();
+        using var host = BuildHost(fx, services =>
+        {
+            AddDocumentedOutbox(services);
+            services.AddSaga().WithEfCoreStore<OutboxE2EDbContext>().WithOutbox().WithOrderFulfillmentSaga()
+                .AddCommandSource(new NonProbingSerializingSource());
+            services.AddTestSerializers();
+        });
+
+        await host.StartAsync();
+        await host.StopAsync();
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -137,6 +240,7 @@ public sealed class SagaOutboxStartupCheckTests
             if (outboxFirst) AddDocumentedOutbox(services);
             services.AddSaga().WithEfCoreStore<OutboxE2EDbContext>().WithOutbox().WithOrderFulfillmentSaga();
             if (!outboxFirst) AddDocumentedOutbox(services);
+            services.AddTestSerializers();
         });
 
         await host.StartAsync();
@@ -156,6 +260,7 @@ public sealed class SagaOutboxStartupCheckTests
             services.AddSingleton<IHostedService>(sp => ActivatorUtilities.CreateInstance<OutboxWorkerService>(sp));
             services.AddScoped<IOutboxStore, EfCoreOutboxStore<OutboxE2EDbContext>>();
             services.AddSaga().WithEfCoreStore<OutboxE2EDbContext>().WithOutbox().WithOrderFulfillmentSaga();
+            services.AddTestSerializers();
         });
 
         await host.StartAsync();
@@ -174,6 +279,7 @@ public sealed class SagaOutboxStartupCheckTests
             AddDocumentedOutbox(services);
             services.AddSaga().WithEfCoreStore<OutboxE2EDbContext>().WithOutbox().WithOrderFulfillmentSaga();
             DecorateDispatchersInPlace(services);
+            services.AddTestSerializers();
         });
 
         await host.StartAsync();
@@ -237,6 +343,24 @@ public sealed class SagaOutboxStartupCheckTests
 
     // Not an IRequest: this project runs the Mediator generator, which would demand a handler.
     private sealed class StrayCommand;
+
+    // A source like one a Saga generator older than the serializer check emits into an assembly
+    // with ZeroAlloc.Serialisation: it dispatches serialized commands but has no serializer probe.
+    private sealed class NonProbingSerializingSource : SagaCommandSource
+    {
+        public override IReadOnlyList<Type> CommandTypes { get; } = [typeof(OtherStrayCommand)];
+
+        public override bool CanDispatchSerialized => true;
+
+        public override ISagaCommandDispatcher CreateDispatcher(IServiceProvider services)
+            => throw new NotSupportedException();
+
+        public override ValueTask DispatchSerializedAsync(
+            string typeName, ReadOnlyMemory<byte> payload, IServiceProvider services, CancellationToken ct)
+            => throw new NotSupportedException();
+    }
+
+    private sealed class OtherStrayCommand;
 
     private sealed class ForeignDispatcher(string typeName) : IOutboxTypeDispatcher
     {

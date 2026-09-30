@@ -28,8 +28,9 @@ public static class SagaOutboxBuilderExtensions
     /// dead-letters saga commands, configured through <see cref="OutboxOptions"/>. When the host
     /// starts, before any hosted service, a check fails the start if no
     /// <see cref="OutboxWorkerService"/> or no <see cref="IOutboxStore"/> is registered, if the
-    /// saga store cannot commit what the outbox store stages, or if another
-    /// <see cref="IOutboxTypeDispatcher"/> claims a saga command's type name. ZeroAlloc.Outbox's
+    /// saga store cannot commit what the outbox store stages, if another
+    /// <see cref="IOutboxTypeDispatcher"/> claims a saga command's type name, or if a step or
+    /// compensation command of a registered saga has no <c>ISerializer&lt;T&gt;</c>. ZeroAlloc.Outbox's
     /// EF Core store, <c>AddOutbox().WithEfCore&lt;TContext&gt;()</c>, only stages its rows, so it
     /// needs the EF Core saga store, <c>WithEfCoreStore&lt;TContext&gt;()</c>, on the same
     /// <c>TContext</c>.
@@ -70,7 +71,10 @@ public static class SagaOutboxBuilderExtensions
         SagaCommandRegistryDispatcher dispatch = registration.DispatchAsync;
         services.TryAddSingleton(dispatch);
 
-        // Every assembly's sagas, including those whose With{Saga}() runs after this call.
+        // Every assembly's sagas, including those whose With{Saga}() runs after this call. A
+        // dispatcher is registered for every command type of the assembly, not only those of the
+        // registered sagas: a store shared with a host that runs the assembly's other sagas holds
+        // their rows too, and the worker dead-letters a row it has no dispatcher for.
         builder.ForEachCommandSource(source =>
         {
             foreach (var typeName in registration.Add(source))
@@ -79,6 +83,10 @@ public static class SagaOutboxBuilderExtensions
                     typeName, sp.GetRequiredService<SagaCommandRegistryDispatcher>(), sp));
             }
         });
+
+        // The sagas the application registered, so the startup check asks for serializers only
+        // for their commands.
+        builder.ForEachSaga(registration.AddSaga);
 
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, SagaOutboxStartupCheck>(
             sp => new SagaOutboxStartupCheck(sp, sp.GetRequiredService<SagaOutboxRegistration>())));

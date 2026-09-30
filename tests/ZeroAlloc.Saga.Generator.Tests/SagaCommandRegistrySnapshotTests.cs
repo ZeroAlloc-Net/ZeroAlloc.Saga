@@ -159,6 +159,37 @@ public class SagaCommandRegistrySnapshotTests
     }
 
     [Fact]
+    public void Source_Lists_Each_Sagas_Own_Commands_And_Probes_Each_For_A_Serializer()
+    {
+        // The outbox startup check asks only for the serializers of the sagas the application
+        // registers, so the source lists each saga's step and compensation commands, #211. Each
+        // probe is a closed-generic lookup: no MakeGenericType, so it is AOT-safe.
+        var source = GeneratedSource(GeneratorTestHost.Run(CompensatingSagaWithNestedCommand), "GeneratedSagaCommandSource.g.cs");
+
+        Assert.Contains(
+            """
+                // Sample.NestedCommandSaga
+                private static readonly Type[] s_sagaCommandTypes0 =
+                {
+                    typeof(global::Sample.CancelReserveCmd),
+                    typeof(global::Sample.Commands.ChargeCmd),
+                    typeof(global::Sample.ReserveCmd),
+                };
+            """.ReplaceLineEndings("\n"),
+            source.ReplaceLineEndings("\n"),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "if (sagaType == typeof(global::Sample.NestedCommandSaga)) return s_sagaCommandTypes0;",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "return services.GetService<global::ZeroAlloc.Serialisation.ISerializer<global::Sample.CancelReserveCmd>>() is not null;",
+            source,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("MakeGenericType", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Registry_Dispatches_By_The_Listed_Name_Not_By_A_Display_Name()
     {
         var registry = RegistrySource(GeneratorTestHost.Run(CompensatingSagaWithNestedCommand));

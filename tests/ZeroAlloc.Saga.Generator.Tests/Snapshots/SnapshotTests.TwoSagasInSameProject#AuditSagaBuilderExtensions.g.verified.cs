@@ -25,7 +25,7 @@ public static class AuditSagaBuilderExtensions
         builder.Services.TryAddSingleton<SagaLockManager<global::Sample.OrderId>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<AuditSaga>, AuditSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<AuditSaga, global::Sample.OrderId>, SagaManager<AuditSaga, global::Sample.OrderId>>();
-        global::ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.AddCommandSource(builder, global::ZeroAlloc.Saga.Generated.GeneratedSagaCommandSource.Instance);
+        global::ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.AddCommandSource(builder, global::ZeroAlloc.Saga.Generated.GeneratedSagaCommandSource.Instance, typeof(AuditSaga));
 
         builder.Services.AddTransient<INotificationHandler<global::Sample.OrderShipped>, AuditSaga_OrderShipped_Handler>();
         return builder;

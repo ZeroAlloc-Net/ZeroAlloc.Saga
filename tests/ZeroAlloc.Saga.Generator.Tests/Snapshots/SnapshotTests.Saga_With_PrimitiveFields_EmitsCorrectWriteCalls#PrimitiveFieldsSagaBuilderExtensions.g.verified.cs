@@ -25,7 +25,7 @@ public static class PrimitiveFieldsSagaBuilderExtensions
         builder.Services.TryAddSingleton<SagaLockManager<int>>();
         builder.Services.TryAddTransient<ISagaCompensationDispatcher<PrimitiveFieldsSaga>, PrimitiveFieldsSagaCompensationDispatcher>();
         builder.Services.TryAddTransient<ISagaManager<PrimitiveFieldsSaga, int>, SagaManager<PrimitiveFieldsSaga, int>>();
-        global::ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.AddCommandSource(builder, global::ZeroAlloc.Saga.Generated.GeneratedSagaCommandSource.Instance);
+        global::ZeroAlloc.Saga.SagaCommandSourceBuilderExtensions.AddCommandSource(builder, global::ZeroAlloc.Saga.Generated.GeneratedSagaCommandSource.Instance, typeof(PrimitiveFieldsSaga));
 
         builder.Services.AddTransient<INotificationHandler<global::Sample.Started>, PrimitiveFieldsSaga_Started_Handler>();
         return builder;

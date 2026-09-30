@@ -46,6 +46,36 @@ public abstract class SagaCommandSource
     public virtual bool CanDispatchSerialized => false;
 
     /// <summary>
+    /// The step and compensation command types of one saga of this assembly: a subset of
+    /// <see cref="CommandTypes"/>. The generator implements it. The default returns every type in
+    /// <see cref="CommandTypes"/>, since a source that does not implement it cannot tell its sagas'
+    /// commands apart.
+    /// </summary>
+    /// <param name="sagaType">A saga type of this assembly.</param>
+    /// <returns>The saga's command types, or no types when it is not a saga of this source.</returns>
+    public virtual IReadOnlyList<Type> GetCommandTypes(Type sagaType) => CommandTypes;
+
+    /// <summary>
+    /// Whether an <c>ISerializer&lt;T&gt;</c> for <paramref name="commandType"/> resolves from
+    /// <paramref name="services"/>. <c>ZeroAlloc.Saga.Outbox</c>'s startup check calls it for every
+    /// command of the registered sagas, so the host fails to start rather than failing at a
+    /// command's first dispatch. The generator implements it with one closed-generic lookup per
+    /// command type, with no reflection, when the assembly references
+    /// <c>ZeroAlloc.Serialisation</c>.
+    /// </summary>
+    /// <remarks>
+    /// The default returns <see langword="null"/>: a source that does not implement it cannot say,
+    /// so the check skips it. A source emitted by an older Saga generator is therefore not checked.
+    /// </remarks>
+    /// <param name="commandType">One of <see cref="CommandTypes"/>.</param>
+    /// <param name="services">The scoped service provider to resolve the serializer from.</param>
+    /// <returns>
+    /// <see langword="true"/> or <see langword="false"/>, or <see langword="null"/> when the source
+    /// cannot tell, including for a type it does not list.
+    /// </returns>
+    public virtual bool? HasSerializer(Type commandType, IServiceProvider services) => null;
+
+    /// <summary>
     /// Creates the dispatcher that sends this source's commands through the assembly's own
     /// <c>IMediator</c>. The default <see cref="ISagaCommandDispatcher"/> calls it at most once per
     /// scope, with that scope's provider.

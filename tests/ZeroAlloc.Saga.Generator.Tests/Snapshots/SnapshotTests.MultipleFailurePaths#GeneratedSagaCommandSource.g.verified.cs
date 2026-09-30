@@ -29,11 +29,27 @@ internal sealed class GeneratedSagaCommandSource : SagaCommandSource
         typeof(global::Sample.ShipCommand),
     };
 
+    // Sample.MultiFailureSaga
+    private static readonly Type[] s_sagaCommandTypes0 =
+    {
+        typeof(global::Sample.CancelReserveCommand),
+        typeof(global::Sample.ChargeCommand),
+        typeof(global::Sample.RefundCommand),
+        typeof(global::Sample.ReserveCommand),
+        typeof(global::Sample.ShipCommand),
+    };
+
     private GeneratedSagaCommandSource()
     {
     }
 
     public override IReadOnlyList<Type> CommandTypes => s_commandTypes;
+
+    public override IReadOnlyList<Type> GetCommandTypes(Type sagaType)
+    {
+        if (sagaType == typeof(global::Sample.MultiFailureSaga)) return s_sagaCommandTypes0;
+        return Array.Empty<Type>();
+    }
 
     public override ISagaCommandDispatcher CreateDispatcher(IServiceProvider services)
         => new MediatorSagaCommandDispatcher(services.GetRequiredService<IMediator>());

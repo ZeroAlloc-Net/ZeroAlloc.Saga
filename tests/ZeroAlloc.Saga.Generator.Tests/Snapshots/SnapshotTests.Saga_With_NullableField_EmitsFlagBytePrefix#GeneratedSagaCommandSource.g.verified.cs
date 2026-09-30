@@ -25,11 +25,23 @@ internal sealed class GeneratedSagaCommandSource : SagaCommandSource
         typeof(global::Sample.DoIt),
     };
 
+    // Sample.NullableFieldSaga
+    private static readonly Type[] s_sagaCommandTypes0 =
+    {
+        typeof(global::Sample.DoIt),
+    };
+
     private GeneratedSagaCommandSource()
     {
     }
 
     public override IReadOnlyList<Type> CommandTypes => s_commandTypes;
+
+    public override IReadOnlyList<Type> GetCommandTypes(Type sagaType)
+    {
+        if (sagaType == typeof(global::Sample.NullableFieldSaga)) return s_sagaCommandTypes0;
+        return Array.Empty<Type>();
+    }
 
     public override ISagaCommandDispatcher CreateDispatcher(IServiceProvider services)
         => new MediatorSagaCommandDispatcher(services.GetRequiredService<IMediator>());
