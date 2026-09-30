@@ -46,10 +46,11 @@ public sealed class SqlServerE2ETests(SqlServerE2ETests.Database db) : IClassFix
             await using (connection.ConfigureAwait(false))
             {
                 await connection.OpenAsync().ConfigureAwait(false);
-                await new MigrationRunner(
-                        connection,
-                        CombinedMigrations.Of(SagaOrmMigrations.SqlServer, OutboxOrmMigrations.SqlServer),
-                        new SqlServerMigrationDialect())
+                // Two sources, each numbered from 1, in one database.
+                var dialect = new SqlServerMigrationDialect();
+                await new MigrationRunner(connection, SagaOrmMigrations.SqlServer, dialect)
+                    .RunAsync(default).ConfigureAwait(false);
+                await new MigrationRunner(connection, OutboxOrmMigrations.SqlServer, dialect)
                     .RunAsync(default).ConfigureAwait(false);
             }
         }
