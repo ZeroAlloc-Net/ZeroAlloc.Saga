@@ -18,13 +18,14 @@ public sealed record ShipmentRequested(ShipmentId Id) : INotification;
 
 public sealed record ShipmentDelivered(ShipmentId Id) : INotification;
 
-// Declared partial with a user-applied [ZeroAllocSerializable], as in the Outbox test fixture, so
-// the Saga generator leaves the attribute alone and the registry can deserialise it.
+// The user applies [ZeroAllocSerializable] and lists the command on the JsonSerializerContext
+// below, as ZeroAlloc.Serialisation requires. The registry deserialises with the
+// JsonCommandSerializer<T> this assembly registers.
 [ZeroAllocSerializable(SerializationFormat.SystemTextJson)]
-public sealed partial record BookCarrierCommand(ShipmentId Id) : IRequest;
+public sealed record BookCarrierCommand(ShipmentId Id) : IRequest;
 
 [ZeroAllocSerializable(SerializationFormat.SystemTextJson)]
-public sealed partial record CloseShipmentCommand(ShipmentId Id) : IRequest;
+public sealed record CloseShipmentCommand(ShipmentId Id) : IRequest;
 
 [System.Text.Json.Serialization.JsonSerializable(typeof(BookCarrierCommand))]
 [System.Text.Json.Serialization.JsonSerializable(typeof(CloseShipmentCommand))]

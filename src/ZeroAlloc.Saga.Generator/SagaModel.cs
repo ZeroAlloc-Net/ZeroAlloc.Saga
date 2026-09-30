@@ -192,14 +192,11 @@ internal sealed record SagaModel(
                 var eventTypeFqn = StripGlobalPrefix(member.Parameters[0].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
                 var commandTypeFqn = StripGlobalPrefix(member.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
 
-                // Capture cross-assembly / partial info on the command type for
-                // ZASAGA016 / ZASAGA017, and what the [ZeroAllocSerializable] extension
-                // needs, here where the semantic model is in hand. The diagnostics and
-                // the extension are gated later on whether ZeroAlloc.Serialisation is
-                // referenced, which keeps the compilation out of those outputs.
+                // Capture whether the command type is declared in this compilation for
+                // ZASAGA017, here where the semantic model is in hand. The diagnostic is gated
+                // later on whether ZeroAlloc.Serialisation is referenced, which keeps the
+                // compilation out of that output.
                 bool? cmdInOwnAssembly = null;
-                bool cmdIsPartial = false;
-                SerializableExtensionInfo? serializableExtension = null;
                 // The step's return type names the command, so it stands in for a command type
                 // declared outside this compilation, which has no source to point at.
                 var returnTypeSyntax = member.DeclaringSyntaxReferences
@@ -212,24 +209,6 @@ internal sealed record SagaModel(
                     cmdInOwnAssembly = SymbolEqualityComparer.Default.Equals(
                         cmdNamed.ContainingAssembly,
                         ctx.SemanticModel.Compilation.Assembly);
-
-                    if (cmdInOwnAssembly == true)
-                    {
-                        foreach (var declRef in cmdNamed.DeclaringSyntaxReferences)
-                        {
-                            var declNode = declRef.GetSyntax(ct);
-                            if (declNode is TypeDeclarationSyntax tds)
-                            {
-                                cmdTypeLoc = LocationInfo.From(tds.Identifier.GetLocation());
-                                if (tds.Modifiers.Any(m => m.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.PartialKeyword)))
-                                {
-                                    cmdIsPartial = true;
-                                }
-                            }
-                        }
-
-                        serializableExtension = SerializableExtensionInfo.From(cmdNamed);
-                    }
                 }
 
                 steps.Add(new StepInfo(
@@ -237,9 +216,7 @@ internal sealed record SagaModel(
                     compensateName, compensateOnFqn,
                     Location: memberLoc,
                     CommandTypeIsInOwnAssembly: cmdInOwnAssembly,
-                    CommandTypeIsPartial: cmdIsPartial,
                     CommandTypeLocation: cmdTypeLoc,
-                    SerializableExtension: serializableExtension,
                     CommandTypeIsReferenceType: member.ReturnType.IsReferenceType));
             }
         }
@@ -657,26 +634,14 @@ internal sealed record StepInfo(
     /// <summary>
     /// True if the [Step] method's return-type symbol resolves to a type declared
     /// in the current compilation's assembly. Null when the symbol could not be
-    /// resolved (e.g. error type). Used to distinguish ZASAGA016 (own-assembly,
-    /// must be partial) from ZASAGA017 (cross-assembly, manual attribute required).
+    /// resolved (e.g. error type). False means ZASAGA017 is reported for it.
     /// </summary>
     bool? CommandTypeIsInOwnAssembly = null,
     /// <summary>
-    /// True if any declaration of the command type carries the 'partial' modifier.
-    /// Only meaningful when <see cref="CommandTypeIsInOwnAssembly"/> is true.
-    /// </summary>
-    bool CommandTypeIsPartial = false,
-    /// <summary>
-    /// Location of the command type's identifier — used as the diagnostic location
-    /// for ZASAGA016. When the command type is declared in a referenced assembly it
-    /// is the [Step] method's return type instead, which ZASAGA017 reports at.
+    /// Location of the [Step] method's return type, which names the command type. ZASAGA017
+    /// reports here, since a command type from a referenced assembly has no source to point at.
     /// </summary>
     LocationInfo? CommandTypeLocation = null,
-    /// <summary>
-    /// What the [ZeroAllocSerializable] partial extension of the command type needs.
-    /// Null when the command type is not declared in the current compilation.
-    /// </summary>
-    SerializableExtensionInfo? SerializableExtension = null,
     /// <summary>
     /// True if the command type is a reference type. The command registry null-checks a
     /// deserialized command only then: a struct command cannot be compared to null.
@@ -686,43 +651,6 @@ internal sealed record StepInfo(
     /// <see cref="CommandTypeIsReferenceType"/> for <see cref="CompensateCommandTypeFqn"/>.
     /// </summary>
     bool CompensateCommandTypeIsReferenceType = false);
-
-/// <summary>
-/// The shape of a step command type declared in the current compilation, captured so the
-/// [ZeroAllocSerializable] extension is emitted from the cached model, not the compilation.
-/// </summary>
-internal sealed record SerializableExtensionInfo(
-    string? Namespace,
-    string Name,
-    string TypeKeyword,
-    bool HasSerializableAttribute)
-{
-    private const string SerializableAttributeFqn = "ZeroAlloc.Serialisation.ZeroAllocSerializableAttribute";
-
-    public static SerializableExtensionInfo From(INamedTypeSymbol type)
-    {
-        // C# attribute merging requires the same type-keyword sequence on every
-        // partial declaration ("partial record struct" / "partial record" /
-        // "partial struct" / "partial class"). The compiler resolves "partial
-        // record" against the original positional-record declaration.
-        var typeKeyword = (type.IsRecord, type.IsValueType) switch
-        {
-            (true, true) => "record struct",
-            (true, false) => "record",
-            (false, true) => "struct",
-            (false, false) => "class",
-        };
-
-        var hasAttribute = type.GetAttributes().Any(a =>
-            string.Equals(a.AttributeClass?.ToDisplayString(), SerializableAttributeFqn, System.StringComparison.Ordinal));
-
-        return new SerializableExtensionInfo(
-            type.ContainingNamespace.IsGlobalNamespace ? null : type.ContainingNamespace.ToDisplayString(),
-            type.Name,
-            typeKeyword,
-            hasAttribute);
-    }
-}
 
 /// <summary>
 /// Information about a single saga state member (field or property) the

@@ -143,13 +143,13 @@ services.AddSaga()
     .WithOutbox()                        // <-- replaces the dispatcher, registers saga dispatchers
     .WithOrderFulfillmentSaga();
 
-// 3. Per-command serialiser registration.
-//    The bridge resolves ISerializer<TCommand> from DI for each step command.
-//    Use ZeroAlloc.Serialisation.SystemTextJson for the JSON adapter, or roll
-//    a hand-tuned ISerializer<T> for hot paths.
-services.AddSingleton<ISerializer<ReserveStockCommand>, JsonCommandSerializer<ReserveStockCommand>>();
-services.AddSingleton<ISerializer<ChargeCustomerCommand>, JsonCommandSerializer<ChargeCustomerCommand>>();
-// ...one per step command.
+// 3. One ISerializer<T> per step and compensation command. The bridge resolves it from DI.
+//    Here each command carries [ZeroAllocSerializable], so ZeroAlloc.Serialisation generates
+//    the serializer and this extension. Registering your own ISerializer<T> works too.
+//    See "Serializers for step commands" below.
+services.AddReserveStockCommandSerializer();
+services.AddChargeCustomerCommandSerializer();
+// ...one per command.
 ```
 
 `AddOutbox()` and `AddSaga()` can come in either order. `WithOutbox()` does not call
@@ -312,30 +312,49 @@ Register the `IOutboxStore` yourself as well, or use `WithRedisOutbox()`, which 
 `WithEfCore<T>()` hangs off the `IOutboxBuilder` that only `AddOutbox()` returns.
 `samples/AotSmokeOutbox` runs this setup under ILC in CI.
 
-## Marking step command types `partial`
+## Serializers for step commands
 
-Outbox dispatch deserialises commands through the generator-emitted
-`SagaCommandRegistry`, which routes by `typeof(T).FullName!` and resolves
-the per-command `ISerializer<T>` from DI. For the generator to auto-apply
-`[ZeroAllocSerializable(SerializationFormat.SystemTextJson)]` (so
-`ZeroAlloc.Serialisation`'s analyzer is satisfied), every step command type
-must be declared `partial` in the consumer compilation:
+The outbox stores each step and compensation command as bytes, so every command type needs an
+`ISerializer<T>` in DI. `OutboxSagaCommandDispatcher` serialises the command with it when it
+enqueues, and the generator-emitted `SagaCommandRegistry`, which routes by
+`typeof(T).FullName!`, deserialises with it when the worker dispatches. The Saga generator does
+not create serializers. Supply one for each command type in either of two ways:
 
-```csharp
-public readonly partial record struct ReserveStockCommand(OrderId OrderId, decimal Total)
-    : IRequest<Unit>;
-```
+- Apply `[ZeroAllocSerializable]` to the command type and call the `Add{Type}Serializer()`
+  extension that ZeroAlloc.Serialisation generates for it. With
+  `SerializationFormat.SystemTextJson`, also list the type on a `JsonSerializerContext`;
+  without that, ZeroAlloc.Serialisation reports `ZASZ004` and generates no serializer.
 
-The saga generator emits two diagnostics to nudge users to the right shape:
+  ```csharp
+  [ZeroAllocSerializable(SerializationFormat.SystemTextJson)]
+  public readonly record struct ReserveStockCommand(OrderId OrderId, decimal Total) : IRequest<Unit>;
 
-- **`ZASAGA016`** (Warning, suppressible) — fires when a step command type
-  is not `partial`. The auto-attribute extension cannot be emitted, so the
-  command will fail `ZeroAlloc.Serialisation`'s analyzer at the consumer's
-  build. A code-fix is provided that adds the `partial` modifier.
-- **`ZASAGA017`** (Info) — fires when a step command type is declared in a
-  different assembly than the saga. The generator can't emit a partial
-  extension across assembly boundaries; the consumer must apply
-  `[ZeroAllocSerializable]` themselves on the source-of-truth type.
+  [JsonSerializable(typeof(ReserveStockCommand))]
+  internal sealed partial class CommandJsonContext : JsonSerializerContext;
+
+  services.AddReserveStockCommandSerializer();
+  ```
+
+- Register an `ISerializer<T>` of your own:
+
+  ```csharp
+  services.AddSingleton<ISerializer<ReserveStockCommand>, ReserveStockSerializer>();
+  ```
+
+A command type with no serializer registered fails when the dispatcher resolves
+`ISerializer<T>` for it, at the first dispatch of that command. `samples/AotSmokeOutbox` uses
+`[ZeroAllocSerializable]` for every command and runs under native AOT in CI.
+
+The command type does not need to be `partial`. Earlier versions of the Saga generator added
+`[ZeroAllocSerializable]` to step command types through a generated partial declaration, and
+`ZASAGA016` asked for `partial` so it could. Roslyn runs every source generator against the same
+input compilation, so ZeroAlloc.Serialisation's generator never saw that attribute and produced no
+serializer. The generated declaration and `ZASAGA016` were removed
+([#207](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/207)).
+
+`ZASAGA017` (Info) fires when a step command type is declared in a referenced assembly. Apply
+`[ZeroAllocSerializable]` to the type in that assembly, or register an `ISerializer<T>` for it
+yourself. See [Cross-assembly step command types](#cross-assembly-step-command-types).
 
 ## Single-dispatch under OCC retry
 
@@ -400,10 +419,11 @@ that commits the outbox rows in the saga store's transaction is tracked in
 
 ### Cross-assembly step command types
 
-`ZASAGA017` fires when a step command type is declared in a separate
-assembly. The auto-`[ZeroAllocSerializable]` partial-extension generator
-can't reach across assemblies; the consumer must apply the attribute
-themselves on the source-of-truth declaration.
+`ZASAGA017` fires when a step command type is declared in a separate assembly. Apply
+`[ZeroAllocSerializable]` to the type's declaration in that assembly, so ZeroAlloc.Serialisation
+generates its serializer there, or register an `ISerializer<T>` for it yourself. The serializer
+ZeroAlloc.Serialisation generates is `internal`, so register it through the `Add{Type}Serializer()`
+extension of the assembly that declares the command.
 
 ### Sagas declared across more than one assembly
 
@@ -429,6 +449,6 @@ overrides) — or any third-party backend that explicitly overrides
   `Saga.EfCore` setup, OCC retry, idempotency expectation
   (`ZASAGA015`).
 - [`docs/diagnostics.md`](diagnostics.md) — full diagnostic catalog
-  including `ZASAGA015` / `ZASAGA016` / `ZASAGA017`.
+  including `ZASAGA015` / `ZASAGA017`, and the retired `ZASAGA016`.
 - `ZeroAlloc.Outbox` documentation — backend-side outbox semantics,
   the worker, dead-letter queue management.

@@ -1,7 +1,6 @@
 using System;
-using System.Buffers;
-using System.Buffers.Binary;
 using System.Runtime.InteropServices;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using ZeroAlloc.Mediator;
@@ -20,20 +19,37 @@ public sealed record PaymentCharged(OrderId OrderId) : INotification;
 public sealed record PaymentDeclined(OrderId OrderId) : INotification;
 public sealed record OrderShipped(OrderId OrderId) : INotification;
 
-// Step commands are partial, as ZASAGA016 asks, so the saga generator adds
-// [ZeroAllocSerializable] to them. ZeroAlloc.Serialisation's generator does not see an
-// attribute another generator adds, so no serializer is generated for them: the
-// AOT-safe byte ISerializer<T> impls hand-rolled below are what the outbox resolves, #207.
-public sealed partial record ReserveStockCommand(OrderId OrderId, decimal Total) : IRequest;
-public sealed partial record ChargeCustomerCommand(OrderId OrderId, decimal Total) : IRequest;
-public sealed partial record ShipOrderCommand(OrderId OrderId) : IRequest;
+// Every command the outbox carries needs an ISerializer<T>. Here the user applies
+// [ZeroAllocSerializable] and lists the type on a JsonSerializerContext, so
+// ZeroAlloc.Serialisation's generator emits an AOT-safe serializer and an
+// Add{Type}Serializer() DI extension for each. Registering a hand-written ISerializer<T>
+// works as well. The Saga generator does not add the attribute, #207.
+[ZeroAllocSerializable(SerializationFormat.SystemTextJson)]
+public sealed record ReserveStockCommand(OrderId OrderId, decimal Total) : IRequest;
+[ZeroAllocSerializable(SerializationFormat.SystemTextJson)]
+public sealed record ChargeCustomerCommand(OrderId OrderId, decimal Total) : IRequest;
+[ZeroAllocSerializable(SerializationFormat.SystemTextJson)]
+public sealed record ShipOrderCommand(OrderId OrderId) : IRequest;
+[ZeroAllocSerializable(SerializationFormat.SystemTextJson)]
 public sealed record CancelReservationCommand(OrderId OrderId) : IRequest;
+[ZeroAllocSerializable(SerializationFormat.SystemTextJson)]
 public sealed record RefundPaymentCommand(OrderId OrderId) : IRequest;
 
 // A struct step command, as Mediator's ZAM003 recommends. The generated SagaCommandRegistry
 // must not null-check it, since comparing a struct to null does not compile, #202.
 [StructLayout(LayoutKind.Auto)]
-public readonly partial record struct NotifyCustomerCommand(OrderId OrderId, int Sequence) : IRequest;
+[ZeroAllocSerializable(SerializationFormat.SystemTextJson)]
+public readonly record struct NotifyCustomerCommand(OrderId OrderId, int Sequence) : IRequest;
+
+// The System.Text.Json source-generated metadata the generated serializers use. Without a
+// [JsonSerializable] entry here, ZeroAlloc.Serialisation reports ZASZ004 and emits nothing.
+[JsonSerializable(typeof(ReserveStockCommand))]
+[JsonSerializable(typeof(ChargeCustomerCommand))]
+[JsonSerializable(typeof(ShipOrderCommand))]
+[JsonSerializable(typeof(CancelReservationCommand))]
+[JsonSerializable(typeof(RefundPaymentCommand))]
+[JsonSerializable(typeof(NotifyCustomerCommand))]
+internal sealed partial class CommandJsonContext : JsonSerializerContext;
 
 [Saga]
 public partial class OrderFulfillmentSaga
@@ -119,97 +135,4 @@ internal sealed class RefundPaymentHandler : IRequestHandler<RefundPaymentComman
 {
     public ValueTask<Unit> Handle(RefundPaymentCommand req, CancellationToken ct)
     { Interlocked.Increment(ref CommandCounters.Current!.Refund); return new(Unit.Value); }
-}
-
-// ── Hand-rolled AOT-safe ISerializer<T> impls ────────────────────────────────
-//
-// Each command is just a couple of primitives. Encoding: [int OrderId.V, decimal Total?].
-// Using BinaryPrimitives + decimal.GetBits avoids reflection entirely and trims
-// to a few dozen IL instructions — the trimmer keeps everything that's
-// statically reachable without ceremony.
-
-internal static class ByteCodec
-{
-    public static void WriteOrderIdAndDecimal(IBufferWriter<byte> w, OrderId id, decimal total)
-    {
-        var span = w.GetSpan(20);
-        BinaryPrimitives.WriteInt32LittleEndian(span, id.V);
-        Span<int> bits = stackalloc int[4];
-        var written = decimal.GetBits(total, bits);
-        BinaryPrimitives.WriteInt32LittleEndian(span[4..], bits[0]);
-        BinaryPrimitives.WriteInt32LittleEndian(span[8..], bits[1]);
-        BinaryPrimitives.WriteInt32LittleEndian(span[12..], bits[2]);
-        BinaryPrimitives.WriteInt32LittleEndian(span[16..], bits[3]);
-        _ = written;
-        w.Advance(20);
-    }
-
-    public static (OrderId Id, decimal Total) ReadOrderIdAndDecimal(ReadOnlySpan<byte> buf)
-    {
-        var id = new OrderId(BinaryPrimitives.ReadInt32LittleEndian(buf));
-        Span<int> bits = stackalloc int[4]
-        {
-            BinaryPrimitives.ReadInt32LittleEndian(buf[4..]),
-            BinaryPrimitives.ReadInt32LittleEndian(buf[8..]),
-            BinaryPrimitives.ReadInt32LittleEndian(buf[12..]),
-            BinaryPrimitives.ReadInt32LittleEndian(buf[16..]),
-        };
-        return (id, new decimal(bits));
-    }
-
-    public static void WriteOrderId(IBufferWriter<byte> w, OrderId id)
-    {
-        var span = w.GetSpan(4);
-        BinaryPrimitives.WriteInt32LittleEndian(span, id.V);
-        w.Advance(4);
-    }
-
-    public static OrderId ReadOrderId(ReadOnlySpan<byte> buf)
-        => new(BinaryPrimitives.ReadInt32LittleEndian(buf));
-}
-
-internal sealed class ReserveStockSerializer : ISerializer<ReserveStockCommand>
-{
-    public void Serialize(IBufferWriter<byte> w, ReserveStockCommand v) => ByteCodec.WriteOrderIdAndDecimal(w, v.OrderId, v.Total);
-    public ReserveStockCommand Deserialize(ReadOnlySpan<byte> buf)
-    { var (id, total) = ByteCodec.ReadOrderIdAndDecimal(buf); return new(id, total); }
-}
-
-internal sealed class ChargeCustomerSerializer : ISerializer<ChargeCustomerCommand>
-{
-    public void Serialize(IBufferWriter<byte> w, ChargeCustomerCommand v) => ByteCodec.WriteOrderIdAndDecimal(w, v.OrderId, v.Total);
-    public ChargeCustomerCommand Deserialize(ReadOnlySpan<byte> buf)
-    { var (id, total) = ByteCodec.ReadOrderIdAndDecimal(buf); return new(id, total); }
-}
-
-internal sealed class ShipOrderSerializer : ISerializer<ShipOrderCommand>
-{
-    public void Serialize(IBufferWriter<byte> w, ShipOrderCommand v) => ByteCodec.WriteOrderId(w, v.OrderId);
-    public ShipOrderCommand Deserialize(ReadOnlySpan<byte> buf) => new(ByteCodec.ReadOrderId(buf));
-}
-
-internal sealed class CancelReservationSerializer : ISerializer<CancelReservationCommand>
-{
-    public void Serialize(IBufferWriter<byte> w, CancelReservationCommand v) => ByteCodec.WriteOrderId(w, v.OrderId);
-    public CancelReservationCommand Deserialize(ReadOnlySpan<byte> buf) => new(ByteCodec.ReadOrderId(buf));
-}
-
-internal sealed class RefundPaymentSerializer : ISerializer<RefundPaymentCommand>
-{
-    public void Serialize(IBufferWriter<byte> w, RefundPaymentCommand v) => ByteCodec.WriteOrderId(w, v.OrderId);
-    public RefundPaymentCommand Deserialize(ReadOnlySpan<byte> buf) => new(ByteCodec.ReadOrderId(buf));
-}
-
-internal sealed class NotifyCustomerSerializer : ISerializer<NotifyCustomerCommand>
-{
-    public void Serialize(IBufferWriter<byte> w, NotifyCustomerCommand v)
-    {
-        var span = w.GetSpan(8);
-        BinaryPrimitives.WriteInt32LittleEndian(span, v.OrderId.V);
-        BinaryPrimitives.WriteInt32LittleEndian(span[4..], v.Sequence);
-        w.Advance(8);
-    }
-
-    public NotifyCustomerCommand Deserialize(ReadOnlySpan<byte> buf)
-        => new(new OrderId(BinaryPrimitives.ReadInt32LittleEndian(buf)), BinaryPrimitives.ReadInt32LittleEndian(buf[4..]));
 }

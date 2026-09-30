@@ -96,13 +96,14 @@ internal static class Program
         var store = new InProcessOutboxStore();
         services.AddSingleton<IOutboxStore>(store);
 
-        // Per-command AOT-safe ISerializer<T> impls (hand-rolled, no JSON / reflection).
-        services.AddSingleton<ISerializer<ReserveStockCommand>, ReserveStockSerializer>();
-        services.AddSingleton<ISerializer<ChargeCustomerCommand>, ChargeCustomerSerializer>();
-        services.AddSingleton<ISerializer<ShipOrderCommand>, ShipOrderSerializer>();
-        services.AddSingleton<ISerializer<CancelReservationCommand>, CancelReservationSerializer>();
-        services.AddSingleton<ISerializer<RefundPaymentCommand>, RefundPaymentSerializer>();
-        services.AddSingleton<ISerializer<NotifyCustomerCommand>, NotifyCustomerSerializer>();
+        // The ISerializer<T> per step command that ZeroAlloc.Serialisation's generator emits for
+        // the [ZeroAllocSerializable] the sample puts on each command. The outbox resolves these.
+        services.AddReserveStockCommandSerializer();
+        services.AddChargeCustomerCommandSerializer();
+        services.AddShipOrderCommandSerializer();
+        services.AddCancelReservationCommandSerializer();
+        services.AddRefundPaymentCommandSerializer();
+        services.AddNotifyCustomerCommandSerializer();
 
         // ZeroAlloc.Outbox's worker dispatches the saga commands. The documented registration is
         // services.AddOutbox(), but AddOutbox is [RequiresUnreferencedCode] for a reflection-based

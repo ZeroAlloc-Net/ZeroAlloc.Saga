@@ -3,10 +3,10 @@ using Microsoft.CodeAnalysis;
 namespace ZeroAlloc.Saga.Generator.Diagnostics;
 
 /// <summary>
-/// Diagnostic descriptors for <c>ZASAGA001</c>-<c>ZASAGA017</c>. These are reported
-/// directly by <see cref="SagaGenerator"/> (and its emitters) via
-/// <c>SourceProductionContext.ReportDiagnostic</c> when a user's <c>[Saga]</c> shape
-/// violates the authoring contract.
+/// Diagnostic descriptors for <c>ZASAGA001</c>-<c>ZASAGA017</c>, except the retired
+/// <c>ZASAGA016</c>. These are reported directly by <see cref="SagaGenerator"/> (and its
+/// emitters) via <c>SourceProductionContext.ReportDiagnostic</c> when a user's <c>[Saga]</c>
+/// shape violates the authoring contract.
 /// </summary>
 internal static class SagaDiagnostics
 {
@@ -167,23 +167,13 @@ internal static class SagaDiagnostics
         description: "Durable saga backends use optimistic concurrency control (OCC). Under contention the entire notification handler — including the user's [Step] method and its emitted command — is retried. Idempotent commands tolerate that; non-idempotent ones may double-charge, double-ship, etc.",
         helpLinkUri: HelpLinkBase + "zasaga015");
 
-    public static readonly DiagnosticDescriptor StepCommandTypeNotPartial = new DiagnosticDescriptor(
-        id: "ZASAGA016",
-        title: "Step command type must be partial when ZeroAlloc.Serialisation is referenced",
-        messageFormat: "Step command type '{0}' must be 'partial' so the Saga generator can apply [ZeroAllocSerializable] via partial-class extension. Add the 'partial' modifier.",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Warning,
-        isEnabledByDefault: true,
-        description: "When ZeroAlloc.Serialisation is referenced the Saga generator extends each step's command type with a partial declaration carrying [ZeroAllocSerializable]. The command type must therefore be declared 'partial' so the generated partial can attach.",
-        helpLinkUri: HelpLinkBase + "zasaga016");
-
     public static readonly DiagnosticDescriptor StepCommandTypeCrossAssembly = new DiagnosticDescriptor(
         id: "ZASAGA017",
         title: "Step command type is in a referenced assembly",
-        messageFormat: "Step command type '{0}' is declared in a referenced assembly. The Saga generator cannot apply [ZeroAllocSerializable] via partial-class extension on foreign types. Apply [ZeroAllocSerializable] manually on the type's declaration.",
+        messageFormat: "Step command type '{0}' is declared in a referenced assembly. The outbox needs an ISerializer<T> for it: apply [ZeroAllocSerializable] to the type's declaration in that assembly, or register an ISerializer<T> for it.",
         category: Category,
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
-        description: "Partial-class extension can only attach to types declared in the same compilation. For step command types declared in a referenced assembly, apply [ZeroAllocSerializable] manually at the type's source declaration site.",
+        description: "The outbox serializes each step command with the ISerializer<T> registered for its type, and the Saga generator does not create serializers. For a step command type declared in a referenced assembly, apply [ZeroAllocSerializable] to its declaration in that assembly, so ZeroAlloc.Serialisation generates the serializer there, or register an ISerializer<T> for it.",
         helpLinkUri: HelpLinkBase + "zasaga017");
 }

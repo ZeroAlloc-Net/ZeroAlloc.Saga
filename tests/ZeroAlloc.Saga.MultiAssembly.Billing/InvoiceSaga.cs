@@ -18,13 +18,14 @@ public sealed record InvoiceRequested(InvoiceId Id) : INotification;
 
 public sealed record InvoicePaid(InvoiceId Id) : INotification;
 
-// Declared partial with a user-applied [ZeroAllocSerializable], as in the Outbox test fixture, so
-// the Saga generator leaves the attribute alone and the registry can deserialise it.
+// The user applies [ZeroAllocSerializable] and lists the command on the JsonSerializerContext
+// below, as ZeroAlloc.Serialisation requires. The registry deserialises with the
+// JsonCommandSerializer<T> this assembly registers.
 [ZeroAllocSerializable(SerializationFormat.SystemTextJson)]
-public sealed partial record IssueInvoiceCommand(InvoiceId Id) : IRequest;
+public sealed record IssueInvoiceCommand(InvoiceId Id) : IRequest;
 
 [ZeroAllocSerializable(SerializationFormat.SystemTextJson)]
-public sealed partial record CloseInvoiceCommand(InvoiceId Id) : IRequest;
+public sealed record CloseInvoiceCommand(InvoiceId Id) : IRequest;
 
 [System.Text.Json.Serialization.JsonSerializable(typeof(IssueInvoiceCommand))]
 [System.Text.Json.Serialization.JsonSerializable(typeof(CloseInvoiceCommand))]

@@ -101,29 +101,14 @@ public sealed class SagaGenerator : IIncrementalGenerator
                 SagaCommandRegistryEmitter.Emit(spc, results);
             });
 
-        // Auto-apply [ZeroAllocSerializable(SerializationFormat.SystemTextJson)] to each
-        // step command type via a partial-class extension when ZeroAlloc.Serialisation
-        // is referenced. Skips cross-assembly types (ZASAGA017), non-partial types
-        // (ZASAGA016), and types where the user already applied the attribute themselves.
-        // The existing-attribute check and the type-keyword sequence (record/struct/class)
-        // are captured in the model, so this output stays cached across unrelated edits.
-        context.RegisterSourceOutput(
-            allModels.Combine(serialisationReferenced),
-            static (spc, tuple) =>
-            {
-                var (results, hasSerialisation) = tuple;
-                if (!hasSerialisation) return;
-                SerializableExtensionEmitter.Emit(spc, results);
-            });
+        // The generator does not attach [ZeroAllocSerializable] to step command types: Roslyn
+        // runs every source generator against the same input compilation, so
+        // ZeroAlloc.Serialisation's generator would never see it (#207). The user applies the
+        // attribute or registers an ISerializer<T> for each outbox step command.
 
-        // ZASAGA016 / ZASAGA017 — fired only when ZeroAlloc.Serialisation is
-        // referenced. ZASAGA016 (Warning) covers step command types declared in
-        // the current compilation that are not yet 'partial'; the Saga generator
-        // needs the partial modifier to attach [ZeroAllocSerializable] via
-        // partial-class extension. ZASAGA017 (Info) covers step command types
-        // declared in a referenced assembly — partial-class extension cannot
-        // reach foreign types, so the user must apply [ZeroAllocSerializable]
-        // manually at the type's source declaration site.
+        // ZASAGA017 - fired only when ZeroAlloc.Serialisation is referenced, for step command
+        // types declared in a referenced assembly. The serializer has to come from that
+        // assembly or from the user's own ISerializer<T> registration.
         context.RegisterSourceOutput(
             allModels.Combine(serialisationReferenced),
             static (spc, tuple) =>
@@ -131,9 +116,8 @@ public sealed class SagaGenerator : IIncrementalGenerator
                 var (results, hasSerialisation) = tuple;
                 if (!hasSerialisation) return;
 
-                // De-dupe by command type FQN so a single command used by multiple
-                // steps / sagas only fires once per category.
-                var reportedNotPartial = new HashSet<string>(System.StringComparer.Ordinal);
+                // De-dupe by command type FQN so a command used by several steps or sagas
+                // is reported once.
                 var reportedCrossAssembly = new HashSet<string>(System.StringComparer.Ordinal);
 
                 foreach (var result in results)
@@ -142,28 +126,15 @@ public sealed class SagaGenerator : IIncrementalGenerator
                     if (model is null) continue;
                     foreach (var step in model.Steps)
                     {
-                        if (step.CommandTypeIsInOwnAssembly == true)
+                        // The type's declaration is not in this compilation, so the diagnostic
+                        // points at the [Step] method's return type, which names it.
+                        if (step.CommandTypeIsInOwnAssembly == false
+                            && reportedCrossAssembly.Add(step.CommandTypeFqn))
                         {
-                            if (!step.CommandTypeIsPartial && reportedNotPartial.Add(step.CommandTypeFqn))
-                            {
-                                spc.ReportDiagnostic(Diagnostic.Create(
-                                    SagaDiagnostics.StepCommandTypeNotPartial,
-                                    location: step.CommandTypeLocation?.ToLocation(),
-                                    step.CommandTypeFqn));
-                            }
-                        }
-                        else if (step.CommandTypeIsInOwnAssembly == false)
-                        {
-                            // Cross-assembly: the type's declaration is not in this
-                            // compilation, so the diagnostic points at the [Step]
-                            // method's return type, which names it.
-                            if (reportedCrossAssembly.Add(step.CommandTypeFqn))
-                            {
-                                spc.ReportDiagnostic(Diagnostic.Create(
-                                    SagaDiagnostics.StepCommandTypeCrossAssembly,
-                                    location: step.CommandTypeLocation?.ToLocation(),
-                                    step.CommandTypeFqn));
-                            }
+                            spc.ReportDiagnostic(Diagnostic.Create(
+                                SagaDiagnostics.StepCommandTypeCrossAssembly,
+                                location: step.CommandTypeLocation?.ToLocation(),
+                                step.CommandTypeFqn));
                         }
                     }
                 }

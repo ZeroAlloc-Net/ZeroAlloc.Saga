@@ -236,11 +236,12 @@ public class DiagnosticTests
         return GeneratorVerifier.ExpectAsync(src, "ZASAGA013");
     }
 
-    // ── ZASAGA016 ───────────────────────────────────────────────────────────
-    // Header used by the ZASAGA016 tests. Mirrors the canonical Header above
-    // but inlines a stub for ZeroAlloc.Serialisation.ZeroAllocSerializableAttribute
-    // so the generator's `serialisationReferenced` gate is tripped without
-    // needing to add the real package as a test dependency.
+    // ── ZASAGA016, retired ─────────────────────────────────────────────────
+    // ZASAGA016 asked for 'partial' step command types so the generator could attach
+    // [ZeroAllocSerializable]. ZeroAlloc.Serialisation's generator never sees that attribute,
+    // so the requirement was removed (#207). The header inlines a stub for
+    // ZeroAlloc.Serialisation.ZeroAllocSerializableAttribute so the generator's
+    // `serialisationReferenced` gate is tripped without the real package.
     private const string SerialisationStubHeader = """
         using System;
         using ZeroAlloc.Mediator;
@@ -261,7 +262,7 @@ public class DiagnosticTests
         """;
 
     [Fact]
-    public async Task ZASAGA016_FiresWhen_StepCommandType_IsNotPartial_AndSerialisationStubPresent()
+    public async Task NonPartialStepCommand_ReportsNoDiagnostic_WhenSerialisationReferenced()
     {
         var src = SerialisationStubHeader + """
             namespace Sample
@@ -277,34 +278,14 @@ public class DiagnosticTests
             }
             """;
         var run = await GeneratorVerifier.RunAsync(src);
-        Assert.Contains(run.Diagnostics, d => d.Id == "ZASAGA016");
-    }
-
-    [Fact]
-    public async Task ZASAGA016_DoesNotFire_WhenStepCommandIsPartial()
-    {
-        var src = SerialisationStubHeader + """
-            namespace Sample
-            {
-                public partial record struct ReserveCmd(OrderId OrderId) : IRequest<Unit>;
-
-                [Saga]
-                public partial class TwoStepSaga
-                {
-                    [CorrelationKey] public OrderId Correlation(OrderPlaced e) => e.OrderId;
-                    [Step(Order = 1)] public ReserveCmd Reserve(OrderPlaced e) => new(e.OrderId);
-                }
-            }
-            """;
-        var run = await GeneratorVerifier.RunAsync(src);
-        Assert.DoesNotContain(run.Diagnostics, d => d.Id == "ZASAGA016");
+        Assert.Empty(run.Diagnostics);
     }
 
     // ── ZASAGA017 ───────────────────────────────────────────────────────────
     // Cross-assembly fixture: the step command type lives in a separately
     // compiled assembly attached as a MetadataReference. The generator should
     // see ContainingAssembly != Compilation.Assembly and fire ZASAGA017
-    // (Info-severity, location: None) instead of ZASAGA016.
+    // (Info-severity).
     [Fact]
     public async Task ZASAGA017_FiresWhen_StepCommandType_IsCrossAssembly_AndSerialisationStubPresent()
     {
@@ -346,9 +327,6 @@ public class DiagnosticTests
 
         var run = await GeneratorVerifier.RunAsync(src, new[] { foreignRef });
         Assert.Contains(run.Diagnostics, d => d.Id == "ZASAGA017");
-        // And the same shape must NOT trigger ZASAGA016 — the type is foreign,
-        // partial-class extension cannot reach it, so ZASAGA016 would mislead.
-        Assert.DoesNotContain(run.Diagnostics, d => d.Id == "ZASAGA016");
     }
 
     [Fact]
@@ -385,32 +363,5 @@ public class DiagnosticTests
 
         var run = await GeneratorVerifier.RunAsync(src, new[] { foreignRef });
         Assert.DoesNotContain(run.Diagnostics, d => d.Id == "ZASAGA017");
-    }
-
-    [Fact]
-    public async Task ZASAGA016_DoesNotFire_WhenSerialisationNotReferenced()
-    {
-        // Same shape as the firing case but with NO ZeroAllocSerializableAttribute
-        // in the compilation — the gate stays closed and ZASAGA016 must not fire.
-        var src = """
-            using System;
-            using ZeroAlloc.Mediator;
-            using ZeroAlloc.Saga;
-
-            namespace Sample;
-
-            public readonly record struct OrderId(int V) : IEquatable<OrderId>;
-            public sealed record OrderPlaced(OrderId OrderId) : INotification;
-            public readonly record struct ReserveCmd(OrderId OrderId) : IRequest<Unit>;
-
-            [Saga]
-            public partial class TwoStepSaga
-            {
-                [CorrelationKey] public OrderId Correlation(OrderPlaced e) => e.OrderId;
-                [Step(Order = 1)] public ReserveCmd Reserve(OrderPlaced e) => new(e.OrderId);
-            }
-            """;
-        var run = await GeneratorVerifier.RunAsync(src);
-        Assert.DoesNotContain(run.Diagnostics, d => d.Id == "ZASAGA016");
     }
 }
