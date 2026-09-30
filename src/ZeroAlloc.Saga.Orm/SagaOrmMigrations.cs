@@ -16,8 +16,13 @@ namespace ZeroAlloc.Saga.Orm;
 /// cannot express that; selecting the statement by dialect can.
 /// </para>
 /// <para>
-/// Every statement is additive and versioned, so it composes with your
-/// application's own migrations in the same history table.
+/// Every source here is named <c>ZeroAlloc.Saga.Orm</c>. ZeroAlloc.ORM records
+/// that name with each migration it applies and numbers each source's versions
+/// on its own, so this schema shares one database and one history table with
+/// your application's migrations and with ZeroAlloc.Outbox.Orm's, although all
+/// of them start at version 1. Run each source through its own
+/// <c>MigrationRunner</c>. The name is fixed, not taken from a type name, because
+/// a changed name makes the runner apply the schema again.
 /// </para>
 /// </remarks>
 /// <example>
@@ -88,6 +93,10 @@ public static class SagaOrmMigrations
     {
         private readonly IReadOnlyList<Migration> _migrations =
             [new Migration(1, "create_saga_instance", sql)];
+
+        // One name for every dialect: a database has one of them. Never change
+        // it: the history table finds this schema's applied versions by it.
+        public string Name => "ZeroAlloc.Saga.Orm";
 
         public IReadOnlyList<Migration> GetMigrations() => _migrations;
     }

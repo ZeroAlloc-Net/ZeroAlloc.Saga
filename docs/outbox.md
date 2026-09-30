@@ -450,13 +450,74 @@ Requirements:
 - `IOrmSagaTransactionContributor`, in `ZeroAlloc.Saga.Orm`, is the extension point this uses.
   Other packages can write into the saga store's transaction the same way.
 
-Both schemas number their migrations from 1, and the ORM's `MigrationRunner` keeps one history
-table per database, so running `SagaOrmMigrations` and `OutboxOrmMigrations` through two runners on
-one database fails with a version conflict. Until the ORM can keep the two apart
-([ZeroAlloc.ORM#306](https://github.com/ZeroAlloc-Net/ZeroAlloc.ORM/issues/306)), run them through
-one `IMigrationSource` that moves the second source's versions out of the way, for example by
-adding 1000 to each. Pick the offset once per database and never change it: the history table
-records the offset versions.
+#### Creating the schema
+
+Create both tables with ZeroAlloc.ORM's `MigrationRunner`, one runner per source, on the same
+connection and dialect:
+
+```csharp
+var dialect = new SqlServerMigrationDialect();
+await new MigrationRunner(connection, SagaOrmMigrations.SqlServer, dialect).RunAsync(ct);
+await new MigrationRunner(connection, OutboxOrmMigrations.SqlServer, dialect).RunAsync(ct);
+```
+
+Both sources number their migrations from 1. Since ZeroAlloc.ORM 2.2, which Saga requires, the
+history table records each migration with its source's `Name` and keys it by source and version,
+so the two do not collide, and the order of the runners does not matter. The saga source is named
+`ZeroAlloc.Saga.Orm` on every dialect. Don't wrap either source in one of your own: the name the
+runner records is how it finds what a source has applied, and a different name makes it apply
+the schema again.
+
+A database whose history table ZeroAlloc.ORM 2.1 or earlier wrote with `SagaOrmMigrations` alone
+is upgraded in place by the first run on 2.2, and its rows are assigned to the source being run.
+Run the saga runner first there, then add the outbox runner: the outbox source would be refused,
+because the table holds a row that is not one of its migrations.
+
+`OutboxOrmMigrations` does not have a fixed name yet, so the runner records the ORM's default
+for it, `ZeroAlloc.Outbox.Orm.OutboxOrmMigrations+Source`. Fixing that is
+[ZeroAlloc.Outbox#261](https://github.com/ZeroAlloc-Net/ZeroAlloc.Outbox/issues/261); check its
+release notes for how to move to the fixed name when you upgrade ZeroAlloc.Outbox.Orm.
+
+#### If you used a version offset before
+
+Earlier Saga docs told you to run both schemas through one `IMigrationSource` of your own that
+added 1000 to the outbox source's versions, because ZeroAlloc.ORM before 2.2 kept one version
+sequence per database. That database's history table holds `create_saga_instance` at version 1
+and the two outbox migrations at 1001 and 1002, all written by your combined source. Pick one of
+these before your first migration run on ZeroAlloc.ORM 2.2:
+
+- **Keep running your combined source, under the same name.** Nothing else changes. On its first
+  run, ZeroAlloc.ORM 2.2 upgrades the history table in place and assigns every row to that
+  source, and nothing is applied again. The name is your source type's full name unless you
+  override `Name`, so don't rename or move the type.
+- **Switch to the two runners above, after moving the rows to them once by hand.** Run this in
+  one go, before the first run on ZeroAlloc.ORM 2.2. It is for SQLite; on another database,
+  create the table with that dialect's `CreateHistoryTableSql` and copy the rows the same way,
+  as ZeroAlloc.ORM's cookbook shows under
+  [Upgrading a history table from before source scoping](https://github.com/ZeroAlloc-Net/ZeroAlloc.ORM/blob/main/docs/cookbook/migrations.md#upgrading-a-history-table-from-before-source-scoping).
+
+  ```sql
+  BEGIN;
+  ALTER TABLE __zaorm_migrations RENAME TO __zaorm_migrations_old;
+  CREATE TABLE __zaorm_migrations (source TEXT NOT NULL, version INTEGER NOT NULL,
+    name TEXT NOT NULL, applied_at TEXT NOT NULL, PRIMARY KEY (source, version));
+  INSERT INTO __zaorm_migrations (source, version, name, applied_at)
+    SELECT CASE WHEN version >= 1000 THEN 'ZeroAlloc.Outbox.Orm.OutboxOrmMigrations+Source'
+                ELSE 'ZeroAlloc.Saga.Orm' END,
+           CASE WHEN version >= 1000 THEN version - 1000 ELSE version END,
+           name, applied_at
+    FROM __zaorm_migrations_old;
+  DROP TABLE __zaorm_migrations_old;
+  COMMIT;
+  ```
+
+  Adjust the mapping if your offset was not 1000, or if your combined source also held your
+  application's migrations: those rows belong to your application's source name.
+
+Don't switch to the two runners without that step. The saga source would find a history table
+that also holds the outbox's rows, and ZeroAlloc.ORM refuses to upgrade it: the run throws
+`ZeroAllocOrmMigrationConflictException` and leaves the table untouched. Run your combined source
+again, or move the rows as above.
 
 Without `WithOrmOutbox()`, `WithOrmStore().WithOutbox()` with `AddOutbox().WithOrm()` still works,
 but it is at-least-once: `WithOutbox()`'s default unit of work enlists each command through

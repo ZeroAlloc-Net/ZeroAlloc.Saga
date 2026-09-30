@@ -31,18 +31,21 @@ public sealed class SqliteFixture : IAsyncDisposable
     /// <summary>A new, unopened connection onto the fixture's database.</summary>
     public IAsyncDbConnection Connection() => new SqliteConnection(ConnectionString).AsAsync();
 
-    /// <summary>Applies the saga schema and, unless told otherwise, the outbox schema.</summary>
+    /// <summary>
+    /// Applies the saga schema and, unless told otherwise, the outbox schema, each through its
+    /// own runner as docs/outbox.md shows. Both number their migrations from 1; the history table
+    /// keeps them apart by source name.
+    /// </summary>
     public async Task MigrateAsync(bool withOutbox = true, CancellationToken ct = default)
     {
         var connection = Connection();
         await using (connection.ConfigureAwait(false))
         {
             await connection.OpenAsync(ct).ConfigureAwait(false);
-            var source = withOutbox
-                ? CombinedMigrations.Of(SagaOrmMigrations.Sqlite, OutboxOrmMigrations.Sqlite)
-                : SagaOrmMigrations.Sqlite;
-            await new MigrationRunner(connection, source, new SqliteMigrationDialect())
-                .RunAsync(ct).ConfigureAwait(false);
+            var dialect = new SqliteMigrationDialect();
+            await new MigrationRunner(connection, SagaOrmMigrations.Sqlite, dialect).RunAsync(ct).ConfigureAwait(false);
+            if (withOutbox)
+                await new MigrationRunner(connection, OutboxOrmMigrations.Sqlite, dialect).RunAsync(ct).ConfigureAwait(false);
         }
     }
 
@@ -81,6 +84,32 @@ public sealed class SqliteFixture : IAsyncDisposable
         => ExecuteAsync(
             "UPDATE SagaInstance SET RowVersion = randomblob(16) WHERE CorrelationKey = '" + correlationKey + "'");
 
+    /// <summary>The history table's rows as <c>source/version/name</c>, sorted.</summary>
+    public async Task<string[]> HistoryAsync()
+    {
+        var rows = new List<string>();
+        var connection = Connection();
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var cmd = connection.CreateCommand();
+            await using (cmd.ConfigureAwait(false))
+            {
+                cmd.CommandText = "SELECT source, version, name FROM __zaorm_migrations";
+                await using var reader = await cmd.ExecuteReaderAsync(CancellationToken.None).ConfigureAwait(false);
+                while (await reader.ReadAsync(CancellationToken.None).ConfigureAwait(false))
+                {
+                    rows.Add(string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{reader.GetString(0)}/{reader.GetInt64(1)}/{reader.GetString(2)}"));
+                }
+            }
+        }
+
+        rows.Sort(StringComparer.Ordinal);
+        return [.. rows];
+    }
+
     public async Task ExecuteAsync(string sql)
     {
         var connection = Connection();
@@ -96,7 +125,7 @@ public sealed class SqliteFixture : IAsyncDisposable
         }
     }
 
-    private async Task<long> ScalarAsync(string sql)
+    public async Task<long> ScalarAsync(string sql)
     {
         var connection = Connection();
         await using (connection.ConfigureAwait(false))
@@ -126,27 +155,4 @@ public sealed class SqliteFixture : IAsyncDisposable
 
         return ValueTask.CompletedTask;
     }
-}
-
-/// <summary>
-/// Runs two libraries' migrations through one <see cref="MigrationRunner"/>. The runner keeps one
-/// history table per database, keyed by version, and both the saga and the outbox schema number
-/// their migrations from 1. So the second source's versions are moved past the first's.
-/// </summary>
-public sealed class CombinedMigrations : IMigrationSource
-{
-    private const int SecondSourceOffset = 1000;
-    private readonly IReadOnlyList<Migration> _migrations;
-
-    private CombinedMigrations(IReadOnlyList<Migration> migrations) => _migrations = migrations;
-
-    public static IMigrationSource Of(IMigrationSource first, IMigrationSource second)
-    {
-        var all = new List<Migration>(first.GetMigrations());
-        foreach (var m in second.GetMigrations())
-            all.Add(m with { Version = m.Version + SecondSourceOffset });
-        return new CombinedMigrations(all);
-    }
-
-    public IReadOnlyList<Migration> GetMigrations() => _migrations;
 }
