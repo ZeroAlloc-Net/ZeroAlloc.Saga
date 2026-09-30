@@ -40,9 +40,9 @@ Save flow:
 4. If `EXEC` returns `null` (a concurrent writer touched the watched key
    between step 2 and step 3), throw `RedisSagaConcurrencyException`.
 
-The generator-emitted handler's `IsBackendConflict` method matches
-`RedisSagaConcurrencyException` by fully-qualified name alongside EfCore's
-`DbUpdateException` / `DbUpdateConcurrencyException`, so a Redis OCC clash
+The generator-emitted handler's `IsBackendConflict` method matches any exception implementing
+`ISagaConcurrencyConflict`, which `RedisSagaConcurrencyException` does, as EF Core's and the
+ORM store's conflict exceptions do, so a Redis OCC clash
 drives the same scope-per-attempt retry path as an EfCore conflict — every
 attempt creates a fresh `IServiceScope`, fresh `RedisSagaStore`, fresh
 observed-version map, and re-runs the load → fire → dispatch → save flow.

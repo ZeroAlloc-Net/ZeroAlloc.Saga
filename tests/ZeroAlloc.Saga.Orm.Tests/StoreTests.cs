@@ -391,6 +391,67 @@ public sealed class StoreTests
     }
 
     [Fact]
+    public async Task A_Failed_Insert_With_No_Competing_Row_Propagates_The_Fault_Unchanged()
+    {
+        // #222. A constraint the row itself breaks is a fault, not contention. Reporting it as a
+        // conflict made the retry loop run it again until it gave up, and then blamed
+        // concurrency. The trigger raises SQLITE_CONSTRAINT, the same error code as the primary-key
+        // violation of a lost insert race, so this also shows the store does not decide by code.
+        await using var fx = new SqliteFixture();
+        await fx.MigrateAsync();
+        await ExecuteAsync(fx, """
+            CREATE TRIGGER RejectSagaInsert BEFORE INSERT ON SagaInstance
+            BEGIN SELECT RAISE(ABORT, 'rejected by test'); END
+            """);
+        var orderId = new OrderId(501);
+
+        await using var sp = BuildProvider(await fx.ConnectAsync());
+        var store = StoreFrom(sp);
+        var saga = await store.LoadOrCreateAsync(orderId, default);
+        saga.Fsm.TryFire(OrderFulfillmentSagaFsm.Trigger.OrderPlaced);
+        saga.ReserveStock(new OrderPlaced(orderId, 1m));
+
+        var ex = await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(
+            async () => await store.SaveAsync(orderId, saga, default).ConfigureAwait(false));
+
+        Assert.Contains("rejected by test", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(0, await CountRowsAsync(fx));
+    }
+
+    [Fact]
+    public async Task A_Fault_On_Insert_Is_Not_Retried_By_The_Handler()
+    {
+        // Through the generated handler: the fault escapes on the first attempt instead of
+        // surfacing as SagaConcurrencyException after every retry.
+        await using var fx = new SqliteFixture();
+        await fx.MigrateAsync();
+        await ExecuteAsync(fx, """
+            CREATE TRIGGER RejectSagaInsert BEFORE INSERT ON SagaInstance
+            BEGIN SELECT RAISE(ABORT, 'rejected by test'); END
+            """);
+
+        var services = new ServiceCollection();
+        services.AddMediator();
+        services.AddLogging();
+        services.AddTransient<ReserveStockHandler>();
+        services.AddSingleton(await fx.ConnectAsync());
+        services.AddSaga()
+            .WithOrmStore(opts =>
+            {
+                opts.MaxRetryAttempts = 3;
+                opts.RetryBaseDelay = TimeSpan.FromMilliseconds(1);
+                opts.UseExponentialBackoff = false;
+            })
+            .WithOrderFulfillmentSaga();
+        await using var sp = services.BuildServiceProvider();
+        using var scope = sp.CreateScope();
+        var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+
+        await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(
+            async () => await mediator.Publish(new OrderPlaced(new OrderId(502), 1m), default).ConfigureAwait(false));
+    }
+
+    [Fact]
     public void Configuring_A_Second_Durable_Store_Is_Rejected()
     {
         var services = new ServiceCollection();
@@ -399,6 +460,20 @@ public sealed class StoreTests
         var builder = services.AddSaga().WithOrmStore();
 
         Assert.Throws<InvalidOperationException>(() => builder.WithOrmStore());
+    }
+
+    private static async Task ExecuteAsync(SqliteFixture fx, string sql)
+    {
+        var connection = await fx.ConnectAsync().ConfigureAwait(false);
+        await using (connection.ConfigureAwait(false))
+        {
+            var cmd = connection.CreateCommand();
+            await using (cmd.ConfigureAwait(false))
+            {
+                cmd.CommandText = sql;
+                await cmd.ExecuteNonQueryAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+        }
     }
 
     private static async Task<long> CountRowsAsync(SqliteFixture fx)

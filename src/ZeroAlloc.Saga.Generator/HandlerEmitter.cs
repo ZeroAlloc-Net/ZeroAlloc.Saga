@@ -14,17 +14,15 @@ namespace ZeroAlloc.Saga.Generator;
 /// </summary>
 /// <remarks>
 /// Each emitted handler wraps the load/fire/dispatch/save flow in an OCC
-/// retry loop. The catch block matches <c>DbUpdateException</c> AND
-/// <c>DbUpdateConcurrencyException</c> by string-name
-/// (<c>ex.GetType().FullName == ...</c>) so the generator output never
-/// references <c>Microsoft.EntityFrameworkCore</c> — InMemory users compile
-/// cleanly without the EF Core package, and the catch is dormant for them
-/// because <see cref="ZeroAlloc.Saga.InMemorySagaStore{TSaga,TKey}"/> never
-/// throws those exceptions. Both base (<c>DbUpdateException</c>, raised on
-/// unique-constraint INSERT races) and derived
-/// (<c>DbUpdateConcurrencyException</c>, raised on row-version OCC
-/// conflicts) are handled by the same retry path so a fresh-key INSERT
-/// race between two processes is recovered just like an UPDATE OCC clash.
+/// retry loop. The catch block matches any exception implementing
+/// <c>ISagaConcurrencyConflict</c>, so the generator output never references
+/// a backend's types — InMemory users compile cleanly without the EF Core
+/// package, and the catch is dormant for them because
+/// <see cref="ZeroAlloc.Saga.InMemorySagaStore{TSaga,TKey}"/> never throws
+/// one. Each durable store raises it for a stale update or delete and for an
+/// INSERT that lost the race to another writer, so a fresh-key INSERT race
+/// between two processes is recovered just like an UPDATE OCC clash. Any
+/// other store failure is a fault and escapes the loop unchanged.
 /// The retry budget is read from
 /// <see cref="ZeroAlloc.Saga.SagaRetryOptions"/>, registered with
 /// defaults by <c>AddSaga()</c> and overridden by
@@ -81,7 +79,7 @@ internal static class HandlerEmitter
         sb.AppendLine("{");
         sb.AppendLine("    // Scope-per-attempt: ISagaStore<TSaga,TKey> and ISagaCommandDispatcher");
         sb.AppendLine("    // are resolved from a fresh IServiceScope inside the retry loop. On a");
-        sb.AppendLine("    // DbUpdateException / DbUpdateConcurrencyException catch, the scope's");
+        sb.AppendLine("    // store's concurrency conflict, the scope's");
         sb.AppendLine("    // DbContext (and any tracked outbox row added by OutboxSagaCommandDispatcher)");
         sb.AppendLine("    // is disposed before the next attempt — so a retry that eventually succeeds");
         sb.AppendLine("    // commits exactly ONE outbox row (the winning attempt's). The lock manager,");
@@ -136,12 +134,10 @@ internal static class HandlerEmitter
         }
         sb.AppendLine("                return;");
         sb.AppendLine("            }");
-        // String-based type-name catch avoids referencing Microsoft.EntityFrameworkCore
-        // from generator output; InMemory users get a dormant catch (their store
-        // never raises those exceptions). Both DbUpdateException (e.g. a
-        // unique-constraint INSERT race when two processes both create a fresh
-        // saga row) and DbUpdateConcurrencyException (UPDATE OCC clash) are
-        // recovered by the same retry path.
+        // The marker-interface catch avoids referencing any backend's types from
+        // generator output; InMemory users get a dormant catch (their store
+        // never raises a conflict). A lost INSERT race and an UPDATE OCC clash
+        // are recovered by the same retry path; other store failures escape.
         sb.AppendLine("            catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsBackendConflict(ex))");
         sb.AppendLine("            {");
         sb.AppendLine("                attempts++;");
@@ -272,7 +268,7 @@ internal static class HandlerEmitter
         sb.AppendLine("                await store.RemoveAsync(key, ct).ConfigureAwait(false);");
         sb.AppendLine("                return;");
         sb.AppendLine("            }");
-        // Note: if RemoveAsync throws DbUpdateConcurrencyException (third-party
+        // Note: if RemoveAsync raises a concurrency conflict (third-party
         // deleted/updated row mid-compensation), the retry loop re-enters the
         // try block. On retry, TryLoadAsync may return null (just-deleted), and
         // the handler returns silently. However, the compensation commands have

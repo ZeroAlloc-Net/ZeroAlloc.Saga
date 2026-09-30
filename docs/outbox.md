@@ -61,8 +61,8 @@ With the outbox bridge:
    the entry with exponential backoff, or dead-letters it after `OutboxOptions.MaxAttempts`
    attempts.
 
-When `SaveChangesAsync` raises `DbUpdateConcurrencyException` (or
-`DbUpdateException` for fresh-key INSERT races), the failing attempt's
+When the save raises a concurrency conflict, for a stale `RowVersion` or
+for a fresh-key INSERT that lost the race to another writer's row, the failing attempt's
 `IServiceScope` is disposed by the generated handler — its tracked
 outbox row goes away with the rolled-back saga update. The handler
 then retries in a fresh scope with a fresh `DbContext`. A retry that

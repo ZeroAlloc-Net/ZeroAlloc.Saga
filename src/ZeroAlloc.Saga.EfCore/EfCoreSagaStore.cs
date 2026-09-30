@@ -133,7 +133,8 @@ public sealed class EfCoreSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
                 RowVersion = Guid.NewGuid().ToByteArray(),
             });
             // A row another writer inserts before this commit collides on the
-            // key, and CommitAsync reports that as a conflict.
+            // key, and CommitAsync reports that as a conflict once it has read
+            // their row.
             _log.LogDebug("Inserting new saga row {SagaType}/{Key}", s_sagaTypeKey, key);
         }
         else
@@ -150,7 +151,7 @@ public sealed class EfCoreSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
             _log.LogDebug("Updating saga row {SagaType}/{Key}", s_sagaTypeKey, key);
         }
 
-        await CommitAsync(key, ct).ConfigureAwait(false);
+        await CommitAsync(key, inserting: entity is null, ct).ConfigureAwait(false);
         // The row is this scope's own now, tracked with its RowVersion.
         _loadedAbsent.Remove(key);
     }
@@ -186,7 +187,7 @@ public sealed class EfCoreSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
             _log.LogDebug("No saga row to remove for {SagaType}/{Key}", s_sagaTypeKey, key);
         }
 
-        await CommitAsync(key, ct).ConfigureAwait(false);
+        await CommitAsync(key, inserting: false, ct).ConfigureAwait(false);
         // Gone as of this commit, which is an observation too.
         _loadedAbsent.Add(key);
     }
@@ -219,13 +220,20 @@ public sealed class EfCoreSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
     /// <see cref="RemoveAsync"/> end in it unconditionally, so no path through
     /// either can drop work enlisted in the scoped <see cref="DbContext"/>.
     /// </summary>
-    private async Task CommitAsync(TKey key, CancellationToken ct)
+    /// <remarks>
+    /// A <see cref="DbUpdateConcurrencyException"/>, an update or delete that matched no row
+    /// version, is always a conflict. Any other <see cref="DbUpdateException"/> is a conflict only
+    /// when this commit inserted the saga row and another writer's row exists now: the insert lost
+    /// the race. Otherwise it is a fault, such as a constraint the row breaks, and propagates
+    /// unchanged rather than being retried and reported as contention.
+    /// </remarks>
+    private async Task CommitAsync(TKey key, bool inserting, CancellationToken ct)
     {
         try
         {
             await _context.SaveChangesAsync(ct).ConfigureAwait(false);
         }
-        catch (DbUpdateException ex) when (ex is not EfCoreSagaConcurrencyException)
+        catch (DbUpdateConcurrencyException ex) when (ex is not EfCoreSagaConcurrencyException)
         {
             // Re-thrown as a type implementing ISagaConcurrencyConflict so the
             // generator-emitted retry loop recognises it without EF Core's type
@@ -233,6 +241,39 @@ public sealed class EfCoreSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
             // DbUpdateConcurrencyException, so callers already catching that — or
             // DbUpdateException — are unaffected.
             throw new EfCoreSagaConcurrencyException(s_sagaTypeKey, key.ToString() ?? string.Empty, ex);
+        }
+        catch (DbUpdateException ex) when (inserting && ex is not DbUpdateConcurrencyException)
+        {
+            // SaveChangesAsync has rolled back its own transaction, so the read
+            // sees only committed rows. Provider-agnostic: no error codes, only
+            // whether another writer's row is there now.
+            if (await RowExistsAfterFailedInsertAsync(key, ex, ct).ConfigureAwait(false))
+                throw new EfCoreSagaConcurrencyException(s_sagaTypeKey, key.ToString() ?? string.Empty, ex);
+
+            throw;
+        }
+    }
+
+    // Queries past the change tracker, which still holds this scope's own
+    // unsaved insert for the key. A read that fails itself is logged, and the
+    // commit's own exception propagates.
+    private async Task<bool> RowExistsAfterFailedInsertAsync(TKey key, DbUpdateException commitFailure, CancellationToken ct)
+    {
+        var keyStr = key.ToString() ?? string.Empty;
+        try
+        {
+            return await _context.Set<SagaInstanceEntity>()
+                .AsNoTracking()
+                .AnyAsync(e => e.SagaType == s_sagaTypeKey && e.CorrelationKey == keyStr, ct)
+                .ConfigureAwait(false);
+        }
+        catch (Exception readFailure) when (readFailure is not OperationCanceledException)
+        {
+            _log.LogWarning(
+                readFailure,
+                "Checking for a concurrent saga row {SagaType}/{Key} after a failed insert failed; reporting the commit's {Cause}",
+                s_sagaTypeKey, keyStr, commitFailure.GetType().Name);
+            return false;
         }
     }
 
