@@ -18,9 +18,18 @@ namespace ZeroAlloc.Saga.Outbox.Orm.Tests;
 /// </summary>
 public sealed class MigrationTests : IAsyncLifetime
 {
-    // Must match docs/outbox.md. OutboxOrmMigrations has no fixed name yet, so this is the
-    // ORM's default for its source type, ZeroAlloc-Net/ZeroAlloc.Outbox#261.
-    private const string OutboxSourceName = "ZeroAlloc.Outbox.Orm.OutboxOrmMigrations+Source";
+    // Must match docs/outbox.md: the fixed name ZeroAlloc.Outbox records since 4.2.0, #229.
+    private const string OutboxSourceName = "ZeroAlloc.Outbox.Orm";
+
+    // What ZeroAlloc.Outbox 4.1 and earlier recorded on ZeroAlloc.ORM 2.2: the ORM's default name.
+    private const string DefaultOutboxSourceName = "ZeroAlloc.Outbox.Orm.OutboxOrmMigrations+Source";
+
+    // The one-line move docs/outbox.md gives for that, from ZeroAlloc.Outbox's store adapter guide.
+    private const string MoveDefaultOutboxNameSql = """
+        UPDATE __zaorm_migrations
+        SET source = 'ZeroAlloc.Outbox.Orm'
+        WHERE source = 'ZeroAlloc.Outbox.Orm.OutboxOrmMigrations+Source';
+        """;
 
     // The SQLite reassignment docs/outbox.md gives, verbatim.
     private const string ReassignOffsetHistorySql = """
@@ -29,7 +38,7 @@ public sealed class MigrationTests : IAsyncLifetime
         CREATE TABLE __zaorm_migrations (source TEXT NOT NULL, version INTEGER NOT NULL,
           name TEXT NOT NULL, applied_at TEXT NOT NULL, PRIMARY KEY (source, version));
         INSERT INTO __zaorm_migrations (source, version, name, applied_at)
-          SELECT CASE WHEN version >= 1000 THEN 'ZeroAlloc.Outbox.Orm.OutboxOrmMigrations+Source'
+          SELECT CASE WHEN version >= 1000 THEN 'ZeroAlloc.Outbox.Orm'
                       ELSE 'ZeroAlloc.Saga.Orm' END,
                  CASE WHEN version >= 1000 THEN version - 1000 ELSE version END,
                  name, applied_at
@@ -46,15 +55,15 @@ public sealed class MigrationTests : IAsyncLifetime
 
     private static readonly string[] ScopedHistory =
     [
-        "ZeroAlloc.Outbox.Orm.OutboxOrmMigrations+Source/1/create_outbox_messages",
-        "ZeroAlloc.Outbox.Orm.OutboxOrmMigrations+Source/2/add_outbox_lease",
+        "ZeroAlloc.Outbox.Orm/1/create_outbox_messages",
+        "ZeroAlloc.Outbox.Orm/2/add_outbox_lease",
         "ZeroAlloc.Saga.Orm/1/create_saga_instance",
     ];
 
     [Fact]
     public void The_Documented_Outbox_Source_Name_Is_The_One_The_Runner_Records()
     {
-        // When ZeroAlloc.Outbox fixes its name, this fails and docs/outbox.md needs the new one.
+        // If ZeroAlloc.Outbox ever changes it, this fails and docs/outbox.md needs the new one.
         Assert.Equal(OutboxSourceName, OutboxOrmMigrations.Sqlite.Name);
         Assert.Equal("ZeroAlloc.Saga.Orm", SagaOrmMigrations.Sqlite.Name);
     }
@@ -139,6 +148,22 @@ public sealed class MigrationTests : IAsyncLifetime
         Assert.Empty(await RunAsync(SagaOrmMigrations.Sqlite));
         Assert.Equal(2, (await RunAsync(OutboxOrmMigrations.Sqlite)).Count);
 
+        Assert.Equal(ScopedHistory, await _fx.HistoryAsync());
+    }
+
+    [Fact]
+    public async Task A_Database_That_Recorded_The_Default_Outbox_Name_Applies_Nothing_Again_After_The_Documented_Update()
+    {
+        // Migrated with ZeroAlloc.Outbox 4.1 on ZeroAlloc.ORM 2.2: the outbox rows sit under the
+        // ORM's default name. Simulated by recording the fixed-name run under the default.
+        await _fx.MigrateAsync();
+        await _fx.ExecuteAsync(
+            $"UPDATE __zaorm_migrations SET source = '{DefaultOutboxSourceName}' WHERE source = '{OutboxSourceName}'");
+
+        await _fx.ExecuteAsync(MoveDefaultOutboxNameSql);
+
+        Assert.Empty(await RunAsync(OutboxOrmMigrations.Sqlite));
+        Assert.Empty(await RunAsync(SagaOrmMigrations.Sqlite));
         Assert.Equal(ScopedHistory, await _fx.HistoryAsync());
     }
 

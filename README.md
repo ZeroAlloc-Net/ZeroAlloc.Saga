@@ -94,7 +94,7 @@ services.AddSaga()
     .WithOrderFulfillmentSaga();
 ```
 
-Requires ZeroAlloc.Outbox 4.1.0 or later. See
+Requires ZeroAlloc.Outbox 4.2.0 or later. See
 [`docs/outbox.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox.md#zeroallocsagaorm-atomic-with-withormoutbox).
 
 ### `ZeroAlloc.Saga.Outbox.Redis` (new package — closes Phase 3a-2)
@@ -199,7 +199,7 @@ services.AddSaga()
     .WithOrderFulfillmentSaga();
 ```
 
-Requires `ZeroAlloc.Outbox` 4.1.0+ and `ZeroAlloc.Serialisation` 2.1.0+. EF Core users also need
+Requires `ZeroAlloc.Outbox` 4.2.0+ and `ZeroAlloc.Serialisation` 2.5.0+. EF Core users also need
 the matching 4.x `ZeroAlloc.Outbox.EfCore`; Saga's floor on `ZeroAlloc.Outbox` does not raise it.
 See [`docs/outbox.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox.md) for the full setup, the
 `ISerializer<T>` each step command needs, `ZASAGA017`, and dispatch options. Upgrading from 3.x: see

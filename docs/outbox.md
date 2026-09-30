@@ -19,8 +19,8 @@ saga store from `WithOrmOutbox()` in `ZeroAlloc.Saga.Outbox.Orm`, see
 
 [outbox]: https://microservices.io/patterns/data/transactional-outbox.html
 
-> **Status:** `ZeroAlloc.Saga.Outbox` requires `ZeroAlloc.Outbox` 4.1.0 or later and
-> `ZeroAlloc.Serialisation` 2.1.0 or later. Use the matching 4.x adapter package too, such as
+> **Status:** `ZeroAlloc.Saga.Outbox` requires `ZeroAlloc.Outbox` 4.2.0 or later and
+> `ZeroAlloc.Serialisation` 2.5.0 or later, the floor ZeroAlloc.Outbox 4.2.0 itself requires. Use the matching 4.x adapter package too, such as
 > `ZeroAlloc.Outbox.EfCore` or `ZeroAlloc.Outbox.Orm`; Saga's floor on `ZeroAlloc.Outbox` does
 > not raise it. ZeroAlloc.Outbox 4.0 hosts one outbox store per container, so registering a
 > second, different store now throws at registration; see its
@@ -473,10 +473,21 @@ is upgraded in place by the first run on 2.2, and its rows are assigned to the s
 Run the saga runner first there, then add the outbox runner: the outbox source would be refused,
 because the table holds a row that is not one of its migrations.
 
-`OutboxOrmMigrations` does not have a fixed name yet, so the runner records the ORM's default
-for it, `ZeroAlloc.Outbox.Orm.OutboxOrmMigrations+Source`. Fixing that is
-[ZeroAlloc.Outbox#261](https://github.com/ZeroAlloc-Net/ZeroAlloc.Outbox/issues/261); check its
-release notes for how to move to the fixed name when you upgrade ZeroAlloc.Outbox.Orm.
+The outbox source is named `ZeroAlloc.Outbox.Orm` since ZeroAlloc.Outbox 4.2.0, which Saga
+requires. ZeroAlloc.Outbox 4.1 and earlier had no fixed name, so a database they migrated on
+ZeroAlloc.ORM 2.2 recorded the outbox under the ORM's default, `ZeroAlloc.Outbox.Orm.OutboxOrmMigrations+Source`.
+Move those rows to the fixed name once, before the first run on the new version, with the
+one-line `UPDATE` in ZeroAlloc.Outbox's
+[store adapter guide](https://github.com/ZeroAlloc-Net/ZeroAlloc.Outbox/blob/main/docs/store-adapters.md#several-sources-in-one-database):
+
+```sql
+UPDATE __zaorm_migrations
+SET source = 'ZeroAlloc.Outbox.Orm'
+WHERE source = 'ZeroAlloc.Outbox.Orm.OutboxOrmMigrations+Source';
+```
+
+Without it the outbox runner finds none of its versions applied under the fixed name and applies
+them again; on SQLite its second migration then fails with a duplicate column error.
 
 #### If you used a version offset before
 
@@ -502,7 +513,7 @@ these before your first migration run on ZeroAlloc.ORM 2.2:
   CREATE TABLE __zaorm_migrations (source TEXT NOT NULL, version INTEGER NOT NULL,
     name TEXT NOT NULL, applied_at TEXT NOT NULL, PRIMARY KEY (source, version));
   INSERT INTO __zaorm_migrations (source, version, name, applied_at)
-    SELECT CASE WHEN version >= 1000 THEN 'ZeroAlloc.Outbox.Orm.OutboxOrmMigrations+Source'
+    SELECT CASE WHEN version >= 1000 THEN 'ZeroAlloc.Outbox.Orm'
                 ELSE 'ZeroAlloc.Saga.Orm' END,
            CASE WHEN version >= 1000 THEN version - 1000 ELSE version END,
            name, applied_at

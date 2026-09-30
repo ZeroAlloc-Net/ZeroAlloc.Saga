@@ -14,9 +14,10 @@
     <ProjectReference Include="..\ZeroAlloc.Saga\ZeroAlloc.Saga.csproj" />
     <ProjectReference Include="..\ZeroAlloc.Saga.Orm\ZeroAlloc.Saga.Orm.csproj" />
     <ProjectReference Include="..\ZeroAlloc.Saga.Outbox\ZeroAlloc.Saga.Outbox.csproj" />
-    <!-- 4.1.0 is the floor: it adds OrmOutboxStore.EnqueueInTransactionAsync, which takes the
-         saga store's IAsyncDbTransaction. The version itself is central, in
-         Directory.Packages.props. -->
+    <!-- 4.2.0 is the floor. 4.1.0 added OrmOutboxStore.EnqueueInTransactionAsync, which takes the
+         saga store's IAsyncDbTransaction, and 4.2.0 records the outbox migrations under the fixed
+         source name ZeroAlloc.Outbox.Orm, which docs/outbox.md tells users to run next to the
+         saga schema. The version itself is central, in Directory.Packages.props. -->
     <PackageReference Include="ZeroAlloc.Outbox.Orm" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
