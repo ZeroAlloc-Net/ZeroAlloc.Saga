@@ -96,6 +96,13 @@ containing types joined by `+`, each with its generic arity, for example
 different namespaces therefore get their own files. File names are not a contract and may
 change between releases.
 
+Inside those files, an event's handler class is `<Saga>_<Event>_Handler` and its FSM trigger is
+`Trigger.<Event>`, where `<Event>` is the event's simple name, such as `OrderPlaced`. When two
+events of one saga have the same simple name, such as `Warehouse.Placed` and `Billing.Placed`,
+both use their full name with each `.` replaced by `_` instead: `OrderSaga_Warehouse_Placed_Handler`
+and `Trigger.Warehouse_Placed`. Each event then keeps its own handler and trigger. The handler
+class name appears as the logger category in log output.
+
 ## Sagas in more than one assembly
 
 Sagas can live in several projects of one application: for example `Billing` declares

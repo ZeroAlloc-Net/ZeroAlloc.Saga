@@ -104,8 +104,8 @@ public class HintNameTests
     [Fact]
     public void SameNamedEvents_InDifferentNamespaces_GetDistinctHandlerHintNames()
     {
-        // Only the hint names are checked here: two events with one simple name also share a
-        // handler class name and an FSM trigger, which is tracked in #216.
+        // Only the hint names are checked here. SnapshotTests.SameNamedEvents_InOneSaga covers
+        // the handler class names and FSM triggers of such events, #216.
         var src = Header + """
 
             namespace A { public sealed record Placed(int Id) : INotification; }

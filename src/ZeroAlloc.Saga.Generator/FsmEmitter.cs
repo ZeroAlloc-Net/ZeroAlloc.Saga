@@ -37,12 +37,12 @@ internal static class FsmEmitter
         var seenTriggers = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal);
         foreach (var step in model.Steps)
         {
-            var n = NameUtil.SimpleName(step.EventTypeFqn);
+            var n = NameUtil.EventName(model, step.EventTypeFqn);
             if (seenTriggers.Add(n)) triggerNames.Add(n);
         }
         foreach (var compFqn in model.CompensateOnEventFqns)
         {
-            var n = NameUtil.SimpleName(compFqn);
+            var n = NameUtil.EventName(model, compFqn);
             if (seenTriggers.Add(n)) triggerNames.Add(n);
         }
         if (seenTriggers.Add("Complete")) triggerNames.Add("Complete");
@@ -68,7 +68,7 @@ internal static class FsmEmitter
             var step = model.Steps[i];
             var fromState = i == 0 ? "State.NotStarted" : $"State.Step{i}";
             var toState = $"State.Step{i + 1}";
-            var trigger = $"Trigger.{NameUtil.SimpleName(step.EventTypeFqn)}";
+            var trigger = $"Trigger.{NameUtil.EventName(model, step.EventTypeFqn)}";
             sb.Append("            (").Append(fromState).Append(", ").Append(trigger).Append(") => (State?)").Append(toState).AppendLine(",");
         }
 
@@ -81,7 +81,7 @@ internal static class FsmEmitter
             var step = model.Steps[i];
             if (step.CompensateOnEventTypeFqn is null) continue;
             var fromState = $"State.Step{i + 1}";
-            var trigger = $"Trigger.{NameUtil.SimpleName(step.CompensateOnEventTypeFqn)}";
+            var trigger = $"Trigger.{NameUtil.EventName(model, step.CompensateOnEventTypeFqn)}";
             sb.Append("            (").Append(fromState).Append(", ").Append(trigger).AppendLine(") => (State?)State.Compensating,");
         }
 
