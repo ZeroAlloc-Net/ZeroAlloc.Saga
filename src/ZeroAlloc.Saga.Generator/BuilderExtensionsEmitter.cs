@@ -124,7 +124,7 @@ internal static class BuilderExtensionsEmitter
         }
         sb.AppendLine("            default: break;");
         sb.AppendLine("        }");
-        sb.Append("        saga.Fsm.TryFire(").Append(model.ClassName).AppendLine("Fsm.Trigger.CompensateDone);");
+        sb.Append("        saga.Fsm.TryFire(").Append(model.ClassName).Append("Fsm.Trigger.").Append(FsmTriggers.CompensateDone).AppendLine(");");
         sb.AppendLine("    }");
         sb.AppendLine("}");
 

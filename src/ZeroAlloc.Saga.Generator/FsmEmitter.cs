@@ -45,8 +45,9 @@ internal static class FsmEmitter
             var n = NameUtil.EventName(model, compFqn);
             if (seenTriggers.Add(n)) triggerNames.Add(n);
         }
-        if (seenTriggers.Add("Complete")) triggerNames.Add("Complete");
-        if (seenTriggers.Add("CompensateDone")) triggerNames.Add("CompensateDone");
+        // NameUtil.EventName never gives an event a built-in trigger's name, so these are new.
+        triggerNames.Add(FsmTriggers.Complete);
+        triggerNames.Add(FsmTriggers.CompensateDone);
 
         sb.Append("    public enum Trigger { ").Append(string.Join(", ", triggerNames)).AppendLine(" }");
         sb.AppendLine();
@@ -73,7 +74,7 @@ internal static class FsmEmitter
         }
 
         // Final-step → Completed on Trigger.Complete
-        sb.Append("            (State.Step").Append(model.Steps.Count).AppendLine(", Trigger.Complete) => (State?)State.Completed,");
+        sb.Append("            (State.Step").Append(model.Steps.Count).Append(", Trigger.").Append(FsmTriggers.Complete).AppendLine(") => (State?)State.Completed,");
 
         // Compensation entry: any forward state → Compensating on its CompensateOn trigger.
         for (int i = 0; i < model.Steps.Count; i++)
@@ -86,7 +87,7 @@ internal static class FsmEmitter
         }
 
         // Compensating → Compensated on Trigger.CompensateDone
-        sb.AppendLine("            (State.Compensating, Trigger.CompensateDone) => (State?)State.Compensated,");
+        sb.Append("            (State.Compensating, Trigger.").Append(FsmTriggers.CompensateDone).AppendLine(") => (State?)State.Compensated,");
         sb.AppendLine("            _ => (State?)null");
         sb.AppendLine("        };");
         sb.AppendLine();

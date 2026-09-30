@@ -127,7 +127,7 @@ internal static class HandlerEmitter
         sb.AppendLine();
         if (isLastStep)
         {
-            sb.Append("                saga.Fsm.TryFire(").Append(fsmType).AppendLine(".Trigger.Complete);");
+            sb.Append("                saga.Fsm.TryFire(").Append(fsmType).Append(".Trigger.").Append(FsmTriggers.Complete).AppendLine(");");
             sb.AppendLine("                await store.RemoveAsync(key, ct).ConfigureAwait(false);");
         }
         else
@@ -268,7 +268,7 @@ internal static class HandlerEmitter
         sb.AppendLine("                    default: break;");
         sb.AppendLine("                }");
         sb.AppendLine();
-        sb.Append("                saga.Fsm.TryFire(").Append(fsmType).AppendLine(".Trigger.CompensateDone);");
+        sb.Append("                saga.Fsm.TryFire(").Append(fsmType).Append(".Trigger.").Append(FsmTriggers.CompensateDone).AppendLine(");");
         sb.AppendLine("                await store.RemoveAsync(key, ct).ConfigureAwait(false);");
         sb.AppendLine("                return;");
         sb.AppendLine("            }");
