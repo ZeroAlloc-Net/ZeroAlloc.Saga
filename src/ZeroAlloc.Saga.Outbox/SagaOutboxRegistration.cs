@@ -22,6 +22,7 @@ internal sealed class SagaOutboxRegistration
     private readonly Dictionary<string, SagaCommandSource> _sourceByTypeName = new(StringComparer.Ordinal);
     private readonly List<string> _typeNames = [];
     private readonly List<string> _assembliesWithoutSerialisation = [];
+    private readonly List<SagaCommandSource> _serializingSources = [];
 
     /// <summary>The saga command type names, as <c>Type.FullName</c>.</summary>
     public IReadOnlyList<string> TypeNames => _typeNames;
@@ -34,6 +35,12 @@ internal sealed class SagaOutboxRegistration
     /// outbox, because the assembly does not reference ZeroAlloc.Serialisation.
     /// </summary>
     public IReadOnlyList<string> AssembliesWithoutSerialisation => _assembliesWithoutSerialisation;
+
+    /// <summary>
+    /// The sources whose commands the outbox dispatches, for the check that each command type has
+    /// an <c>ISerializer&lt;T&gt;</c>.
+    /// </summary>
+    public IReadOnlyList<SagaCommandSource> SerializingSources => _serializingSources;
 
     /// <summary>
     /// Records <paramref name="source"/> and returns the type names to register an outbox
@@ -49,6 +56,7 @@ internal sealed class SagaOutboxRegistration
             return [];
         }
 
+        _serializingSources.Add(source);
         var added = new List<string>(source.CommandTypes.Count);
         foreach (var type in source.CommandTypes)
         {

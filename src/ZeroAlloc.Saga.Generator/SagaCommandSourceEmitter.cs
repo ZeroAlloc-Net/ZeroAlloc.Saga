@@ -72,6 +72,20 @@ internal static class SagaCommandSourceEmitter
             sb.AppendLine("        IServiceProvider services,");
             sb.AppendLine("        CancellationToken ct)");
             sb.AppendLine("        => SagaCommandRegistry.DispatchAsync(typeName, payload, services, services.GetRequiredService<IMediator>(), ct);");
+            sb.AppendLine();
+            // One closed-generic lookup per command type, so the check needs no MakeGenericType
+            // and stays AOT-safe.
+            sb.AppendLine("    public override IReadOnlyList<Type> GetCommandTypesWithoutSerializer(IServiceProvider services)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        List<Type>? missing = null;");
+            foreach (var commandType in commandTypes)
+            {
+                var typeExpr = TypeNameHelper.GlobalQualified(commandType.Fqn);
+                sb.Append("        if (services.GetService<global::ZeroAlloc.Serialisation.ISerializer<").Append(typeExpr).AppendLine(">>() is null)");
+                sb.Append("            (missing ??= new List<Type>()).Add(typeof(").Append(typeExpr).AppendLine("));");
+            }
+            sb.AppendLine("        return (IReadOnlyList<Type>?)missing ?? Array.Empty<Type>();");
+            sb.AppendLine("    }");
         }
         sb.AppendLine("}");
 

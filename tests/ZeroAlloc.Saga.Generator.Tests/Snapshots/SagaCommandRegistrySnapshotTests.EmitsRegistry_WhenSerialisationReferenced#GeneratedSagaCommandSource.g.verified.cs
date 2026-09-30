@@ -43,4 +43,14 @@ internal sealed class GeneratedSagaCommandSource : SagaCommandSource
         IServiceProvider services,
         CancellationToken ct)
         => SagaCommandRegistry.DispatchAsync(typeName, payload, services, services.GetRequiredService<IMediator>(), ct);
+
+    public override IReadOnlyList<Type> GetCommandTypesWithoutSerializer(IServiceProvider services)
+    {
+        List<Type>? missing = null;
+        if (services.GetService<global::ZeroAlloc.Serialisation.ISerializer<global::Sample.ChargeCmd>>() is null)
+            (missing ??= new List<Type>()).Add(typeof(global::Sample.ChargeCmd));
+        if (services.GetService<global::ZeroAlloc.Serialisation.ISerializer<global::Sample.ReserveCmd>>() is null)
+            (missing ??= new List<Type>()).Add(typeof(global::Sample.ReserveCmd));
+        return (IReadOnlyList<Type>?)missing ?? Array.Empty<Type>();
+    }
 }

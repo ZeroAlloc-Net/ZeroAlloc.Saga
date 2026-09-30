@@ -1,1 +1,2 @@
 #nullable enable
+virtual ZeroAlloc.Saga.SagaCommandSource.GetCommandTypesWithoutSerializer(System.IServiceProvider! services) -> System.Collections.Generic.IReadOnlyList<System.Type!>!

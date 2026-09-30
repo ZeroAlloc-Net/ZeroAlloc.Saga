@@ -46,6 +46,21 @@ public abstract class SagaCommandSource
     public virtual bool CanDispatchSerialized => false;
 
     /// <summary>
+    /// The command types in <see cref="CommandTypes"/> that have no <c>ISerializer&lt;T&gt;</c>
+    /// registered in <paramref name="services"/>. <c>ZeroAlloc.Saga.Outbox</c>'s startup check calls
+    /// it, so the host fails to start rather than failing at a command's first dispatch. The
+    /// generator implements it, with no reflection, when the assembly references
+    /// <c>ZeroAlloc.Serialisation</c>.
+    /// </summary>
+    /// <remarks>
+    /// The default returns no types, because a source that does not implement it cannot say which
+    /// serializers it needs. A source emitted by an older Saga generator is therefore not checked.
+    /// </remarks>
+    /// <param name="services">The scoped service provider to resolve the serializers from.</param>
+    public virtual IReadOnlyList<Type> GetCommandTypesWithoutSerializer(IServiceProvider services)
+        => Array.Empty<Type>();
+
+    /// <summary>
     /// Creates the dispatcher that sends this source's commands through the assembly's own
     /// <c>IMediator</c>. The default <see cref="ISagaCommandDispatcher"/> calls it at most once per
     /// scope, with that scope's provider.
