@@ -421,4 +421,48 @@ public class SnapshotTests
             """;
         GeneratorSnapshot.Verify(GeneratorTestHost.Run(src));
     }
+
+    [Fact]
+    public void ReservedTriggerNames_InOneSaga()
+    {
+        // Complete and CompensateDone are the FSM's built-in triggers, so events with those
+        // simple names get qualified handler and trigger names. The Complete event is in the
+        // global namespace, so its name gets a global_ prefix. Paid keeps its simple name, #219.
+        var src = """
+            using System;
+            using ZeroAlloc.Mediator;
+            using ZeroAlloc.Saga;
+
+            public sealed record Complete(int Id) : INotification;
+
+            namespace App
+            {
+                public sealed record CompensateDone(int Id) : INotification;
+                public sealed record Paid(int Id) : INotification;
+
+                public sealed record Step1(int Id) : IRequest;
+                public sealed record Step2(int Id) : IRequest;
+                public sealed record Undo1(int Id) : IRequest;
+
+                [Saga]
+                public partial class OrderSaga
+                {
+                    public int Id { get; set; }
+
+                    [CorrelationKey] public int Key(global::Complete e) => e.Id;
+                    [CorrelationKey] public int Key(CompensateDone e) => e.Id;
+                    [CorrelationKey] public int Key(Paid e) => e.Id;
+
+                    [Step(Order = 1, Compensate = nameof(Undo), CompensateOn = typeof(CompensateDone))]
+                    public Step1 First(global::Complete e) { Id = e.Id; return new(e.Id); }
+
+                    [Step(Order = 2)]
+                    public Step2 Second(Paid e) => new(Id);
+
+                    public Undo1 Undo() => new(Id);
+                }
+            }
+            """;
+        GeneratorSnapshot.Verify(GeneratorTestHost.Run(src));
+    }
 }

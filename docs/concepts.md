@@ -100,7 +100,11 @@ Inside those files, an event's handler class is `<Saga>_<Event>_Handler` and its
 `Trigger.<Event>`, where `<Event>` is the event's simple name, such as `OrderPlaced`. When two
 events of one saga have the same simple name, such as `Warehouse.Placed` and `Billing.Placed`,
 both use their full name with each `.` replaced by `_` instead: `OrderSaga_Warehouse_Placed_Handler`
-and `Trigger.Warehouse_Placed`. Each event then keeps its own handler and trigger. The handler
+and `Trigger.Warehouse_Placed`. Each event then keeps its own handler and trigger. The same
+applies to an event whose simple name is one of the FSM's built-in triggers, `Complete` and
+`CompensateDone`: `Shop.Complete` gets `OrderSaga_Shop_Complete_Handler` and
+`Trigger.Shop_Complete`, so it never completes the saga or ends a compensation. An event with such
+a name in the global namespace gets a `global_` prefix: `Trigger.global_Complete`. The handler
 class name appears as the logger category in log output.
 
 ## Sagas in more than one assembly
