@@ -15,7 +15,7 @@ internal sealed class MultiFieldOrderSaga_Started_Handler : INotificationHandler
 {
     // Scope-per-attempt: ISagaStore<TSaga,TKey> and ISagaCommandDispatcher
     // are resolved from a fresh IServiceScope inside the retry loop. On a
-    // DbUpdateException / DbUpdateConcurrencyException catch, the scope's
+    // store's concurrency conflict, the scope's
     // DbContext (and any tracked outbox row added by OutboxSagaCommandDispatcher)
     // is disposed before the next attempt — so a retry that eventually succeeds
     // commits exactly ONE outbox row (the winning attempt's). The lock manager,

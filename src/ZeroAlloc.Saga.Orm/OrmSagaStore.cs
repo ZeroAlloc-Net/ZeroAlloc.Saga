@@ -134,10 +134,17 @@ public sealed class OrmSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
     /// The write runs in a transaction on the application's connection, together with every
     /// registered <see cref="IOrmSagaTransactionContributor"/>, and commits once. A conflict or
     /// any other failure rolls the whole transaction back.
+    /// <para>
+    /// A failed insert is a conflict only when another writer's row exists after the rollback:
+    /// the insert lost the race. Otherwise the provider's exception propagates unchanged and is
+    /// not retried. On SQLite, an insert that waits out the busy timeout while another writer's
+    /// insert of the same saga is still uncommitted finds no row either, so it surfaces as that
+    /// timeout's error.
+    /// </para>
     /// </remarks>
     /// <exception cref="OrmSagaConcurrencyException">
-    /// Another writer changed the row first. The generated handler recognises
-    /// this through <see cref="ISagaConcurrencyConflict"/> and retries.
+    /// Another writer changed the row first, or created it first. The generated handler
+    /// recognises this through <see cref="ISagaConcurrencyConflict"/> and retries.
     /// </exception>
     public async ValueTask SaveAsync(TKey key, TSaga saga, CancellationToken ct)
     {
@@ -170,7 +177,23 @@ public sealed class OrmSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
                 }
                 catch (Exception ex)
                 {
+                    // Rolled back first, which PostgreSQL requires before any
+                    // further statement: a failed statement aborts the whole
+                    // transaction there.
                     await RollbackAsync(tx, ex).ConfigureAwait(false);
+
+                    // A failed insert is a conflict only when another writer has
+                    // created the row: reloading and retrying then finds theirs.
+                    // Anything else, such as a constraint the row itself breaks,
+                    // is a fault and propagates unchanged rather than being
+                    // retried and reported as contention.
+                    if (expectedRowVersion is null
+                        && ex is DbException insertFailure
+                        && await RowExistsAfterFailedInsertAsync(correlationKey, insertFailure, ct).ConfigureAwait(false))
+                    {
+                        throw new OrmSagaConcurrencyException(s_sagaTypeKey, correlationKey, insertFailure);
+                    }
+
                     throw;
                 }
             }
@@ -192,27 +215,12 @@ public sealed class OrmSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
         if (expectedRowVersion is null)
         {
             _log.LogDebug("Inserting new saga row {SagaType}/{Key}", s_sagaTypeKey, key);
-            try
-            {
-                await _repo.InsertAsync(
-                    s_sagaTypeKey, correlationKey, newState, newFsmState,
-                    newRowVersion, now, now, tx, ct).ConfigureAwait(false);
-            }
-            catch (DbException ex)
-            {
-                // Losing the insert race means another writer created this
-                // instance first. That is a conflict, not a failure: reloading
-                // and retrying will find their row. The ORM surfaces the
-                // primary-key violation as a provider-specific DbException, so
-                // every DbException from the insert is reported as a conflict,
-                // as the EF Core store does for DbUpdateException. A genuine
-                // fault then fails every retry and surfaces once they run out.
-                // The caller rolls back before the conflict escapes, which
-                // PostgreSQL requires: a failed statement aborts the whole
-                // transaction there.
-                throw new OrmSagaConcurrencyException(s_sagaTypeKey, correlationKey, ex);
-            }
-
+            // A primary-key violation from losing the insert race surfaces as
+            // a provider-specific DbException. SaveAsync tells it apart from a
+            // genuine fault by reading the row after rolling back.
+            await _repo.InsertAsync(
+                s_sagaTypeKey, correlationKey, newState, newFsmState,
+                newRowVersion, now, now, tx, ct).ConfigureAwait(false);
             return;
         }
 
@@ -331,6 +339,26 @@ public sealed class OrmSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
         }
 
         _log.LogDebug("Removing saga row {SagaType}/{Key}", s_sagaTypeKey, key);
+    }
+
+    // Reads the row outside the rolled-back transaction. Provider-agnostic: no
+    // error codes, only whether another writer's row is there now. A read that
+    // fails itself is logged, and the insert's own exception propagates.
+    private async ValueTask<bool> RowExistsAfterFailedInsertAsync(
+        string correlationKey, DbException insertFailure, CancellationToken ct)
+    {
+        try
+        {
+            return await _repo.GetAsync(s_sagaTypeKey, correlationKey, ct).ConfigureAwait(false) is not null;
+        }
+        catch (DbException readFailure)
+        {
+            _log.LogWarning(
+                readFailure,
+                "Checking for a concurrent saga row {SagaType}/{Key} after a failed insert failed; reporting the insert's {Cause}",
+                s_sagaTypeKey, correlationKey, insertFailure.GetType().Name);
+            return false;
+        }
     }
 
     // The contributors write after the saga statement has passed its

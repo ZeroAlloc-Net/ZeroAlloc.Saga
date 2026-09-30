@@ -179,6 +179,45 @@ public sealed class SqlServerE2ETests(SqlServerE2ETests.Database db) : IClassFix
         Assert.Equal(1, await CountOutboxAsync(typeof(ShipOrderCommand)));
     }
 
+    [Fact]
+    public async Task A_Failed_Insert_With_No_Competing_Row_Propagates_The_Fault_And_Commits_No_Outbox_Row()
+    {
+        // #222. A CHECK constraint rejects this one key. SQL Server leaves the transaction open
+        // after a failed statement, unlike PostgreSQL, so the store's rollback matters here too.
+        // No other writer holds the row, so the fault propagates rather than being retried as a
+        // conflict.
+        var orderId = new OrderId(9004);
+        await ExecuteAsync(
+            $"ALTER TABLE SagaInstance ADD CONSTRAINT CK_Test_Reject_9004 CHECK (CorrelationKey <> N'{orderId}')");
+        using var host = BuildHost();
+
+        using var scope = host.Services.CreateScope();
+        var store = Store(scope);
+        var saga = Started(await store.LoadOrCreateAsync(orderId, default), orderId);
+        await EnlistAsync(scope, typeof(CancelReservationCommand));
+
+        var ex = await Assert.ThrowsAsync<SqlException>(async () => await store.SaveAsync(orderId, saga, default));
+
+        Assert.Contains("CK_Test_Reject_9004", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(0, await CountAsync("SagaInstance", orderId));
+        Assert.Equal(0, await CountOutboxAsync(typeof(CancelReservationCommand)));
+    }
+
+    private async Task ExecuteAsync(string sql)
+    {
+        var connection = Connection();
+        await using (connection.ConfigureAwait(false))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            var cmd = connection.CreateCommand();
+            await using (cmd.ConfigureAwait(false))
+            {
+                cmd.CommandText = sql;
+                await cmd.ExecuteNonQueryAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+    }
+
     private static ISagaStore<OrderFulfillmentSaga, OrderId> Store(IServiceScope scope)
         => scope.ServiceProvider.GetRequiredService<ISagaStore<OrderFulfillmentSaga, OrderId>>();
 

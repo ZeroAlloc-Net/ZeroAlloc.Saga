@@ -113,7 +113,16 @@ deletes nothing and still commits what the attempt enlisted, such as its outbox 
 `RemoveAsync` deletes a loaded row against the `RowVersion` it was loaded with, so a row another
 writer changed or deleted since is a conflict as well.
 
-The generator-emitted notification handler catches that exception and
+An insert that loses the race to another writer creating the same saga fails on the primary
+key. `SaveChanges` raises a plain `DbUpdateException` for that, the same type it raises for a
+genuine fault such as a constraint the row itself breaks. The store tells the two apart without
+provider error codes: after the failed commit it reads the row. If another writer's row is there,
+it raises `EfCoreSagaConcurrencyException`. If not, the original `DbUpdateException` propagates
+unchanged and is not retried. On SQLite, an insert that waits out the busy timeout while another
+writer's insert of the same saga is still uncommitted finds no row either, and so surfaces as
+the timeout's error rather than as a conflict.
+
+The generator-emitted notification handler catches `EfCoreSagaConcurrencyException` and
 retries the entire load → step → save loop. After
 `MaxRetryAttempts` consecutive conflicts the handler gives up and
 re-throws so the failure is visible to your message-bus consumer.

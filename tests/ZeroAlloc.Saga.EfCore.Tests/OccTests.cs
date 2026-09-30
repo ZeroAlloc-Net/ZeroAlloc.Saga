@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -311,6 +312,109 @@ public sealed class OccTests
             await PublishAsync(sp, new OrderPlaced(orderId, 1m)).ConfigureAwait(false));
         Assert.Equal("OrderFulfillmentSaga", ex.SagaType);
         Assert.Equal(2, ex.Attempts);
+    }
+
+    [Fact]
+    public async Task A_Real_Insert_Race_Is_Reported_As_A_Conflict()
+    {
+        // #222. Both scopes find no row and plan an insert. The competing writer's insert commits
+        // just before this scope's SaveChanges, so its INSERT violates the key. The store reads
+        // their row after the failure and reports the conflict the retry loop acts on.
+        await using var fx = new SqliteFixture();
+        await fx.EnsureCreatedAsync();
+        var orderId = new OrderId(601);
+
+        var competitor = new CompetingInsert(fx, orderId);
+        var ctx = CreateContext(fx, competitor);
+        await using (ctx.ConfigureAwait(false))
+        {
+            var store = CreateStore(ctx);
+            var saga = Started(await store.LoadOrCreateAsync(orderId, default), orderId);
+            competitor.Armed = true;
+
+            var conflict = await Assert.ThrowsAsync<EfCoreSagaConcurrencyException>(
+                async () => await store.SaveAsync(orderId, saga, default).ConfigureAwait(false));
+
+            Assert.IsType<DbUpdateException>(conflict.InnerException, exactMatch: false);
+        }
+
+        Assert.True(competitor.Inserted);
+    }
+
+    [Fact]
+    public async Task A_Failed_Insert_With_No_Competing_Row_Propagates_The_Fault_Unchanged()
+    {
+        // #222. A constraint the row itself breaks is a fault, not contention. It used to be
+        // wrapped as a conflict, retried until the budget ran out, and reported as contention.
+        await using var fx = new SqliteFixture();
+        await fx.EnsureCreatedAsync();
+        await ExecuteAsync(fx, """
+            CREATE TRIGGER RejectSagaInsert BEFORE INSERT ON SagaInstance
+            BEGIN SELECT RAISE(ABORT, 'rejected by test'); END
+            """);
+        var orderId = new OrderId(602);
+
+        var ctx = fx.CreateContext();
+        await using (ctx.ConfigureAwait(false))
+        {
+            var store = CreateStore(ctx);
+            var saga = Started(await store.LoadOrCreateAsync(orderId, default), orderId);
+
+            var ex = await Assert.ThrowsAsync<DbUpdateException>(
+                async () => await store.SaveAsync(orderId, saga, default).ConfigureAwait(false));
+
+            Assert.IsNotAssignableFrom<ISagaConcurrencyConflict>(ex);
+            Assert.Contains("rejected by test", ex.InnerException!.Message, StringComparison.Ordinal);
+        }
+    }
+
+    private static OrderFulfillmentSaga Started(OrderFulfillmentSaga saga, OrderId orderId)
+    {
+        saga.Fsm.TryFire(OrderFulfillmentSagaFsm.Trigger.OrderPlaced);
+        saga.ReserveStock(new OrderPlaced(orderId, 1m));
+        return saga;
+    }
+
+    private static TestDbContext CreateContext(SqliteFixture fx, IInterceptor interceptor)
+        => new(new DbContextOptionsBuilder<TestDbContext>()
+            .UseSqlite(fx.Connection)
+            .AddInterceptors(interceptor)
+            .Options);
+
+    private static async Task ExecuteAsync(SqliteFixture fx, string sql)
+    {
+        var ctx = fx.CreateContext();
+        await using (ctx.ConfigureAwait(false))
+        {
+            await ctx.Database.ExecuteSqlRawAsync(sql).ConfigureAwait(false);
+        }
+    }
+
+    // Saves the same saga through a second context, once, right before the intercepted
+    // context's SaveChanges: another writer winning the insert race.
+    private sealed class CompetingInsert(SqliteFixture fx, OrderId orderId) : SaveChangesInterceptor
+    {
+        public bool Armed { get; set; }
+
+        public bool Inserted { get; private set; }
+
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (Armed && !Inserted)
+            {
+                Inserted = true;
+                var other = fx.CreateContext();
+                await using (other.ConfigureAwait(false))
+                {
+                    var store = CreateStore(other);
+                    var saga = Started(await store.LoadOrCreateAsync(orderId, default).ConfigureAwait(false), orderId);
+                    await store.SaveAsync(orderId, saga, default).ConfigureAwait(false);
+                }
+            }
+
+            return result;
+        }
     }
 
     // Goes through the real IMediator.Publish rather than resolving INotificationHandler<T>
