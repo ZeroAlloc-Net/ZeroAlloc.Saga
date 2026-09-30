@@ -25,6 +25,6 @@ internal static class PartialCompletionEmitter
         sb.Append("    public ").Append(model.ClassName).Append("Fsm Fsm { get; } = new ").Append(model.ClassName).AppendLine("Fsm();");
         sb.AppendLine("}");
 
-        spc.AddSource($"{model.ClassName}.g.cs", sb.ToString());
+        spc.AddSource($"{model.HintNameStem}.g.cs", sb.ToString());
     }
 }

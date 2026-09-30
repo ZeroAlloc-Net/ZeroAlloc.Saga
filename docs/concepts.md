@@ -69,24 +69,32 @@ For every `[Saga]` class the generator emits the files below. Once per assembly 
 `IMediator`, and `GeneratedSagaCommandSource`, which lists them; see
 [Sagas in more than one assembly](#sagas-in-more-than-one-assembly).
 
-1. **`<SagaName>Fsm.g.cs`** — a companion state machine modeling the steps as
+1. **`<Saga>.Fsm.g.cs`** — a companion state machine modeling the steps as
    FSM states (`NotStarted` → `Step1` → … → `Completed`; or `Compensating` →
    `Compensated`). Used to enforce step ordering at runtime.
-2. **`<SagaName>.g.cs`** — a tiny partial-class completion that exposes the
+2. **`<Saga>.g.cs`** — a tiny partial-class completion that exposes the
    FSM as a property on the saga instance.
-3. **`<SagaName>_<EventType>_Handler.g.cs`** — one
+3. **`<Saga>.Handler.<Event>.g.cs`** — one
    `INotificationHandler<TEvent>` per event the saga subscribes to. The
    handler acquires the per-saga lock, loads (or creates) the saga, advances
    the FSM via `TryFire`, invokes the user step, dispatches the returned
    command, saves, and releases the lock. For failure events tagged with
    `CompensateOn`, the handler dispatches the reverse-cascade compensation
    chain.
-4. **`<SagaName>CorrelationDispatch.g.cs`** — a static helper that calls
+4. **`<Saga>.CorrelationDispatch.g.cs`** — a static helper that calls
    the user's `[CorrelationKey]` methods through a single shared probe
    instance.
-5. **`<SagaName>BuilderExtensions.g.cs`** — the `WithXxxSaga()` extension
+5. **`<Saga>.BuilderExtensions.g.cs`** — the `WithXxxSaga()` extension
    method that registers every concrete-closed-type the saga needs. AOT-safe;
    nothing is resolved with open generics at runtime.
+6. **`<Saga>.PersistableState.g.cs`** — the saga's `ISagaPersistableState` implementation,
+   `Snapshot()` and `Restore()`, which durable stores use to save and load its state.
+
+`<Saga>` and `<Event>` are the saga's and the event's full names: the namespace, then any
+containing types joined by `+`, each with its generic arity, for example
+`Shop.OrderSaga.Handler.Shop.OrderPlaced.g.cs`. Sagas or events with the same name in
+different namespaces therefore get their own files. File names are not a contract and may
+change between releases.
 
 ## Sagas in more than one assembly
 

@@ -82,7 +82,7 @@ internal static class SnapshotRestoreEmitter
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
-        spc.AddSource($"{model.ClassName}.PersistableState.g.cs", sb.ToString());
+        spc.AddSource($"{model.HintNameStem}.PersistableState.g.cs", sb.ToString());
     }
 
     private static string EmitWrite(StateFieldInfo field, string writer, string accessor) =>
