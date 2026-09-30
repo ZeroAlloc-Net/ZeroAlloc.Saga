@@ -55,11 +55,11 @@ internal static class SagaCommandRegistryEmitter
         sb.AppendLine("    // command types match as well.");
         sb.AppendLine("    private static readonly string[] s_typeNames =");
         sb.AppendLine("    {");
-        foreach (var fqn in commandTypes)
+        foreach (var commandType in commandTypes)
         {
             // Model FQNs are already global-prefix-stripped (SagaModel.StripGlobalPrefix);
             // GlobalQualified adds "global::" back to avoid namespace ambiguity.
-            sb.Append("        typeof(").Append(TypeNameHelper.GlobalQualified(fqn)).AppendLine(").FullName!,");
+            sb.Append("        typeof(").Append(TypeNameHelper.GlobalQualified(commandType.Fqn)).AppendLine(").FullName!,");
         }
         sb.AppendLine("    };");
         sb.AppendLine();
@@ -72,16 +72,21 @@ internal static class SagaCommandRegistryEmitter
         sb.AppendLine("    {");
         for (var i = 0; i < commandTypes.Count; i++)
         {
-            var fqn = commandTypes[i];
-            var typeExpr = TypeNameHelper.GlobalQualified(fqn);
+            var commandType = commandTypes[i];
+            var typeExpr = TypeNameHelper.GlobalQualified(commandType.Fqn);
             sb.Append("        if (string.Equals(typeName, s_typeNames[")
               .Append(i.ToString(System.Globalization.CultureInfo.InvariantCulture))
               .AppendLine("], StringComparison.Ordinal))");
             sb.AppendLine("        {");
             sb.Append("            var serializer = services.GetRequiredService<ISerializer<").Append(typeExpr).AppendLine(">>();");
             sb.AppendLine("            var cmd = serializer.Deserialize(bytes.Span);");
-            sb.AppendLine("            if (cmd is null)");
-            sb.Append("                throw new InvalidOperationException(\"ISerializer.Deserialize returned null for ").Append(fqn).AppendLine(".\");");
+            // ISerializer<T>.Deserialize returns an unconstrained T?, which is plain T for a
+            // struct: a struct command is never null, and comparing it to null is CS0037.
+            if (commandType.IsReferenceType)
+            {
+                sb.AppendLine("            if (cmd is null)");
+                sb.Append("                throw new InvalidOperationException(\"ISerializer.Deserialize returned null for ").Append(commandType.Fqn).AppendLine(".\");");
+            }
             sb.AppendLine("            await mediator.Send(cmd, ct).ConfigureAwait(false);");
             sb.AppendLine("            return;");
             sb.AppendLine("        }");

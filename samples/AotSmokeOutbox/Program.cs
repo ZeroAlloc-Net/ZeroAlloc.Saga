@@ -54,6 +54,12 @@ internal static class Program
         await scope.ServiceProvider.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
     }
 
+    private static async Task PublishAsync(IServiceProvider sp, OrderShipped evt)
+    {
+        using var scope = sp.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<IMediator>().Publish(evt, default).ConfigureAwait(false);
+    }
+
     private static async Task<bool> WaitForAsync(Func<bool> condition)
     {
         var deadline = DateTime.UtcNow + WorkerTimeout;
@@ -82,6 +88,7 @@ internal static class Program
         services.TryAddTransient<ShipOrderHandler>();
         services.TryAddTransient<CancelReservationHandler>();
         services.TryAddTransient<RefundPaymentHandler>();
+        services.TryAddTransient<NotifyCustomerHandler>();
 
         // Single-instance in-process IOutboxStore — registered as Singleton so the
         // OutboxSagaCommandDispatcher (Scoped) and the worker's per-batch scopes see the
@@ -95,6 +102,7 @@ internal static class Program
         services.AddSingleton<ISerializer<ShipOrderCommand>, ShipOrderSerializer>();
         services.AddSingleton<ISerializer<CancelReservationCommand>, CancelReservationSerializer>();
         services.AddSingleton<ISerializer<RefundPaymentCommand>, RefundPaymentSerializer>();
+        services.AddSingleton<ISerializer<NotifyCustomerCommand>, NotifyCustomerSerializer>();
 
         // ZeroAlloc.Outbox's worker dispatches the saga commands. The documented registration is
         // services.AddOutbox(), but AddOutbox is [RequiresUnreferencedCode] for a reflection-based
@@ -132,10 +140,18 @@ internal static class Program
             await PublishAsync(sp, new StockReserved(orderId));
             if (!await WaitForAsync(() => Volatile.Read(ref counters.Charge) == 1)) return Fail($"Expected Charge=1 after StockReserved, got {counters.Charge}");
 
-            // Step 3: PaymentCharged → ShipOrder enqueued + dispatched; saga completes.
+            // Step 3: PaymentCharged → ShipOrder enqueued + dispatched.
             await PublishAsync(sp, new PaymentCharged(orderId));
             if (!await WaitForAsync(() => Volatile.Read(ref counters.Ship) == 1)) return Fail($"Expected Ship=1 after PaymentCharged, got {counters.Ship}");
-            if (!await WaitForAsync(() => store.SucceededCount == 3)) return Fail($"Expected 3 succeeded outbox entries (one per step), got {store.SucceededCount}");
+
+            // Step 4: OrderShipped → the struct NotifyCustomer command round-trips through the
+            // outbox and the registry's struct path, #202; saga completes. The exact values must
+            // arrive, so a struct lost or defaulted on the way fails here.
+            await PublishAsync(sp, new OrderShipped(orderId));
+            if (!await WaitForAsync(() => Volatile.Read(ref counters.Notify) == 1)) return Fail($"Expected Notify=1 after OrderShipped, got {counters.Notify}");
+            var expectedNotify = new NotifyCustomerCommand(orderId, 7);
+            if (counters.LastNotify != expectedNotify) return Fail($"Expected {expectedNotify} to reach the handler, got {counters.LastNotify}");
+            if (!await WaitForAsync(() => store.SucceededCount == 4)) return Fail($"Expected 4 succeeded outbox entries (one per step), got {store.SucceededCount}");
         }
         finally
         {

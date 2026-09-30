@@ -53,9 +53,9 @@ internal static class MediatorSagaCommandDispatcherEmitter
         sb.AppendLine("    {");
         sb.AppendLine("        return cmd switch");
         sb.AppendLine("        {");
-        foreach (var fqn in commandTypes)
+        foreach (var commandType in commandTypes)
         {
-            var typeExpr = TypeNameHelper.GlobalQualified(fqn);
+            var typeExpr = TypeNameHelper.GlobalQualified(commandType.Fqn);
             sb.Append("            ").Append(typeExpr).Append(" c => Forward(_mediator.Send(c, ct)),").AppendLine();
         }
         sb.AppendLine("            _ => throw new InvalidOperationException(");

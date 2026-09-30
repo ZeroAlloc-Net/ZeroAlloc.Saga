@@ -47,9 +47,9 @@ internal static class SagaCommandSourceEmitter
         sb.AppendLine();
         sb.AppendLine("    private static readonly Type[] s_commandTypes =");
         sb.AppendLine("    {");
-        foreach (var fqn in commandTypes)
+        foreach (var commandType in commandTypes)
         {
-            sb.Append("        typeof(").Append(TypeNameHelper.GlobalQualified(fqn)).AppendLine("),");
+            sb.Append("        typeof(").Append(TypeNameHelper.GlobalQualified(commandType.Fqn)).AppendLine("),");
         }
         sb.AppendLine("    };");
         sb.AppendLine();

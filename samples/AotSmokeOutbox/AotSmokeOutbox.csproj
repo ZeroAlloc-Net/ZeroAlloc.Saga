@@ -17,14 +17,9 @@
     <InvariantGlobalization>true</InvariantGlobalization>
 
     <!-- Sample relaxations.
-         ZAM003: Mediator's "use readonly record struct" hint — sample mirrors
-                 the saga test fixtures which use record class.
-         ZASAGA016: Step command types are intentionally NOT partial here so
-                 the saga generator's auto-[ZeroAllocSerializable] partial
-                 extension stays out of the way. We hand-roll AOT-safe byte
-                 ISerializer<T> impls instead — JSON source-gen would force
-                 a JsonSerializerContext just to satisfy ZASZ004. -->
-    <NoWarn>$(NoWarn);MA0004;MA0011;MA0048;MA0051;CA1305;CA1812;CA2007;ZAM003;ZASAGA016</NoWarn>
+         ZAM003: Mediator's "use readonly record struct" hint — most commands
+                 mirror the saga test fixtures, which use record class. -->
+    <NoWarn>$(NoWarn);MA0004;MA0011;MA0048;MA0051;CA1305;CA1812;CA2007;ZAM003</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

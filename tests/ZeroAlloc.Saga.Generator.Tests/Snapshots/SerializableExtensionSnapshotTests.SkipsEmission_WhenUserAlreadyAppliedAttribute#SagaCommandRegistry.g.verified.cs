@@ -37,8 +37,6 @@ internal static class SagaCommandRegistry
         {
             var serializer = services.GetRequiredService<ISerializer<global::Sample.ReserveCmd>>();
             var cmd = serializer.Deserialize(bytes.Span);
-            if (cmd is null)
-                throw new InvalidOperationException("ISerializer.Deserialize returned null for Sample.ReserveCmd.");
             await mediator.Send(cmd, ct).ConfigureAwait(false);
             return;
         }
