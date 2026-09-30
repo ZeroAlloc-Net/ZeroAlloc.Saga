@@ -18,14 +18,16 @@ namespace ZeroAlloc.Saga.Outbox;
 ///   <c>SaveChangesAsync</c> commits both atomically. With any other saga store nothing saves
 ///   that <c>DbContext</c>, so the startup check <c>WithOutbox()</c> registers fails the host
 ///   start rather than let every command be lost.</description></item>
-///   <item><description>InMemory <see cref="IOutboxStore"/> implementations that
-///   auto-commit via the default-interface-method fallback do NOT guarantee
-///   atomicity — the outbox row is persisted before the saga state save.
-///   See <c>docs/outbox.md</c>.</description></item>
+///   <item><description><see cref="IOutboxStore"/> implementations that
+///   auto-commit via the default-interface-method fallback, such as the InMemory store and
+///   <c>OrmOutboxStore</c>, do NOT guarantee atomicity — the outbox row is persisted before the
+///   saga state save. See <c>docs/outbox.md</c>.</description></item>
 /// </list>
-/// Backend-specific bridge packages (<c>ZeroAlloc.Saga.Redis</c>) override this
-/// with their own <see cref="ISagaUnitOfWork"/> registration that participates
-/// in the backend's transactional primitive (e.g. Redis MULTI/EXEC).
+/// Backend-specific bridge packages override this with their own
+/// <see cref="ISagaUnitOfWork"/> registration that participates in the backend's
+/// transactional primitive: <c>WithRedisOutbox()</c> in <c>ZeroAlloc.Saga.Outbox.Redis</c> uses
+/// Redis MULTI/EXEC, and <c>WithOrmOutbox()</c> in <c>ZeroAlloc.Saga.Outbox.Orm</c> the ORM saga
+/// store's database transaction.
 /// </remarks>
 public sealed class OutboxStoreSagaUnitOfWork : ISagaUnitOfWork
 {

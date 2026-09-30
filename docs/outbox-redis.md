@@ -6,11 +6,9 @@ same Redis `MULTI/EXEC` as the saga state save — so a failed save discards
 both, and a successful retry produces exactly one outbox entry that
 ZeroAlloc.Outbox's worker dispatches exactly once.
 
-> **Status:** 4.0 implements the ZeroAlloc.Outbox 3.0 lease contract. Requires
-> `ZeroAlloc.Outbox` 3.0.1 or later, not 3.0.0 — see [`docs/outbox.md`](outbox.md) for why —
-> and `StackExchange.Redis` 2.8+. EF Core users also need `ZeroAlloc.Outbox.EfCore` 3.0.1 or
-> later; Saga's floor on `ZeroAlloc.Outbox` does not raise it. Upgrading from 3.x? See
-> [Migrating to v4](migrating-to-v4.md).
+> **Status:** implements the ZeroAlloc.Outbox lease contract. Requires `ZeroAlloc.Outbox` 4.1.0
+> or later, see [`docs/outbox.md`](outbox.md), and `StackExchange.Redis` 2.8+. Upgrading from
+> 3.x? See [Migrating to v4](migrating-to-v4.md).
 
 ## Architecture
 

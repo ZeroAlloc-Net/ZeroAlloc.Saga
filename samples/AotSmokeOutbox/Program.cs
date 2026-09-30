@@ -105,15 +105,10 @@ internal static class Program
         services.AddRefundPaymentCommandSerializer();
         services.AddNotifyCustomerCommandSerializer();
 
-        // ZeroAlloc.Outbox's worker dispatches the saga commands. The documented registration is
-        // services.AddOutbox(), but AddOutbox is [RequiresUnreferencedCode] for a reflection-based
-        // JSON serializer fallback that saga dispatch never uses, so a PublishAot build cannot call
-        // it without a suppression. This registers what the worker needs directly, and so skips
-        // OutboxOptionsValidator: 3.0 makes it internal, so the sample cannot register it itself,
-        // and invalid OutboxOptions would go unreported here. The options below are valid.
-        // Tracked upstream in ZeroAlloc-Net/ZeroAlloc.Outbox#207.
-        services.AddOptions<OutboxOptions>().Configure(o => o.PollingInterval = TimeSpan.FromMilliseconds(50));
-        services.AddHostedService<OutboxWorkerService>();
+        // ZeroAlloc.Outbox's worker dispatches the saga commands. Since ZeroAlloc.Outbox 4.0,
+        // AddOutbox() is trim- and AOT-safe: it no longer registers a reflection-based JSON
+        // serializer, which saga dispatch never used. It also validates OutboxOptions.
+        services.AddOutbox(o => o.PollingInterval = TimeSpan.FromMilliseconds(50));
 
         services.AddSaga()
             .WithOutbox()                        // <-- the load-bearing line under AOT

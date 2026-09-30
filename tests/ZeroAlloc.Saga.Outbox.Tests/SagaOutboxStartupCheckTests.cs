@@ -299,6 +299,8 @@ public sealed class SagaOutboxStartupCheckTests
         Assert.Equal(SagaOutboxStartupCheck.EfCoreSagaStoreOptionsTypeName, typeof(EfCoreSagaStoreOptions).FullName);
         Assert.Equal(SagaOutboxStartupCheck.EfCoreOutboxStoreTypeName, typeof(EfCoreOutboxStore<>).FullName);
         Assert.Equal(SagaOutboxStartupCheck.DbContextTypeName, typeof(DbContext).FullName);
+        Assert.Equal(SagaOutboxStartupCheck.OrmOutboxStoreTypeName, typeof(ZeroAlloc.Outbox.Orm.OrmOutboxStore).FullName);
+        Assert.Equal(SagaOutboxStartupCheck.OrmSagaStoreOptionsTypeName, typeof(ZeroAlloc.Saga.Orm.OrmSagaStoreOptions).FullName);
     }
 
     // Mirrors OutboxTelemetryBuilderExtensions.WithTelemetry: each descriptor is swapped for a

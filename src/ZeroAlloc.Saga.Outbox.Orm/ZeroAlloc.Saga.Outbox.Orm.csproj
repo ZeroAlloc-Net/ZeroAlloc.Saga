@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- net10.0 only, like ZeroAlloc.Saga.Orm: ZeroAlloc.ORM ships net10.0 only. -->
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ZeroAlloc.Saga.Outbox.Orm</PackageId>
+    <Description>Transactional outbox unit of work for ZeroAlloc.Saga.Outbox + ZeroAlloc.Saga.Orm. A saga step's outbox rows commit in the same database transaction as the saga state, through ZeroAlloc.Outbox.Orm, or roll back with it. Native AOT compatible.</Description>
+    <PackageTags>zeroalloc;saga;outbox;orm;mediator;cqrs;nativeaot</PackageTags>
+    <IsAotCompatible>true</IsAotCompatible>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ZeroAlloc.Saga\ZeroAlloc.Saga.csproj" />
+    <ProjectReference Include="..\ZeroAlloc.Saga.Orm\ZeroAlloc.Saga.Orm.csproj" />
+    <ProjectReference Include="..\ZeroAlloc.Saga.Outbox\ZeroAlloc.Saga.Outbox.csproj" />
+    <!-- 4.1.0 is the floor: it adds OrmOutboxStore.EnqueueInTransactionAsync, which takes the
+         saga store's IAsyncDbTransaction. The version itself is central, in
+         Directory.Packages.props. -->
+    <PackageReference Include="ZeroAlloc.Outbox.Orm" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <AdditionalFiles Include="PublicAPI.Shipped.txt" />
+    <AdditionalFiles Include="PublicAPI.Unshipped.txt" />
+  </ItemGroup>
+</Project>

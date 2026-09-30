@@ -1,3 +1,5 @@
+using System.Data;
+using System.Data.Async;
 using System.Data.Common;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -25,6 +27,11 @@ namespace ZeroAlloc.Saga.Orm;
 /// statement the database executes rather than in a read-then-write window here.
 /// <see cref="RemoveAsync"/> deletes against the same predicate.
 /// </para>
+/// <para>
+/// Each save and removal is one transaction on the application's connection. The registered
+/// <see cref="IOrmSagaTransactionContributor"/>s write into it after the saga statement, and it
+/// commits once, so their rows and the saga row are committed or discarded together.
+/// </para>
 /// </remarks>
 /// <typeparam name="TSaga">The saga type. Must implement <c>ISagaPersistableState</c>, which the Saga generator emits.</typeparam>
 /// <typeparam name="TKey">The correlation key type.</typeparam>
@@ -35,6 +42,7 @@ public sealed class OrmSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
     private static readonly string s_sagaTypeKey = typeof(TSaga).FullName ?? typeof(TSaga).Name;
 
     private readonly SagaInstanceRepository _repo;
+    private readonly IOrmSagaTransactionContributor[] _contributors;
     private readonly ILogger _log;
 
     // Row versions as they were when this store last read or wrote each saga.
@@ -59,13 +67,22 @@ public sealed class OrmSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
     /// Creates a store over the supplied repository.
     /// </summary>
     /// <param name="repo">Repository bound to the application's connection.</param>
+    /// <param name="contributors">
+    /// The scope's <see cref="IOrmSagaTransactionContributor"/>s, which write inside every save
+    /// and removal's transaction.
+    /// </param>
     /// <param name="log">Optional logger.</param>
     /// <exception cref="InvalidOperationException">
     /// <typeparamref name="TSaga"/> does not implement <c>ISagaPersistableState</c>.
     /// </exception>
-    internal OrmSagaStore(SagaInstanceRepository repo, ILogger<OrmSagaStore<TSaga, TKey>>? log = null)
+    internal OrmSagaStore(
+        SagaInstanceRepository repo,
+        IEnumerable<IOrmSagaTransactionContributor> contributors,
+        ILogger<OrmSagaStore<TSaga, TKey>>? log = null)
     {
         _repo = repo ?? throw new ArgumentNullException(nameof(repo));
+        ArgumentNullException.ThrowIfNull(contributors);
+        _contributors = contributors.ToArray();
 
         // Same guard the EF Core store applies. TSaga's constraint here is the
         // looser one ISagaStore declares, so the persistable contract has to be
@@ -113,6 +130,11 @@ public sealed class OrmSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The write runs in a transaction on the application's connection, together with every
+    /// registered <see cref="IOrmSagaTransactionContributor"/>, and commits once. A conflict or
+    /// any other failure rolls the whole transaction back.
+    /// </remarks>
     /// <exception cref="OrmSagaConcurrencyException">
     /// Another writer changed the row first. The generated handler recognises
     /// this through <see cref="ISagaConcurrencyConflict"/> and retries.
@@ -126,38 +148,78 @@ public sealed class OrmSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
         var newState = persistable.Snapshot();
         var newFsmState = persistable.CurrentFsmStateName;
         var now = DateTimeOffset.UtcNow;
+        var newRowVersion = NewRowVersion();
 
         // Decide insert vs update from what this store has seen, not from a
         // fresh read. See _loadedVersions for why re-reading here would defeat
         // the concurrency check entirely.
-        if (!_loadedVersions.TryGetValue(key, out var expectedRowVersion) || expectedRowVersion is null)
+        _loadedVersions.TryGetValue(key, out var expectedRowVersion);
+
+        var openedHere = await OpenAsync(ct).ConfigureAwait(false);
+        try
         {
-            var rowVersion = NewRowVersion();
+            var tx = await _repo.Connection.BeginTransactionAsync(ct).ConfigureAwait(false);
+            await using (tx.ConfigureAwait(false))
+            {
+                try
+                {
+                    await WriteInTransactionAsync(
+                        key, correlationKey, newState, newFsmState, newRowVersion,
+                        expectedRowVersion, now, tx, ct).ConfigureAwait(false);
+                    await ContributeAndCommitAsync(tx, ct).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    await RollbackAsync(tx, ex).ConfigureAwait(false);
+                    throw;
+                }
+            }
+        }
+        finally
+        {
+            await CloseAsync(openedHere).ConfigureAwait(false);
+        }
+
+        // Our write is now the one others must match against. Only a committed
+        // write moves it: a rolled-back insert or update never happened.
+        _loadedVersions[key] = newRowVersion;
+    }
+
+    private async ValueTask WriteInTransactionAsync(
+        TKey key, string correlationKey, byte[] newState, string newFsmState, byte[] newRowVersion,
+        byte[]? expectedRowVersion, DateTimeOffset now, IAsyncDbTransaction tx, CancellationToken ct)
+    {
+        if (expectedRowVersion is null)
+        {
             _log.LogDebug("Inserting new saga row {SagaType}/{Key}", s_sagaTypeKey, key);
             try
             {
                 await _repo.InsertAsync(
                     s_sagaTypeKey, correlationKey, newState, newFsmState,
-                    rowVersion, now, now, ct).ConfigureAwait(false);
+                    newRowVersion, now, now, tx, ct).ConfigureAwait(false);
             }
             catch (DbException ex)
             {
                 // Losing the insert race means another writer created this
                 // instance first. That is a conflict, not a failure: reloading
-                // and retrying will find their row. Any other provider error is
-                // a genuine fault and propagates.
+                // and retrying will find their row. The ORM surfaces the
+                // primary-key violation as a provider-specific DbException, so
+                // every DbException from the insert is reported as a conflict,
+                // as the EF Core store does for DbUpdateException. A genuine
+                // fault then fails every retry and surfaces once they run out.
+                // The caller rolls back before the conflict escapes, which
+                // PostgreSQL requires: a failed statement aborts the whole
+                // transaction there.
                 throw new OrmSagaConcurrencyException(s_sagaTypeKey, correlationKey, ex);
             }
 
-            _loadedVersions[key] = rowVersion;
             return;
         }
 
-        var newRowVersion = NewRowVersion();
         _log.LogDebug("Updating saga row {SagaType}/{Key}", s_sagaTypeKey, key);
         var affected = await _repo.UpdateAsync(
             s_sagaTypeKey, correlationKey, newState, newFsmState,
-            newRowVersion, expectedRowVersion, now, ct).ConfigureAwait(false);
+            newRowVersion, expectedRowVersion, now, tx, ct).ConfigureAwait(false);
 
         if (affected == 0)
         {
@@ -169,15 +231,14 @@ public sealed class OrmSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
             // which replaces it.
             throw new OrmSagaConcurrencyException(s_sagaTypeKey, correlationKey);
         }
-
-        // Our write is now the one others must match against.
-        _loadedVersions[key] = newRowVersion;
     }
 
     /// <inheritdoc />
     /// <remarks>
+    /// <para>
     /// The remove is checked against what this store observed at load, as
     /// <see cref="SaveAsync"/> is, and as the EF Core and Redis stores do:
+    /// </para>
     /// <list type="bullet">
     /// <item>A loaded row is deleted only while its row version is still the
     /// one this store loaded. A row another writer changed or deleted since is
@@ -189,6 +250,11 @@ public sealed class OrmSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
     /// <item>With no load at all there is nothing to compare against, and the
     /// delete is unconditional.</item>
     /// </list>
+    /// <para>
+    /// Like <see cref="SaveAsync"/>, the removal runs in a transaction together with every
+    /// registered <see cref="IOrmSagaTransactionContributor"/>, and commits it even when there is
+    /// no row to delete.
+    /// </para>
     /// </remarks>
     /// <exception cref="OrmSagaConcurrencyException">
     /// Another writer changed, deleted or created the row since this store
@@ -197,13 +263,46 @@ public sealed class OrmSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
     public async ValueTask RemoveAsync(TKey key, CancellationToken ct)
     {
         var correlationKey = KeyOf(key);
+        var loaded = _loadedVersions.TryGetValue(key, out var expectedRowVersion);
 
-        if (!_loadedVersions.TryGetValue(key, out var expectedRowVersion))
+        var openedHere = await OpenAsync(ct).ConfigureAwait(false);
+        try
         {
-            var deleted = await _repo.DeleteAsync(s_sagaTypeKey, correlationKey, ct).ConfigureAwait(false);
-            _loadedVersions[key] = null;
+            var tx = await _repo.Connection.BeginTransactionAsync(ct).ConfigureAwait(false);
+            await using (tx.ConfigureAwait(false))
+            {
+                try
+                {
+                    await RemoveInTransactionAsync(key, correlationKey, loaded, expectedRowVersion, tx, ct)
+                        .ConfigureAwait(false);
+                    await ContributeAndCommitAsync(tx, ct).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    await RollbackAsync(tx, ex).ConfigureAwait(false);
+                    throw;
+                }
+            }
+        }
+        finally
+        {
+            await CloseAsync(openedHere).ConfigureAwait(false);
+        }
+
+        // The row is gone as of our own delete, or was absent and still is.
+        // Either way that is an observation too.
+        _loadedVersions[key] = null;
+    }
+
+    private async ValueTask RemoveInTransactionAsync(
+        TKey key, string correlationKey, bool loaded, byte[]? expectedRowVersion,
+        IAsyncDbTransaction tx, CancellationToken ct)
+    {
+        if (!loaded)
+        {
+            var deleted = await _repo.DeleteAsync(s_sagaTypeKey, correlationKey, tx, ct).ConfigureAwait(false);
             _log.LogDebug(
-                "Removed {Affected} row(s) for saga {SagaType}/{Key} without a prior load",
+                "Removing {Affected} row(s) for saga {SagaType}/{Key} without a prior load",
                 deleted, s_sagaTypeKey, key);
             return;
         }
@@ -212,7 +311,7 @@ public sealed class OrmSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
         {
             // This store saw no row. There is nothing of ours to delete, and a
             // row that exists now belongs to another writer.
-            var current = await _repo.GetAsync(s_sagaTypeKey, correlationKey, ct).ConfigureAwait(false);
+            var current = await _repo.GetInTransactionAsync(s_sagaTypeKey, correlationKey, tx, ct).ConfigureAwait(false);
             if (current is not null)
             {
                 throw new OrmSagaConcurrencyException(s_sagaTypeKey, correlationKey);
@@ -223,7 +322,7 @@ public sealed class OrmSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
         }
 
         var affected = await _repo.DeleteVersionedAsync(
-            s_sagaTypeKey, correlationKey, expectedRowVersion, ct).ConfigureAwait(false);
+            s_sagaTypeKey, correlationKey, expectedRowVersion, tx, ct).ConfigureAwait(false);
         if (affected == 0)
         {
             // Same as a stale update: the row moved or vanished since the load.
@@ -231,9 +330,63 @@ public sealed class OrmSagaStore<TSaga, TKey> : ISagaStore<TSaga, TKey>
             throw new OrmSagaConcurrencyException(s_sagaTypeKey, correlationKey);
         }
 
-        // The row is gone as of our own delete, which is an observation too.
-        _loadedVersions[key] = null;
-        _log.LogDebug("Removed saga row {SagaType}/{Key}", s_sagaTypeKey, key);
+        _log.LogDebug("Removing saga row {SagaType}/{Key}", s_sagaTypeKey, key);
+    }
+
+    // The contributors write after the saga statement has passed its
+    // concurrency check, so a conflict never reaches them. Then the whole
+    // transaction commits at once.
+    private async ValueTask ContributeAndCommitAsync(IAsyncDbTransaction tx, CancellationToken ct)
+    {
+        foreach (var contributor in _contributors)
+        {
+            await contributor.ContributeAsync(tx, ct).ConfigureAwait(false);
+        }
+
+        await tx.CommitAsync(ct).ConfigureAwait(false);
+    }
+
+    // CancellationToken.None: a cancelled operation must still release its
+    // transaction. A failed rollback is logged rather than thrown, so the
+    // caller sees the exception that caused it, such as the conflict the retry
+    // loop acts on. The database discards an uncommitted transaction when the
+    // connection closes in any case.
+    private async ValueTask RollbackAsync(IAsyncDbTransaction tx, Exception cause)
+    {
+        try
+        {
+            await tx.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception rollbackFailure)
+        {
+            _log.LogWarning(
+                rollbackFailure,
+                "Rolling back the transaction for saga {SagaType} failed after {Cause}",
+                s_sagaTypeKey, cause.GetType().Name);
+        }
+    }
+
+    // The ORM opens a closed connection for each statement and closes it
+    // again. A transaction spans several statements, so the store does the
+    // same around the whole transaction instead.
+    private async ValueTask<bool> OpenAsync(CancellationToken ct)
+    {
+        var connection = _repo.Connection;
+        if (connection.State == ConnectionState.Open)
+        {
+            return false;
+        }
+
+        await connection.OpenAsync(ct).ConfigureAwait(false);
+        return true;
+    }
+
+    private async ValueTask CloseAsync(bool openedHere)
+    {
+        if (openedHere)
+        {
+            await _repo.Connection.CloseAsync().ConfigureAwait(false);
+        }
     }
 
     private static TSaga Rehydrate(SagaInstanceRow row)

@@ -8,12 +8,9 @@ dispatch row is committed in the same database transaction as the saga
 state save, eliminating the cross-process race where a saga state update
 can succeed without the corresponding command being delivered (or vice
 versa). The Redis saga store gets the same guarantee from
-`WithRedisOutbox()`, see [`outbox-redis.md`](outbox-redis.md).
-
-> **Not atomic on `ZeroAlloc.Saga.Orm`.** With `WithOrmStore()`, the outbox row is written as
-> soon as the step dispatches, before the saga state is saved. Dispatch is at-least-once, and
-> step command handlers must be idempotent. See
-> [ZeroAlloc.Saga.Orm: at-least-once](#zeroallocsagaorm-at-least-once).
+`WithRedisOutbox()`, see [`outbox-redis.md`](outbox-redis.md), and the ORM
+saga store from `WithOrmOutbox()` in `ZeroAlloc.Saga.Outbox.Orm`, see
+[ZeroAlloc.Saga.Orm: atomic with `WithOrmOutbox()`](#zeroallocsagaorm-atomic-with-withormoutbox).
 
 > **The EF Core outbox store needs the EF Core saga store.** `AddOutbox().WithEfCore<TContext>()`
 > works only with `WithEfCoreStore<TContext>()` on the same `TContext`. Any other saga store
@@ -22,12 +19,14 @@ versa). The Redis saga store gets the same guarantee from
 
 [outbox]: https://microservices.io/patterns/data/transactional-outbox.html
 
-> **Status:** `ZeroAlloc.Saga.Outbox` 4.0 requires `ZeroAlloc.Outbox` 3.0.1 or later and
-> `ZeroAlloc.Serialisation` 2.1.0 or later. Not 3.0.0: its EfCore package throws
-> `TypeLoadException` on .NET 10 with EF Core 10, fixed in
-> [ZeroAlloc.Outbox#208](https://github.com/ZeroAlloc-Net/ZeroAlloc.Outbox/issues/208). EF Core
-> users also need `ZeroAlloc.Outbox.EfCore` 3.0.1 or later; Saga's floor on `ZeroAlloc.Outbox`
-> does not raise it. Upgrading from 3.x? See [Migrating to v4](migrating-to-v4.md).
+> **Status:** `ZeroAlloc.Saga.Outbox` requires `ZeroAlloc.Outbox` 4.1.0 or later and
+> `ZeroAlloc.Serialisation` 2.1.0 or later. Use the matching 4.x adapter package too, such as
+> `ZeroAlloc.Outbox.EfCore` or `ZeroAlloc.Outbox.Orm`; Saga's floor on `ZeroAlloc.Outbox` does
+> not raise it. ZeroAlloc.Outbox 4.0 hosts one outbox store per container, so registering a
+> second, different store now throws at registration; see its
+> [migration guide](https://github.com/ZeroAlloc-Net/ZeroAlloc.Outbox/blob/main/docs/migrating-to-v4.md).
+> Saga dispatch serializes with `ISerializer<T>`, so Outbox 4.0's serializer choice does not
+> affect saga commands. Upgrading from Saga 3.x? See [Migrating to v4](migrating-to-v4.md).
 
 ## What it fixes
 
@@ -78,9 +77,9 @@ races (each replica has its own scope) and same-process OCC retries
 |---|---|
 | `ZeroAlloc.Saga.EfCore` backend | **Use the bridge.** This is the primary deployment shape it was designed for. |
 | `ZeroAlloc.Saga.Redis` backend | **Use the bridge with `WithRedisOutbox()`**, which makes it atomic. Without it, dispatch is at-least-once. See [`outbox-redis.md`](outbox-redis.md). |
-| `ZeroAlloc.Saga.Orm` backend | **At-least-once, not atomic.** The bridge still makes dispatch durable and asynchronous, but an OCC retry can enqueue a command twice. Step command handlers must be idempotent. Use `AddOutbox().WithOrm()`. See [below](#zeroallocsagaorm-at-least-once). |
+| `ZeroAlloc.Saga.Orm` backend | **Use the bridge with `WithOrmOutbox()`** from `ZeroAlloc.Saga.Outbox.Orm`, and `AddOutbox().WithOrm()`, which makes it atomic. Without `WithOrmOutbox()`, dispatch is at-least-once. See [below](#zeroallocsagaorm-atomic-with-withormoutbox). |
 | `ZeroAlloc.Saga` InMemory backend | Don't bother. InMemory writes are atomic by construction; the bridge adds latency and a worker for no benefit. If you use it anyway, pick an outbox store that writes each row itself, not the EF Core one. |
-| Cross-process / multi-replica deployments | **Use the bridge** with EF Core, or with Redis and `WithRedisOutbox()`. This is exactly the race it fixes. |
+| Cross-process / multi-replica deployments | **Use the bridge** with EF Core, with Redis and `WithRedisOutbox()`, or with the ORM store and `WithOrmOutbox()`. This is exactly the race it fixes. |
 | Single-process, single-replica, fire-and-forget commands | Optional; the bridge converts synchronous dispatch into asynchronous dispatch (worker cadence). Either is correct. |
 
 ## Supported pairings
@@ -92,7 +91,8 @@ each write itself:
 |---|---|---|
 | `WithEfCoreStore<TContext>()` | `AddOutbox().WithEfCore<TContext>()`, the same `TContext` | Atomic with the saga state save |
 | `WithRedisStore()` | `WithOutbox().WithRedisOutbox()`, with `AddOutbox()` for the worker | Atomic, see [`outbox-redis.md`](outbox-redis.md) |
-| `WithOrmStore()` | `AddOutbox().WithOrm()` | At-least-once, see [below](#zeroallocsagaorm-at-least-once) |
+| `WithOrmStore()` | `WithOutbox().WithOrmOutbox()`, with `AddOutbox().WithOrm()` | Atomic, see [below](#zeroallocsagaorm-atomic-with-withormoutbox) |
+| `WithOrmStore()` without `WithOrmOutbox()` | `AddOutbox().WithOrm()` | At-least-once, and the host logs a warning at start |
 | Any saga store, including InMemory and `WithRedisStore()` without `WithRedisOutbox()` | A store that writes each row itself, such as `AddOutbox().WithOrm()` | At-least-once |
 | Any saga store except `WithEfCoreStore<TContext>()` on the same `TContext` | `AddOutbox().WithEfCore<TContext>()` | **Fails at startup** |
 
@@ -106,7 +106,8 @@ no log. The [startup check](#startup-check) therefore refuses to start the host.
 With `WithRedisOutbox()`, the worker must claim from the `RedisOutboxStore` it registers. Don't
 register another outbox store after it, such as `AddOutbox().WithEfCore<TContext>()`: the worker
 would claim from that store and never see a saga command. `WithRedisOutbox()` adds its own
-startup check for that.
+startup check for that. `WithOrmOutbox()` has the same check: the worker must claim from
+ZeroAlloc.Outbox's `OrmOutboxStore`, the store it writes saga commands through.
 
 ## Wiring
 
@@ -222,7 +223,16 @@ which the host calls on every such service before it starts any `IHostedService`
   The saga store is named by its builder call, such as `WithOrmStore()` or `WithRedisStore()`.
   For an EF Core saga store on another `DbContext`, the message names that context. The check
   runs only with `WithOutbox()`'s own unit of work: a backend that replaces it, as
-  `WithRedisOutbox()` does, commits the rows itself.
+  `WithRedisOutbox()` and `WithOrmOutbox()` do, commits the rows itself.
+
+- The saga store is `WithOrmStore()` and the outbox store is `AddOutbox().WithOrm()`, but
+  `WithOrmOutbox()` is missing. This one does not fail the start, because at-least-once is a
+  supported mode. It logs a warning instead:
+
+  > ZeroAlloc.Saga.Outbox.WithOutbox(): the saga store WithOrmStore() is paired with the outbox
+  > store OrmOutboxStore without WithOrmOutbox(), so saga command dispatch is at-least-once:
+  > [...] Add WithOrmOutbox() from ZeroAlloc.Saga.Outbox.Orm after WithOutbox() to commit the
+  > outbox rows in the saga store's transaction. [...]
 
 - Two `IOutboxTypeDispatcher`s claim the same saga command type name — see below.
 
@@ -309,20 +319,11 @@ that outlives `LeaseDuration`, or a host that dies after dispatching but before 
 
 ## Native AOT
 
-`AddOutbox()` is `[RequiresUnreferencedCode]`, because it may register a reflection-based JSON
-serializer that saga dispatch never uses. Until ZeroAlloc.Outbox offers an AOT-clean registration
-([ZeroAlloc.Outbox#207](https://github.com/ZeroAlloc-Net/ZeroAlloc.Outbox/issues/207)),
-a `PublishAot` app registers what the worker needs itself:
-
-```csharp
-services.AddOptions<OutboxOptions>().Configure(o => o.PollingInterval = TimeSpan.FromSeconds(2));
-services.AddHostedService<OutboxWorkerService>();
-```
-
-This skips the `OutboxOptions` validation that `AddOutbox()` adds, so check the values yourself.
-Register the `IOutboxStore` yourself as well, or use `WithRedisOutbox()`, which supplies it.
-`WithEfCore<T>()` hangs off the `IOutboxBuilder` that only `AddOutbox()` returns.
-`samples/AotSmokeOutbox` runs this setup under ILC in CI.
+Since ZeroAlloc.Outbox 4.0, `AddOutbox()` is trim- and AOT-safe: it no longer registers a
+reflection-based JSON serializer, which saga dispatch never used
+([ZeroAlloc.Outbox#207](https://github.com/ZeroAlloc-Net/ZeroAlloc.Outbox/issues/207)). A
+`PublishAot` app calls `AddOutbox()` like any other. `samples/AotSmokeOutbox` publishes and runs
+that setup under native AOT in CI.
 
 ## Serializers for step commands
 
@@ -371,9 +372,10 @@ yourself. See [Cross-assembly step command types](#cross-assembly-step-command-t
 
 ## Single-dispatch under OCC retry
 
-This section describes the EF Core store. The Redis store with `WithRedisOutbox()` gives the
-same guarantee. The ORM store does not, see
-[ZeroAlloc.Saga.Orm: at-least-once](#zeroallocsagaorm-at-least-once).
+This section describes the EF Core store. The Redis store with `WithRedisOutbox()` and the ORM
+store with `WithOrmOutbox()` give the same guarantee. Without `WithOrmOutbox()` the ORM store
+does not, see
+[ZeroAlloc.Saga.Orm: atomic with `WithOrmOutbox()`](#zeroallocsagaorm-atomic-with-withormoutbox).
 
 The generator-emitted handler's retry loop creates a fresh
 `IServiceScope` per attempt, so `ISagaStore<TSaga,TKey>` and
@@ -405,30 +407,63 @@ satisfies this naturally. Don't register the saga store and the outbox
 store against different `DbContext` types in the same scope: the startup check fails the host
 start for that pairing.
 
-### ZeroAlloc.Saga.Orm: at-least-once
+### ZeroAlloc.Saga.Orm: atomic with `WithOrmOutbox()`
 
-`WithOrmStore().WithOutbox()` works with ZeroAlloc.Outbox's ORM store, `AddOutbox().WithOrm()`,
-but it is not atomic. The ORM saga store cannot be paired with `WithEfCore<TContext>()`: the EF
-Core outbox store defers its row to a `SaveChangesAsync` that the ORM saga store never calls, so
-the command would be lost. The [startup check](#startup-check) fails the host start for that
-pairing.
+Add the `ZeroAlloc.Saga.Outbox.Orm` package and call `WithOrmOutbox()` after `WithOrmStore()` and
+`WithOutbox()`. Register ZeroAlloc.Outbox's ORM store with `AddOutbox().WithOrm()`, passing your
+database's dialect:
 
-Why the ORM pairing is not atomic:
+```csharp
+services.AddScoped<IAsyncDbConnection>(_ => new SqlConnection(connectionString).AsAsync());
+services.AddOutbox(o => o.PollingInterval = TimeSpan.FromSeconds(2))
+    .WithOrm(OutboxOrmDialect.SqlServer);
+services.AddSaga()
+    .WithOrmStore()
+    .WithOutbox()
+    .WithOrmOutbox()      // <-- commits the outbox rows in the saga store's transaction
+    .WithOrderFulfillmentSaga();
+```
 
-- `WithOutbox()` enlists each step command through `IOutboxStore.EnqueueDeferredAsync`.
-  ZeroAlloc.Outbox's `OrmOutboxStore` does not override it, so the default writes the outbox
-  row immediately, in its own statement.
-- The saga state is saved afterwards, in a separate statement. The ORM store has no
-  transaction that both writes share.
+Each `SaveAsync` and `RemoveAsync` of the ORM saga store is then one database transaction:
 
-So when the save or removal raises `OrmSagaConcurrencyException`, the command's outbox row is
-already committed. The generated handler retries the step in a fresh scope, and the retry
-enqueues the command again. The worker then dispatches it twice. The same happens for any
-other failure between the enqueue and the save.
+1. The store begins a transaction on the scoped `IAsyncDbConnection`, and runs its insert,
+   versioned update or versioned delete in it.
+2. `WithOrmOutbox()`'s unit of work has held the step's commands in memory since they were
+   enlisted. It writes them into the same transaction through ZeroAlloc.Outbox's
+   `OrmOutboxStore.EnqueueInTransactionAsync`.
+3. The store commits. A removal commits too when there is no saga row to delete, as for a saga
+   that one event both starts and completes.
 
-Step command handlers must therefore be idempotent, as `ZASAGA015` recommends. A unit of work
-that commits the outbox rows in the saga store's transaction is tracked in
-[ZeroAlloc.Saga#197](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/197).
+When the saga statement fails its concurrency check, the store rolls back and raises
+`OrmSagaConcurrencyException` before any outbox row is written, and the generated handler retries
+in a fresh scope with an empty buffer. Any other failure inside the transaction, such as a failed
+outbox insert, rolls back the saga row as well. So a retry that eventually succeeds commits
+exactly one outbox row per command, and the worker dispatches each command once, as with the EF
+Core and Redis stores.
+
+Requirements:
+
+- The `OutboxMessages` table must live in the same database as the `SagaInstance` table. The
+  outbox rows are written on the saga store's connection.
+- The worker must claim from `OrmOutboxStore`. `WithOrmOutbox()` registers a startup check that
+  fails the host start when another `IOutboxStore` is registered in its place.
+- `IOrmSagaTransactionContributor`, in `ZeroAlloc.Saga.Orm`, is the extension point this uses.
+  Other packages can write into the saga store's transaction the same way.
+
+Both schemas number their migrations from 1, and the ORM's `MigrationRunner` keeps one history
+table per database, so running `SagaOrmMigrations` and `OutboxOrmMigrations` through two runners on
+one database fails with a version conflict. Run them through one `IMigrationSource` that moves the
+second source's versions out of the way, for example by adding 1000 to each.
+
+Without `WithOrmOutbox()`, `WithOrmStore().WithOutbox()` with `AddOutbox().WithOrm()` still works,
+but it is at-least-once: `WithOutbox()`'s default unit of work enlists each command through
+`IOutboxStore.EnqueueDeferredAsync`, which the ORM outbox store implements by writing the row at
+once. A save that then raises `OrmSagaConcurrencyException` leaves the row committed, and the retry
+enqueues the command again. The [startup check](#startup-check) logs a warning for that setup.
+
+The ORM saga store cannot be paired with `WithEfCore<TContext>()`: the EF Core outbox store defers
+its row to a `SaveChangesAsync` that the ORM saga store never calls, so the command would be lost.
+The startup check fails the host start for that pairing.
 
 ### Cross-assembly step command types
 
@@ -449,9 +484,10 @@ saga command type must belong to the sagas of one assembly. See
 `IOutboxStore.EnqueueDeferredAsync` is a default-interface-method that
 falls back to `EnqueueAsync(transaction: null, ct)` when not overridden.
 A backend that does not override it auto-commits each enqueue, defeating
-the atomicity premise. `ZeroAlloc.Outbox.Orm` is such a backend, see
-[above](#zeroallocsagaorm-at-least-once). Use `ZeroAlloc.Outbox.EfCore` (which
-overrides) — or any third-party backend that explicitly overrides
+the atomicity premise. `ZeroAlloc.Outbox.Orm` is such a backend; with the ORM saga store, use
+`WithOrmOutbox()`, which does not go through `EnqueueDeferredAsync` at all, see
+[above](#zeroallocsagaorm-atomic-with-withormoutbox). Otherwise use `ZeroAlloc.Outbox.EfCore`
+(which overrides) — or any third-party backend that explicitly overrides
 `EnqueueDeferredAsync` to defer the write to the caller's
 `SaveChangesAsync` (or equivalent).
 
