@@ -39,6 +39,6 @@ internal static class CorrelationDispatchEmitter
 
         sb.AppendLine("}");
 
-        spc.AddSource($"{model.ClassName}CorrelationDispatch.g.cs", sb.ToString());
+        spc.AddSource($"{model.HintNameStem}.CorrelationDispatch.g.cs", sb.ToString());
     }
 }

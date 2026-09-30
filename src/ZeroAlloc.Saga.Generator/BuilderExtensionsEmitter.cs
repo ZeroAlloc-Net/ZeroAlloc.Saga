@@ -128,6 +128,6 @@ internal static class BuilderExtensionsEmitter
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
-        spc.AddSource($"{model.ClassName}BuilderExtensions.g.cs", sb.ToString());
+        spc.AddSource($"{model.HintNameStem}.BuilderExtensions.g.cs", sb.ToString());
     }
 }

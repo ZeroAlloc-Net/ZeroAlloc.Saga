@@ -8,11 +8,15 @@ namespace ZeroAlloc.Saga.Generator;
 
 /// <summary>
 /// Source generator for [Saga] partial classes. For each saga, emits:
-///   1. {SagaName}Fsm.g.cs            — inline FSM partial (state, triggers, TryFire)
-///   2. {SagaName}.g.cs               — partial-class completion attaching the Fsm property
-///   3. {SagaName}_{Event}_Handler.g.cs — one INotificationHandler per event
-///   4. {SagaName}CorrelationDispatch.g.cs — typed event-to-key dispatch
-///   5. {SagaName}BuilderExtensions.g.cs — AOT-safe DI registrations + compensation dispatcher
+///   1. {Saga}.Fsm.g.cs                 — inline FSM partial (state, triggers, TryFire)
+///   2. {Saga}.g.cs                     — partial-class completion attaching the Fsm property
+///   3. {Saga}.Handler.{Event}.g.cs     — one INotificationHandler per event
+///   4. {Saga}.CorrelationDispatch.g.cs — typed event-to-key dispatch
+///   5. {Saga}.BuilderExtensions.g.cs   — AOT-safe DI registrations + compensation dispatcher
+///   6. {Saga}.PersistableState.g.cs    — Snapshot/Restore of the saga's state
+///
+/// {Saga} and {Event} are the saga's and the event's names qualified by namespace, containing
+/// types and generic arity; see <see cref="HintNames"/>.
 ///
 /// and once per compilation MediatorSagaCommandDispatcher.g.cs, GeneratedSagaCommandSource.g.cs
 /// and, when ZeroAlloc.Serialisation is referenced, SagaCommandRegistry.g.cs.

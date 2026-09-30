@@ -14,6 +14,7 @@ namespace ZeroAlloc.Saga.Generator;
 internal sealed record SagaModel(
     string Namespace,
     string ClassName,
+    string HintNameStem,
     string Accessibility,
     string CorrelationKeyTypeFqn,
     EquatableArray<StepInfo> Steps,
@@ -179,6 +180,7 @@ internal sealed record SagaModel(
                 int order = 0;
                 string? compensateName = null;
                 string? compensateOnFqn = null;
+                string? compensateOnHintName = null;
                 foreach (var arg in stepAttr.NamedArguments)
                 {
                     if (string.Equals(arg.Key, "Order", System.StringComparison.Ordinal) && arg.Value.Value is int o)
@@ -186,7 +188,10 @@ internal sealed record SagaModel(
                     else if (string.Equals(arg.Key, "Compensate", System.StringComparison.Ordinal) && arg.Value.Value is string s)
                         compensateName = s;
                     else if (string.Equals(arg.Key, "CompensateOn", System.StringComparison.Ordinal) && arg.Value.Value is INamedTypeSymbol t)
+                    {
                         compensateOnFqn = StripGlobalPrefix(t.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+                        compensateOnHintName = HintNames.ForType(t);
+                    }
                 }
 
                 var eventTypeFqn = StripGlobalPrefix(member.Parameters[0].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
@@ -212,8 +217,8 @@ internal sealed record SagaModel(
                 }
 
                 steps.Add(new StepInfo(
-                    order, member.Name, eventTypeFqn, commandTypeFqn,
-                    compensateName, compensateOnFqn,
+                    order, member.Name, eventTypeFqn, HintNames.ForType(member.Parameters[0].Type), commandTypeFqn,
+                    compensateName, compensateOnFqn, compensateOnHintName,
                     Location: memberLoc,
                     CommandTypeIsInOwnAssembly: cmdInOwnAssembly,
                     CommandTypeLocation: cmdTypeLoc,
@@ -332,7 +337,7 @@ internal sealed record SagaModel(
         var stateFields = ExtractStateFields(classSymbol, classNameLocation, diagnostics, ct);
 
         var model = new SagaModel(
-            ns, name, accessibility, correlationKeyType,
+            ns, name, HintNames.ForType(classSymbol), accessibility, correlationKeyType,
             EquatableArray<StepInfo>.From(steps),
             EquatableArray<CorrelationInfo>.From(correlations),
             EquatableArray<string>.From(compensateOn),
@@ -626,9 +631,13 @@ internal sealed record StepInfo(
     int Order,
     string MethodName,
     string EventTypeFqn,
+    /// <summary>The event's part of its handler file's hint name; see <see cref="HintNames"/>.</summary>
+    string EventHintName,
     string CommandTypeFqn,
     string? CompensateMethodName,
     string? CompensateOnEventTypeFqn,
+    /// <summary><see cref="EventHintName"/> for <see cref="CompensateOnEventTypeFqn"/>.</summary>
+    string? CompensateOnEventHintName,
     string? CompensateCommandTypeFqn = null,
     LocationInfo? Location = null,
     /// <summary>

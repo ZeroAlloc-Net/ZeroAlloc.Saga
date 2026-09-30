@@ -103,6 +103,6 @@ internal static class FsmEmitter
 
         sb.AppendLine("}");
 
-        spc.AddSource($"{model.ClassName}Fsm.g.cs", sb.ToString());
+        spc.AddSource($"{model.HintNameStem}.Fsm.g.cs", sb.ToString());
     }
 }

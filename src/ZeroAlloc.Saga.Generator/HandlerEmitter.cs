@@ -42,7 +42,10 @@ internal static class HandlerEmitter
 
         foreach (var compEventFqn in model.CompensateOnEventFqns)
         {
-            EmitCompensateHandler(spc, model, compEventFqn);
+            var compEventHintName = model.Steps
+                .First(s => string.Equals(s.CompensateOnEventTypeFqn, compEventFqn, System.StringComparison.Ordinal))
+                .CompensateOnEventHintName!;
+            EmitCompensateHandler(spc, model, compEventFqn, compEventHintName);
         }
     }
 
@@ -163,10 +166,10 @@ internal static class HandlerEmitter
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
-        spc.AddSource($"{handlerName}.g.cs", sb.ToString());
+        spc.AddSource($"{model.HintNameStem}.Handler.{step.EventHintName}.g.cs", sb.ToString());
     }
 
-    private static void EmitCompensateHandler(SourceProductionContext spc, SagaModel model, string compEventFqn)
+    private static void EmitCompensateHandler(SourceProductionContext spc, SagaModel model, string compEventFqn, string compEventHintName)
     {
         var sb = new StringBuilder();
         var eventSimple = NameUtil.SimpleName(compEventFqn);
@@ -299,6 +302,6 @@ internal static class HandlerEmitter
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
-        spc.AddSource($"{handlerName}.g.cs", sb.ToString());
+        spc.AddSource($"{model.HintNameStem}.Handler.{compEventHintName}.g.cs", sb.ToString());
     }
 }
