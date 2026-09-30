@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <PackageId>ZeroAlloc.Saga.Outbox</PackageId>
-    <Description>Transactional outbox bridge for ZeroAlloc.Saga — command dispatch committed atomically with the saga state save on EF Core, and on Redis with ZeroAlloc.Saga.Outbox.Redis. At-least-once on the ORM store.</Description>
+    <Description>Transactional outbox bridge for ZeroAlloc.Saga — command dispatch committed atomically with the saga state save on EF Core, on Redis with ZeroAlloc.Saga.Outbox.Redis, and on ZeroAlloc.ORM with ZeroAlloc.Saga.Outbox.Orm.</Description>
     <PackageTags>saga;outbox;mediator;cqrs;zeroalloc</PackageTags>
     <IsAotCompatible>true</IsAotCompatible>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>

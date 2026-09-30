@@ -21,9 +21,11 @@ namespace ZeroAlloc.Saga;
 ///
 /// <para>Backends own the meaning of "atomic": <c>ZeroAlloc.Saga.EfCore</c> uses
 /// a shared scoped <c>DbContext</c> whose <c>SaveChangesAsync</c> commits both
-/// the saga update and any tracked outbox entity. <c>ZeroAlloc.Saga.Redis</c>
-/// (Stage 2) uses MULTI/EXEC across the saga key and the outbox stream within
-/// the same scope.</para>
+/// the saga update and any tracked outbox entity. <c>ZeroAlloc.Saga.Redis</c>,
+/// with <c>ZeroAlloc.Saga.Outbox.Redis</c>, uses MULTI/EXEC across the saga key and
+/// the outbox entries within the same scope. <c>ZeroAlloc.Saga.Orm</c>, with
+/// <c>ZeroAlloc.Saga.Outbox.Orm</c>, writes the outbox rows in the saga store's
+/// database transaction.</para>
 ///
 /// <para>The default implementation in <c>ZeroAlloc.Saga.Outbox</c>'s
 /// <c>WithOutbox()</c> wraps <see cref="ZeroAlloc.Outbox.IOutboxStore"/>'s
@@ -31,7 +33,8 @@ namespace ZeroAlloc.Saga;
 /// <c>IOutboxStore</c> implementation already honors deferred-write semantics
 /// (<c>EfCoreOutboxStore</c> does; the InMemory backend's and <c>OrmOutboxStore</c>'s
 /// auto-commit fallback does not, and is documented as not-atomic for those
-/// combinations).</para>
+/// combinations, unless a backend unit of work such as <c>WithOrmOutbox()</c>'s
+/// replaces the default).</para>
 /// </remarks>
 public interface ISagaUnitOfWork
 {

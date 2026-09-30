@@ -5,6 +5,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using ZeroAlloc.Outbox;
 
 namespace ZeroAlloc.Saga.Outbox;
@@ -39,6 +41,11 @@ namespace ZeroAlloc.Saga.Outbox;
 /// the EF Core saga store on that same context saves it. Any other saga store drops the row with
 /// the scope, so every saga command would be lost without an error.
 /// </para>
+/// <para>
+/// ZeroAlloc.Outbox.Orm's store writes each row itself, so it works with any saga store, at
+/// least once. With the ORM saga store, <c>WithOrmOutbox()</c> makes that pairing atomic, and the
+/// check logs a warning when it is missing, without failing the start.
+/// </para>
 /// </remarks>
 internal sealed class SagaOutboxStartupCheck : IHostedLifecycleService
 {
@@ -48,6 +55,8 @@ internal sealed class SagaOutboxStartupCheck : IHostedLifecycleService
     internal const string EfCoreOutboxStoreTypeName = "ZeroAlloc.Outbox.EfCore.EfCoreOutboxStore`1";
     internal const string EfCoreSagaStoreOptionsTypeName = "ZeroAlloc.Saga.EfCore.EfCoreSagaStoreOptions";
     internal const string DbContextTypeName = "Microsoft.EntityFrameworkCore.DbContext";
+    internal const string OrmOutboxStoreTypeName = "ZeroAlloc.Outbox.Orm.OrmOutboxStore";
+    internal const string OrmSagaStoreOptionsTypeName = "ZeroAlloc.Saga.Orm.OrmSagaStoreOptions";
 
     internal const string SupportedSetups =
         "Supported setups:\n" +
@@ -56,14 +65,14 @@ internal sealed class SagaOutboxStartupCheck : IHostedLifecycleService
         "  Redis:   services.AddOutbox(o => ...);\n" +
         "           services.AddSaga().WithRedisStore()...WithOutbox().WithRedisOutbox();\n" +
         "  ORM:     services.AddOutbox(o => ...).WithOrm();\n" +
-        "           services.AddSaga().WithOrmStore()...WithOutbox();\n" +
+        "           services.AddSaga().WithOrmStore()...WithOutbox().WithOrmOutbox();\n" +
         "See https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox.md#supported-pairings";
 
     internal const string SupportedPairings =
         "Supported pairings of saga store and outbox store:\n" +
         "  WithEfCoreStore<TContext>() and AddOutbox().WithEfCore<TContext>(), on the same TContext: atomic.\n" +
         "  WithRedisStore() and WithOutbox().WithRedisOutbox(): atomic.\n" +
-        "  WithOrmStore() and AddOutbox().WithOrm(): at-least-once.\n" +
+        "  WithOrmStore() and WithOutbox().WithOrmOutbox(), with AddOutbox().WithOrm(): atomic.\n" +
         "  Any saga store and an outbox store that writes each row itself, such as AddOutbox().WithOrm(): " +
         "at-least-once.\n" +
         "AddOutbox().WithEfCore<TContext>() only stages its rows, so it works with WithEfCoreStore<TContext>() " +
@@ -76,6 +85,14 @@ internal sealed class SagaOutboxStartupCheck : IHostedLifecycleService
         $"saga store, and {reason}, so every saga command would be lost. Configure the saga store with " +
         $"WithEfCoreStore<{context}>(), or use an outbox store that writes each row itself.\n" +
         SupportedPairings;
+
+    internal const string OrmWithoutOrmOutboxMessage =
+        "ZeroAlloc.Saga.Outbox.WithOutbox(): the saga store WithOrmStore() is paired with the outbox store " +
+        "OrmOutboxStore without WithOrmOutbox(), so saga command dispatch is at-least-once: each outbox row is " +
+        "written when the step dispatches, before the saga state is saved, and a concurrency retry enqueues " +
+        "the command again. Add WithOrmOutbox() from ZeroAlloc.Saga.Outbox.Orm after WithOutbox() to commit " +
+        "the outbox rows in the saga store's transaction. " +
+        "See https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox.md#zeroallocsagaorm-atomic-with-withormoutbox";
 
     internal const string NoSagaRegisteredMessage =
         "ZeroAlloc.Saga.Outbox.WithOutbox(): no saga is registered, so there is no saga command to dispatch. " +
@@ -182,6 +199,12 @@ internal sealed class SagaOutboxStartupCheck : IHostedLifecycleService
             return;
 
         var storeType = store.GetType();
+        if (string.Equals(storeType.FullName, OrmOutboxStoreTypeName, StringComparison.Ordinal))
+        {
+            WarnOnOrmWithoutOrmOutbox();
+            return;
+        }
+
         if (!storeType.IsGenericType
             || !string.Equals(storeType.GetGenericTypeDefinition().FullName, EfCoreOutboxStoreTypeName, StringComparison.Ordinal))
         {
@@ -218,6 +241,20 @@ internal sealed class SagaOutboxStartupCheck : IHostedLifecycleService
 
         throw new InvalidOperationException(UnsupportedPairingMessage(
             sagaStore, reason, FriendlyName(storeType), FriendlyName(outboxContextType)));
+    }
+
+    // The ORM outbox store writes each row itself, so it works with any saga store, at-least-once.
+    // With the ORM saga store, WithOrmOutbox() makes the pairing atomic instead. This warns rather
+    // than fails: at-least-once is a supported mode, and an application that already runs it with
+    // idempotent step handlers keeps starting.
+    private void WarnOnOrmWithoutOrmOutbox()
+    {
+        var sagaOptionsType = _services.GetRequiredService<SagaRetryOptions>().GetType();
+        if (!string.Equals(sagaOptionsType.FullName, OrmSagaStoreOptionsTypeName, StringComparison.Ordinal))
+            return;
+
+        var log = _services.GetService<ILogger<SagaOutboxStartupCheck>>() ?? NullLogger<SagaOutboxStartupCheck>.Instance;
+        log.LogWarning(OrmWithoutOrmOutboxMessage);
     }
 
     private static string DescribeSagaStore(Type sagaOptionsType)

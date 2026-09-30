@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Data.Async;
 using System.Data.Async.Adapters;
 using System.Threading.Tasks;
@@ -6,6 +7,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using ZeroAlloc.Outbox;
 using ZeroAlloc.Outbox.EfCore;
 using ZeroAlloc.Outbox.Orm;
@@ -31,13 +33,15 @@ public sealed class StorePairingTests
 {
     private const string Prefix = "ZeroAlloc.Saga.Outbox.WithOutbox(): ";
 
-    private static IHost BuildHost(SqliteFixture fx, Action<IServiceCollection> configure)
+    private static IHost BuildHost(SqliteFixture fx, Action<IServiceCollection> configure, LogCapture? log = null)
     {
         SagaStoreRegistrar.Reset();
         return new HostBuilder()
             .ConfigureServices(services =>
             {
                 services.AddLogging();
+                if (log is not null)
+                    services.AddSingleton<ILoggerProvider>(log);
                 services.AddDbContext<OutboxE2EDbContext>(o => o.UseSqlite(fx.Connection));
                 // Never opened: the check does not query, and the worker's failed polls are
                 // logged and retried until the test stops the host.
@@ -153,43 +157,84 @@ public sealed class StorePairingTests
     }
 
     [Fact]
-    public async Task OrmSagaStore_With_OrmOutboxStore_Starts()
+    public async Task OrmSagaStore_With_OrmOutboxStore_Without_WithOrmOutbox_Starts_And_Warns()
     {
+        // At-least-once is still a supported mode, so the host starts, but WithOrmOutbox() would
+        // make this pairing atomic, and the warning says so. #197
         await using var fx = new SqliteFixture();
+        var log = new LogCapture();
         using var host = BuildHost(fx, services =>
         {
             AddOrmOutbox(services);
             services.AddSaga().WithOrmStore().WithOutbox().WithOrderFulfillmentSaga();
-        });
+        }, log);
 
         await AssertStartsAsync(host);
+
+        Assert.Contains(SagaOutboxStartupCheck.OrmWithoutOrmOutboxMessage, log.Warnings, StringComparer.Ordinal);
     }
 
     [Fact]
     public async Task RedisSagaStore_Without_WithRedisOutbox_With_OrmOutboxStore_Starts()
     {
-        // At-least-once: the ORM outbox store writes each row when the step dispatches.
+        // At-least-once: the ORM outbox store writes each row when the step dispatches. Only the
+        // ORM saga store has WithOrmOutbox() to offer, so nothing is logged.
         await using var fx = new SqliteFixture();
+        var log = new LogCapture();
         using var host = BuildHost(fx, services =>
         {
             AddOrmOutbox(services);
             services.AddSaga().WithRedisStore().WithOutbox().WithOrderFulfillmentSaga();
-        });
+        }, log);
 
         await AssertStartsAsync(host);
+
+        Assert.DoesNotContain(SagaOutboxStartupCheck.OrmWithoutOrmOutboxMessage, log.Warnings, StringComparer.Ordinal);
     }
 
     [Fact]
     public async Task InMemorySagaStore_With_OrmOutboxStore_Starts()
     {
         await using var fx = new SqliteFixture();
+        var log = new LogCapture();
         using var host = BuildHost(fx, services =>
         {
             AddOrmOutbox(services);
             services.AddSaga().WithOutbox().WithOrderFulfillmentSaga();
-        });
+        }, log);
 
         await AssertStartsAsync(host);
+
+        Assert.DoesNotContain(SagaOutboxStartupCheck.OrmWithoutOrmOutboxMessage, log.Warnings, StringComparer.Ordinal);
+    }
+
+    // Collects the warnings the host logs.
+    private sealed class LogCapture : ILoggerProvider
+    {
+        private readonly ConcurrentQueue<string> _warnings = new();
+
+        public string[] Warnings => [.. _warnings];
+
+        public ILogger CreateLogger(string categoryName) => new Logger(_warnings);
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class Logger(ConcurrentQueue<string> warnings) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state)
+                where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(
+                LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            {
+                if (logLevel == LogLevel.Warning)
+                    warnings.Enqueue(formatter(state, exception));
+            }
+        }
     }
 
     private sealed class OtherSagaDbContext(DbContextOptions<OtherSagaDbContext> options) : DbContext(options)

@@ -11,6 +11,11 @@ The floor is `ZeroAlloc.Outbox` **3.0.1**, not 3.0.0: 3.0.0's EfCore package thr
 users also need `ZeroAlloc.Outbox.EfCore` 3.0.1 or later; Saga's floor on `ZeroAlloc.Outbox`
 does not raise it.
 
+Later 4.x releases raise the floor to `ZeroAlloc.Outbox` **4.1.0**, which
+`ZeroAlloc.Saga.Outbox.Orm` needs for its transactional enqueue. Upgrade the Outbox adapter
+package you use, such as `ZeroAlloc.Outbox.EfCore`, to 4.x with it; see
+[`outbox.md`](outbox.md) for what ZeroAlloc.Outbox 4.0 changes.
+
 ## What got fixed
 
 - **The documented EF setup dead-lettered saga commands.** `AddOutbox()` registers
@@ -166,9 +171,10 @@ same name, the host fails to start and names the type.
 
 ## 8. Native AOT
 
-`AddOutbox()` is `[RequiresUnreferencedCode]`. A `PublishAot` app registers the worker directly
-until ZeroAlloc.Outbox offers an AOT-clean registration
-([ZeroAlloc.Outbox#207](https://github.com/ZeroAlloc-Net/ZeroAlloc.Outbox/issues/207)).
+Under ZeroAlloc.Outbox 3.x, `AddOutbox()` was `[RequiresUnreferencedCode]`, and a `PublishAot`
+app registered the worker directly. ZeroAlloc.Outbox 4.0 made `AddOutbox()` AOT-safe
+([ZeroAlloc.Outbox#207](https://github.com/ZeroAlloc-Net/ZeroAlloc.Outbox/issues/207)), and Saga
+now requires 4.1.0, so call `AddOutbox()` in every app.
 See [Native AOT in the outbox guide](outbox.md#native-aot).
 
 ## Rolling out

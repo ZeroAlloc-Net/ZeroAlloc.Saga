@@ -32,10 +32,10 @@ public static class SagaOrmBuilderExtensions
     /// <c>MigrationRunner</c>; the store does not create tables on the fly.
     /// </para>
     /// <para>
-    /// Combined with <c>WithOutbox()</c>, dispatch is at-least-once, not atomic:
-    /// the outbox row is written when the step dispatches, before the saga
-    /// state is saved, so an OCC retry can enqueue a command twice. Step command
-    /// handlers must be idempotent.
+    /// For atomic outbox dispatch, add <c>WithOutbox().WithOrmOutbox()</c> from
+    /// <c>ZeroAlloc.Saga.Outbox.Orm</c>: each step's outbox rows then commit in
+    /// the same transaction as the saga row, and a failed save or removal
+    /// discards both.
     /// </para>
     /// </remarks>
     /// <example>
@@ -129,6 +129,7 @@ public static class SagaOrmBuilderExtensions
                 typeof(ISagaStore<TSaga, TKey>),
                 sp => new OrmSagaStore<TSaga, TKey>(
                     sp.GetRequiredService<SagaInstanceRepository>(),
+                    sp.GetServices<IOrmSagaTransactionContributor>(),
                     sp.GetService<ILogger<OrmSagaStore<TSaga, TKey>>>()),
                 ServiceLifetime.Scoped));
         }

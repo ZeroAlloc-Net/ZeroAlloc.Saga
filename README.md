@@ -6,10 +6,10 @@ Source-generated long-running process orchestration for the ZeroAlloc ecosystem.
 > each OCC retry attempt in a fresh `IServiceScope`, and the
 > `ZeroAlloc.Saga.Outbox` bridge commits every step command's dispatch
 > row atomically with the saga state save on the EF Core store, and on
-> the Redis store with `WithRedisOutbox()` — together they eliminate
-> Saga 1.1's "OCC retry can dispatch twice" caveat for both
-> cross-process races and same-process retries. On the ORM store the
-> bridge is at-least-once, so step command handlers must be idempotent.
+> the Redis store with `WithRedisOutbox()`, and on the ORM store with
+> `WithOrmOutbox()` — together they eliminate Saga 1.1's "OCC retry can
+> dispatch twice" caveat for both cross-process races and same-process
+> retries.
 > Durable persistence via `ZeroAlloc.Saga.EfCore` (single shared `SagaInstance` table,
 > row-version OCC, retry-on-conflict) is unchanged. InMemory remains
 > the default backend; switch to EfCore with one fluent call, and opt
@@ -78,6 +78,24 @@ through `IMediator.Send`, downstream events advance the FSM, and a terminal
 automatically.
 
 ## What's new
+
+### `ZeroAlloc.Saga.Outbox.Orm` (new package)
+
+Atomic outbox dispatch on the ZeroAlloc.ORM saga store. A saga step's outbox rows are written in
+the same database transaction as the saga row, through ZeroAlloc.Outbox.Orm, so a failed save or
+removal discards both.
+
+```csharp
+services.AddOutbox().WithOrm(OutboxOrmDialect.SqlServer);
+services.AddSaga()
+    .WithOrmStore()
+    .WithOutbox()
+    .WithOrmOutbox()          // <-- commits the outbox rows in the saga store's transaction
+    .WithOrderFulfillmentSaga();
+```
+
+Requires ZeroAlloc.Outbox 4.1.0 or later. See
+[`docs/outbox.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox.md#zeroallocsagaorm-atomic-with-withormoutbox).
 
 ### `ZeroAlloc.Saga.Outbox.Redis` (new package — closes Phase 3a-2)
 
@@ -181,8 +199,8 @@ services.AddSaga()
     .WithOrderFulfillmentSaga();
 ```
 
-Requires `ZeroAlloc.Outbox` 3.0.1+ and `ZeroAlloc.Serialisation` 2.1.0+. EF Core users also need
-`ZeroAlloc.Outbox.EfCore` 3.0.1 or later; Saga's floor on `ZeroAlloc.Outbox` does not raise it.
+Requires `ZeroAlloc.Outbox` 4.1.0+ and `ZeroAlloc.Serialisation` 2.1.0+. EF Core users also need
+the matching 4.x `ZeroAlloc.Outbox.EfCore`; Saga's floor on `ZeroAlloc.Outbox` does not raise it.
 See [`docs/outbox.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox.md) for the full setup, the
 `ISerializer<T>` each step command needs, `ZASAGA017`, and dispatch options. Upgrading from 3.x: see
 [`docs/migrating-to-v4.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/migrating-to-v4.md).

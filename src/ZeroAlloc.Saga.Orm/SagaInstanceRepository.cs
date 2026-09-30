@@ -22,9 +22,18 @@ namespace ZeroAlloc.Saga.Orm;
 /// <see cref="OrmSagaConcurrencyException"/> — there is no read-then-write
 /// window for a competing writer to slip through.
 /// </para>
+/// <para>
+/// Every write takes the store's <see cref="IAsyncDbTransaction"/>, so the ORM
+/// emits <c>cmd.Transaction = tx</c> and the statement commits with whatever
+/// the store's contributors write in the same transaction. Only the load runs
+/// on its own.
+/// </para>
 /// </remarks>
 internal sealed partial class SagaInstanceRepository(IAsyncDbConnection connection)
 {
+    /// <summary>The connection every statement runs on, and the store's transactions begin on.</summary>
+    public IAsyncDbConnection Connection => connection;
+
     [Query("""
         SELECT State, CurrentFsmState, RowVersion
         FROM SagaInstance
@@ -32,6 +41,17 @@ internal sealed partial class SagaInstanceRepository(IAsyncDbConnection connecti
         """)]
     public partial Task<SagaInstanceRow?> GetAsync(
         string sagaType, string correlationKey, CancellationToken ct);
+
+    // The same read, inside the store's transaction: RemoveAsync checks that no
+    // row appeared since a load found none, and the check belongs to the
+    // transaction that commits the removal's contributed writes.
+    [Query("""
+        SELECT State, CurrentFsmState, RowVersion
+        FROM SagaInstance
+        WHERE SagaType = @sagaType AND CorrelationKey = @correlationKey
+        """)]
+    public partial Task<SagaInstanceRow?> GetInTransactionAsync(
+        string sagaType, string correlationKey, IAsyncDbTransaction tx, CancellationToken ct);
 
     [Command("""
         INSERT INTO SagaInstance
@@ -47,6 +67,7 @@ internal sealed partial class SagaInstanceRepository(IAsyncDbConnection connecti
         byte[] rowVersion,
         DateTimeOffset createdAt,
         DateTimeOffset updatedAt,
+        IAsyncDbTransaction tx,
         CancellationToken ct);
 
     [Command("""
@@ -67,6 +88,7 @@ internal sealed partial class SagaInstanceRepository(IAsyncDbConnection connecti
         byte[] newRowVersion,
         byte[] expectedRowVersion,
         DateTimeOffset updatedAt,
+        IAsyncDbTransaction tx,
         CancellationToken ct);
 
     [Command("""
@@ -74,7 +96,7 @@ internal sealed partial class SagaInstanceRepository(IAsyncDbConnection connecti
         WHERE SagaType = @sagaType AND CorrelationKey = @correlationKey
         """)]
     public partial Task<int> DeleteAsync(
-        string sagaType, string correlationKey, CancellationToken ct);
+        string sagaType, string correlationKey, IAsyncDbTransaction tx, CancellationToken ct);
 
     [Command("""
         DELETE FROM SagaInstance
@@ -83,5 +105,5 @@ internal sealed partial class SagaInstanceRepository(IAsyncDbConnection connecti
           AND RowVersion = @expectedRowVersion
         """)]
     public partial Task<int> DeleteVersionedAsync(
-        string sagaType, string correlationKey, byte[] expectedRowVersion, CancellationToken ct);
+        string sagaType, string correlationKey, byte[] expectedRowVersion, IAsyncDbTransaction tx, CancellationToken ct);
 }
