@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v4.0.2...ZeroAlloc.Saga-v4.1.0) (2026-09-30)
+
+
+### Features
+
+* commit ORM saga outbox rows in the saga store's transaction with WithOrmOutbox, in the new ZeroAlloc.Saga.Outbox.Orm package ([e9ae358](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/e9ae358e74550d9ac6f8735756bc90f2575e4d21))
+* fail the outbox startup check when a registered saga's command has no ISerializer&lt;T&gt; ([#214](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/214)) ([d0afa8c](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/d0afa8c642e32d5e270ac3bd066f3ba0a7f19e81))
+
+
+### Bug Fixes
+
+* give same-named events of one saga their own handler and FSM trigger ([#220](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/220)) ([1c6a810](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/1c6a81078413f0a650459bd1bd29678bc44902d4)), closes [#216](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/216)
+* keep events named Complete or CompensateDone off the FSM's built-in triggers ([#221](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/221)) ([8cf5eb9](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/8cf5eb954ee1f5a67c981faee481c93dbaa6c9df)), closes [#219](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/219)
+* name the saga ORM migration source and run it next to the outbox schema ([#227](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/227)) ([1e2c115](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/1e2c115ddaa0b7e0f65d0d23516383e3911f3ba6)), closes [#226](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/226)
+* qualify generated file names so same-named sagas do not crash the generator ([#217](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/217)) ([834fec8](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/834fec86cf25947ff63264b36db639356fadcf6a)), closes [#215](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/215)
+* report a failed saga insert as a conflict only when another writer's row exists ([#225](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/225)) ([0714895](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/071489505d5354bb0a82acf9a4f8d1fa6049dab6)), closes [#222](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/222)
+* require ZeroAlloc.Outbox 4.2.0 for its fixed ORM migration source name ([#230](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/230)) ([04df494](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/04df494301858f5f358314ab2ffff51b5d9b5e41)), closes [#229](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/229)
+* stop adding [ZeroAllocSerializable] to step commands and retire ZASAGA016 ([#210](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/210)) ([a231e71](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/a231e71376f2d17a5d2777845cf11590e1c28219)), closes [#207](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/207)
+
+
+### Dependencies
+
+* require ZeroAlloc.Outbox 4.1.0 or later ([e9ae358](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/e9ae358e74550d9ac6f8735756bc90f2575e4d21))
+
 ## [4.0.2](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v4.0.1...ZeroAlloc.Saga-v4.0.2) (2026-09-30)
 
 
