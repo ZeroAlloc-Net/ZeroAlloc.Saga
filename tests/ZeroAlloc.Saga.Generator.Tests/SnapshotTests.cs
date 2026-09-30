@@ -363,4 +363,62 @@ public class SnapshotTests
             """;
         GeneratorSnapshot.Verify(GeneratorTestHost.Run(src));
     }
+
+    [Fact]
+    public void SameNamedEvents_InOneSaga()
+    {
+        // A.Placed and B.Placed, and A.Failed and B.Failed, share simple names, so their handler
+        // classes and FSM triggers are namespace-qualified. Shipped is unique in the saga and
+        // keeps its simple name, #216.
+        var src = Header + """
+
+            namespace A
+            {
+                public sealed record Placed(int Id) : INotification;
+                public sealed record Failed(int Id) : INotification;
+            }
+
+            namespace B
+            {
+                public sealed record Placed(int Id) : INotification;
+                public sealed record Failed(int Id) : INotification;
+            }
+
+            namespace App
+            {
+                public sealed record Shipped(int Id) : INotification;
+
+                public sealed record Step1(int Id) : IRequest;
+                public sealed record Step2(int Id) : IRequest;
+                public sealed record Step3(int Id) : IRequest;
+                public sealed record Undo1(int Id) : IRequest;
+                public sealed record Undo2(int Id) : IRequest;
+
+                [Saga]
+                public partial class OrderSaga
+                {
+                    public int Id { get; set; }
+
+                    [CorrelationKey] public int Key(A.Placed e) => e.Id;
+                    [CorrelationKey] public int Key(B.Placed e) => e.Id;
+                    [CorrelationKey] public int Key(A.Failed e) => e.Id;
+                    [CorrelationKey] public int Key(B.Failed e) => e.Id;
+                    [CorrelationKey] public int Key(Shipped e) => e.Id;
+
+                    [Step(Order = 1, Compensate = nameof(UndoFirst), CompensateOn = typeof(A.Failed))]
+                    public Step1 First(A.Placed e) { Id = e.Id; return new(e.Id); }
+
+                    [Step(Order = 2, Compensate = nameof(UndoSecond), CompensateOn = typeof(B.Failed))]
+                    public Step2 Second(B.Placed e) => new(Id);
+
+                    [Step(Order = 3)]
+                    public Step3 Third(Shipped e) => new(Id);
+
+                    public Undo1 UndoFirst() => new(Id);
+                    public Undo2 UndoSecond() => new(Id);
+                }
+            }
+            """;
+        GeneratorSnapshot.Verify(GeneratorTestHost.Run(src));
+    }
 }

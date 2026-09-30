@@ -52,8 +52,9 @@ internal static class HandlerEmitter
     private static void EmitForwardHandler(SourceProductionContext spc, SagaModel model, StepInfo step)
     {
         var sb = new StringBuilder();
-        var eventSimple = NameUtil.SimpleName(step.EventTypeFqn);
-        var handlerName = $"{model.ClassName}_{eventSimple}_Handler";
+        var eventName = NameUtil.EventName(model, step.EventTypeFqn);
+        var eventLogName = NameUtil.EventLogName(model, step.EventTypeFqn);
+        var handlerName = $"{model.ClassName}_{eventName}_Handler";
         var keyType = TypeNameHelper.GlobalQualified(model.CorrelationKeyTypeFqn);
         var eventType = TypeNameHelper.GlobalQualified(step.EventTypeFqn);
         var fsmType = $"{model.ClassName}Fsm";
@@ -115,9 +116,9 @@ internal static class HandlerEmitter
         sb.AppendLine("            try");
         sb.AppendLine("            {");
         sb.AppendLine("                var saga = await store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);");
-        sb.Append("                if (!saga.Fsm.TryFire(").Append(fsmType).Append(".Trigger.").Append(eventSimple).AppendLine("))");
+        sb.Append("                if (!saga.Fsm.TryFire(").Append(fsmType).Append(".Trigger.").Append(eventName).AppendLine("))");
         sb.AppendLine("                {");
-        sb.Append("                    _log.LogDebug(\"Saga {Saga}: late ").Append(eventSimple).AppendLine(" for key {Key}; ignored\", \"" + model.ClassName + "\", key);");
+        sb.Append("                    _log.LogDebug(\"Saga {Saga}: late ").Append(eventLogName).AppendLine(" for key {Key}; ignored\", \"" + model.ClassName + "\", key);");
         sb.AppendLine("                    return;");
         sb.AppendLine("                }");
         sb.AppendLine();
@@ -172,8 +173,9 @@ internal static class HandlerEmitter
     private static void EmitCompensateHandler(SourceProductionContext spc, SagaModel model, string compEventFqn, string compEventHintName)
     {
         var sb = new StringBuilder();
-        var eventSimple = NameUtil.SimpleName(compEventFqn);
-        var handlerName = $"{model.ClassName}_{eventSimple}_Handler";
+        var eventName = NameUtil.EventName(model, compEventFqn);
+        var eventLogName = NameUtil.EventLogName(model, compEventFqn);
+        var handlerName = $"{model.ClassName}_{eventName}_Handler";
         var keyType = TypeNameHelper.GlobalQualified(model.CorrelationKeyTypeFqn);
         var eventType = TypeNameHelper.GlobalQualified(compEventFqn);
         var fsmType = $"{model.ClassName}Fsm";
@@ -229,15 +231,15 @@ internal static class HandlerEmitter
         sb.AppendLine("                var saga = await store.TryLoadAsync(key, ct).ConfigureAwait(false);");
         sb.AppendLine("                if (saga is null)");
         sb.AppendLine("                {");
-        sb.Append("                    _log.LogWarning(\"Saga {Saga}: orphan ").Append(eventSimple).AppendLine(" for key {Key}; no instance to compensate\", \"" + model.ClassName + "\", key);");
+        sb.Append("                    _log.LogWarning(\"Saga {Saga}: orphan ").Append(eventLogName).AppendLine(" for key {Key}; no instance to compensate\", \"" + model.ClassName + "\", key);");
         sb.AppendLine("                    return;");
         sb.AppendLine("                }");
         sb.AppendLine();
         sb.Append("                var stateAtFailure = saga.Fsm.Current;");
         sb.AppendLine();
-        sb.Append("                if (!saga.Fsm.TryFire(").Append(fsmType).Append(".Trigger.").Append(eventSimple).AppendLine("))");
+        sb.Append("                if (!saga.Fsm.TryFire(").Append(fsmType).Append(".Trigger.").Append(eventName).AppendLine("))");
         sb.AppendLine("                {");
-        sb.Append("                    _log.LogDebug(\"Saga {Saga}: ").Append(eventSimple).AppendLine(" not valid in state {State} for key {Key}; ignored\", \"" + model.ClassName + "\", stateAtFailure, key);");
+        sb.Append("                    _log.LogDebug(\"Saga {Saga}: ").Append(eventLogName).AppendLine(" not valid in state {State} for key {Key}; ignored\", \"" + model.ClassName + "\", stateAtFailure, key);");
         sb.AppendLine("                    return;");
         sb.AppendLine("                }");
         sb.AppendLine();

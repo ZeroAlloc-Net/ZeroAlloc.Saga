@@ -81,9 +81,9 @@ internal static class BuilderExtensionsEmitter
             .Distinct(System.StringComparer.Ordinal);
         foreach (var evtFqn in allEvents)
         {
-            var simple = NameUtil.SimpleName(evtFqn);
+            var eventName = NameUtil.EventName(model, evtFqn);
             sb.Append("        builder.Services.AddTransient<INotificationHandler<").Append(TypeNameHelper.GlobalQualified(evtFqn)).Append(">, ")
-              .Append(model.ClassName).Append("_").Append(simple).AppendLine("_Handler>();");
+              .Append(model.ClassName).Append("_").Append(eventName).AppendLine("_Handler>();");
         }
 
         sb.AppendLine("        return builder;");
