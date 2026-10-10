@@ -50,7 +50,7 @@
     <PackageVersion Include="ZeroAlloc.Outbox" Version="4.4.0" />
     <PackageVersion Include="ZeroAlloc.Outbox.EfCore" Version="4.4.0" />
     <PackageVersion Include="ZeroAlloc.Outbox.Orm" Version="4.4.0" />
-    <PackageVersion Include="ZeroAlloc.Serialisation" Version="2.5.1" />
+    <PackageVersion Include="ZeroAlloc.Serialisation" Version="2.6.0" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
