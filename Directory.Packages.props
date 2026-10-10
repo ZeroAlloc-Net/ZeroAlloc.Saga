@@ -24,7 +24,7 @@
     <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.50.3" />
 
     <!-- EfCore backend deps -->
-    <PackageVersion Include="ZeroAlloc.ValueObjects.EfCore" Version="2.0.1*" />
+    <PackageVersion Include="ZeroAlloc.ValueObjects.EfCore" Version="2.1.*" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.1*" />
     <PackageVersion Include="AdoNet.Async.Adapters" Version="1.4.1" />
     <PackageVersion Include="Testcontainers.MsSql" Version="4.15.0" />
