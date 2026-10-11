@@ -27,7 +27,7 @@
     <PackageVersion Include="ZeroAlloc.ValueObjects.EfCore" Version="2.1.*" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.1*" />
     <PackageVersion Include="AdoNet.Async.Adapters" Version="1.5.2" />
-    <PackageVersion Include="Testcontainers.MsSql" Version="4.15.0" />
+    <PackageVersion Include="Testcontainers.MsSql" Version="4.16.0" />
     <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.1.1" />
     <PackageVersion Include="ZeroAlloc.ORM" Version="2.2.1" />
     <PackageVersion Include="ZeroAlloc.ORM.Generator" Version="2.2.1" />
@@ -47,9 +47,9 @@
   <ItemGroup>
 
     <!-- Outbox bridge deps -->
-    <PackageVersion Include="ZeroAlloc.Outbox" Version="4.4.1" />
-    <PackageVersion Include="ZeroAlloc.Outbox.EfCore" Version="4.4.1" />
-    <PackageVersion Include="ZeroAlloc.Outbox.Orm" Version="4.4.1" />
+    <PackageVersion Include="ZeroAlloc.Outbox" Version="4.4.2" />
+    <PackageVersion Include="ZeroAlloc.Outbox.EfCore" Version="4.4.2" />
+    <PackageVersion Include="ZeroAlloc.Outbox.Orm" Version="4.4.2" />
     <PackageVersion Include="ZeroAlloc.Serialisation" Version="2.8.0" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
@@ -60,7 +60,7 @@
 
     <!-- Redis backend deps -->
     <PackageVersion Include="StackExchange.Redis" Version="3.3.*" />
-    <PackageVersion Include="Testcontainers.Redis" Version="4.15.*" />
+    <PackageVersion Include="Testcontainers.Redis" Version="4.16.*" />
 
     <!-- Generator deps -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.*" />
