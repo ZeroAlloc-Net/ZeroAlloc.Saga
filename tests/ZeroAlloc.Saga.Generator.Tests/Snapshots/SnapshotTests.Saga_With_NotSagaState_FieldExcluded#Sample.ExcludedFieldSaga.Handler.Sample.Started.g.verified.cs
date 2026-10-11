@@ -27,6 +27,14 @@ internal sealed class ExcludedFieldSaga_Started_Handler : INotificationHandler<g
     private readonly SagaRetryOptions _retry;
     private readonly ILogger<ExcludedFieldSaga_Started_Handler> _log;
 
+    // Cached LoggerMessage delegates. A disabled level returns before any argument is boxed
+    // or any params array is built; the duplicate and late event paths run on every
+    // redelivery. Level, event id 0 and template match the former LogDebug/LogWarning calls.
+    private static readonly Action<ILogger, string, int, Exception?> s_logLateEvent =
+        LoggerMessage.Define<string, int>(LogLevel.Debug, new EventId(0), "Saga {Saga}: late Started for key {Key}; ignored");
+    private static readonly Action<ILogger, string, int, int, int, Exception?> s_logConflictRetry =
+        LoggerMessage.Define<string, int, int, int>(LogLevel.Warning, new EventId(0), "Saga {Saga}: OCC conflict on key {Key}, retry {Attempt}/{Max}");
+
     public ExcludedFieldSaga_Started_Handler(IServiceScopeFactory scopeFactory, SagaLockManager<int> locks, SagaRetryOptions retry, ILogger<ExcludedFieldSaga_Started_Handler> log)
     {
         _scopeFactory = scopeFactory;
@@ -51,7 +59,7 @@ internal sealed class ExcludedFieldSaga_Started_Handler : INotificationHandler<g
                 var saga = await store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);
                 if (!saga.Fsm.TryFire(ExcludedFieldSagaFsm.Trigger.Started))
                 {
-                    _log.LogDebug("Saga {Saga}: late Started for key {Key}; ignored", "ExcludedFieldSaga", key);
+                    s_logLateEvent(_log, "ExcludedFieldSaga", key, null);
                     return;
                 }
 
@@ -65,7 +73,7 @@ internal sealed class ExcludedFieldSaga_Started_Handler : INotificationHandler<g
             catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsBackendConflict(ex))
             {
                 attempts++;
-                _log.LogWarning("Saga {Saga}: OCC conflict on key {Key}, retry {Attempt}/{Max}", "ExcludedFieldSaga", key, attempts, _retry.MaxRetryAttempts);
+                s_logConflictRetry(_log, "ExcludedFieldSaga", key, attempts, _retry.MaxRetryAttempts, null);
                 var delay = _retry.UseExponentialBackoff
                     ? TimeSpan.FromTicks(_retry.RetryBaseDelay.Ticks * (1L << attempts))
                     : _retry.RetryBaseDelay;

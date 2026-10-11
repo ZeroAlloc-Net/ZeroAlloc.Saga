@@ -91,6 +91,12 @@ internal static class HandlerEmitter
         sb.AppendLine("    private readonly SagaRetryOptions _retry;");
         sb.Append("    private readonly ILogger<").Append(handlerName).AppendLine("> _log;");
         sb.AppendLine();
+        AppendLogDelegatesComment(sb);
+        AppendLogDelegate(sb, "s_logLateEvent", "Debug", "string, " + keyType,
+            "Saga {Saga}: late " + eventLogName + " for key {Key}; ignored");
+        AppendLogDelegate(sb, "s_logConflictRetry", "Warning", "string, " + keyType + ", int, int",
+            "Saga {Saga}: OCC conflict on key {Key}, retry {Attempt}/{Max}");
+        sb.AppendLine();
         sb.Append("    public ").Append(handlerName).Append("(IServiceScopeFactory scopeFactory, SagaLockManager<").Append(keyType)
           .Append("> locks, SagaRetryOptions retry, ILogger<").Append(handlerName).AppendLine("> log)");
         sb.AppendLine("    {");
@@ -116,7 +122,7 @@ internal static class HandlerEmitter
         sb.AppendLine("                var saga = await store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);");
         sb.Append("                if (!saga.Fsm.TryFire(").Append(fsmType).Append(".Trigger.").Append(eventName).AppendLine("))");
         sb.AppendLine("                {");
-        sb.Append("                    _log.LogDebug(\"Saga {Saga}: late ").Append(eventLogName).AppendLine(" for key {Key}; ignored\", \"" + model.ClassName + "\", key);");
+        sb.Append("                    s_logLateEvent(_log, \"").Append(model.ClassName).AppendLine("\", key, null);");
         sb.AppendLine("                    return;");
         sb.AppendLine("                }");
         sb.AppendLine();
@@ -141,8 +147,8 @@ internal static class HandlerEmitter
         sb.AppendLine("            catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsBackendConflict(ex))");
         sb.AppendLine("            {");
         sb.AppendLine("                attempts++;");
-        sb.Append("                _log.LogWarning(\"Saga {Saga}: OCC conflict on key {Key}, retry {Attempt}/{Max}\", \"")
-          .Append(model.ClassName).AppendLine("\", key, attempts, _retry.MaxRetryAttempts);");
+        sb.Append("                s_logConflictRetry(_log, \"")
+          .Append(model.ClassName).AppendLine("\", key, attempts, _retry.MaxRetryAttempts, null);");
         sb.AppendLine("                var delay = _retry.UseExponentialBackoff");
         sb.AppendLine("                    ? TimeSpan.FromTicks(_retry.RetryBaseDelay.Ticks * (1L << attempts))");
         sb.AppendLine("                    : _retry.RetryBaseDelay;");
@@ -201,6 +207,14 @@ internal static class HandlerEmitter
         sb.AppendLine("    private readonly SagaRetryOptions _retry;");
         sb.Append("    private readonly ILogger<").Append(handlerName).AppendLine("> _log;");
         sb.AppendLine();
+        AppendLogDelegatesComment(sb);
+        AppendLogDelegate(sb, "s_logOrphanEvent", "Warning", "string, " + keyType,
+            "Saga {Saga}: orphan " + eventLogName + " for key {Key}; no instance to compensate");
+        AppendLogDelegate(sb, "s_logInvalidState", "Debug", "string, " + fsmType + ".State, " + keyType,
+            "Saga {Saga}: " + eventLogName + " not valid in state {State} for key {Key}; ignored");
+        AppendLogDelegate(sb, "s_logConflictRetry", "Warning", "string, " + keyType + ", int, int",
+            "Saga {Saga}: OCC conflict on compensation for key {Key}, retry {Attempt}/{Max}");
+        sb.AppendLine();
         sb.Append("    public ").Append(handlerName).Append("(IServiceScopeFactory scopeFactory, SagaLockManager<").Append(keyType)
           .Append("> locks, SagaRetryOptions retry, ILogger<").Append(handlerName).AppendLine("> log)");
         sb.AppendLine("    {");
@@ -227,7 +241,7 @@ internal static class HandlerEmitter
         sb.AppendLine("                var saga = await store.TryLoadAsync(key, ct).ConfigureAwait(false);");
         sb.AppendLine("                if (saga is null)");
         sb.AppendLine("                {");
-        sb.Append("                    _log.LogWarning(\"Saga {Saga}: orphan ").Append(eventLogName).AppendLine(" for key {Key}; no instance to compensate\", \"" + model.ClassName + "\", key);");
+        sb.Append("                    s_logOrphanEvent(_log, \"").Append(model.ClassName).AppendLine("\", key, null);");
         sb.AppendLine("                    return;");
         sb.AppendLine("                }");
         sb.AppendLine();
@@ -235,7 +249,7 @@ internal static class HandlerEmitter
         sb.AppendLine();
         sb.Append("                if (!saga.Fsm.TryFire(").Append(fsmType).Append(".Trigger.").Append(eventName).AppendLine("))");
         sb.AppendLine("                {");
-        sb.Append("                    _log.LogDebug(\"Saga {Saga}: ").Append(eventLogName).AppendLine(" not valid in state {State} for key {Key}; ignored\", \"" + model.ClassName + "\", stateAtFailure, key);");
+        sb.Append("                    s_logInvalidState(_log, \"").Append(model.ClassName).AppendLine("\", stateAtFailure, key, null);");
         sb.AppendLine("                    return;");
         sb.AppendLine("                }");
         sb.AppendLine();
@@ -278,8 +292,8 @@ internal static class HandlerEmitter
         sb.AppendLine("            catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsBackendConflict(ex))");
         sb.AppendLine("            {");
         sb.AppendLine("                attempts++;");
-        sb.Append("                _log.LogWarning(\"Saga {Saga}: OCC conflict on compensation for key {Key}, retry {Attempt}/{Max}\", \"")
-          .Append(model.ClassName).AppendLine("\", key, attempts, _retry.MaxRetryAttempts);");
+        sb.Append("                s_logConflictRetry(_log, \"")
+          .Append(model.ClassName).AppendLine("\", key, attempts, _retry.MaxRetryAttempts, null);");
         sb.AppendLine("                var delay = _retry.UseExponentialBackoff");
         sb.AppendLine("                    ? TimeSpan.FromTicks(_retry.RetryBaseDelay.Ticks * (1L << attempts))");
         sb.AppendLine("                    : _retry.RetryBaseDelay;");
@@ -301,5 +315,22 @@ internal static class HandlerEmitter
         sb.AppendLine("}");
 
         spc.AddSource($"{model.HintNameStem}.Handler.{compEventHintName}.g.cs", sb.ToString());
+    }
+
+    private static void AppendLogDelegatesComment(StringBuilder sb)
+    {
+        sb.AppendLine("    // Cached LoggerMessage delegates. A disabled level returns before any argument is boxed");
+        sb.AppendLine("    // or any params array is built; the duplicate and late event paths run on every");
+        sb.AppendLine("    // redelivery. Level, event id 0 and template match the former LogDebug/LogWarning calls.");
+    }
+
+    // The template goes into a C# string literal and is parsed by LoggerMessage at type
+    // initialisation, so it must hold exactly one {Placeholder} per type argument.
+    private static void AppendLogDelegate(StringBuilder sb, string field, string level, string typeArgs, string template)
+    {
+        sb.Append("    private static readonly Action<ILogger, ").Append(typeArgs).Append(", Exception?> ").Append(field)
+          .AppendLine(" =");
+        sb.Append("        LoggerMessage.Define<").Append(typeArgs).Append(">(LogLevel.").Append(level)
+          .Append(", new EventId(0), \"").Append(template).AppendLine("\");");
     }
 }

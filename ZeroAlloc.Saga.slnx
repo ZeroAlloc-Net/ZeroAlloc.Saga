@@ -25,11 +25,16 @@
     <Project Path="tests/ZeroAlloc.Saga.MultiAssembly.Shipping/ZeroAlloc.Saga.MultiAssembly.Shipping.csproj" />
     <Project Path="tests/ZeroAlloc.Saga.MultiAssembly.Tests/ZeroAlloc.Saga.MultiAssembly.Tests.csproj" />
   </Folder>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/ZeroAlloc.Saga.Benchmarks/ZeroAlloc.Saga.Benchmarks.csproj" />
+  </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/OrderFulfillment/OrderFulfillment.csproj" />
     <Project Path="samples/AotSmoke/AotSmoke.csproj" />
     <Project Path="samples/AotSmokeEfCore/AotSmokeEfCore.csproj" />
     <Project Path="samples/AotSmokeOutbox/AotSmokeOutbox.csproj" />
+    <Project Path="samples/AotSmokeOrm/AotSmokeOrm.csproj" />
+    <Project Path="samples/AotSmokeRedis/AotSmokeRedis.csproj" />
     <Project Path="samples/ResilienceSample/ResilienceSample.csproj" />
   </Folder>
 </Solution>

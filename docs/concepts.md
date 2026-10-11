@@ -179,7 +179,14 @@ The runtime is fully AOT-compatible: no reflection, no open-generic resolution
 at runtime, no dynamic code paths. The generator emits concrete-closed-type
 DI registrations so the AOT compiler can statically reach every type pair.
 A CI smoke test (`samples/AotSmoke/`) publishes with `PublishAot=true` and
-asserts the saga reaches `Completed` and is removed from the store.
+asserts the saga reaches `Completed` and is removed from the store. The same
+`aot-smoke` workflow publishes the outbox, ORM, Redis and resilience packages
+with `PublishAot=true` and fails on any trim or AOT warning; every one of those
+binaries runs in CI except the Redis one, which needs a Redis server.
+
+The log calls in the generated handlers are cached `LoggerMessage.Define`
+delegates, so a disabled log level costs no boxing and no `params` array, even on
+the duplicate and late event paths that run on every redelivery.
 
 ## Further reading
 

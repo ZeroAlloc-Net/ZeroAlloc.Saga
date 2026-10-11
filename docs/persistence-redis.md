@@ -129,10 +129,12 @@ The `ZeroAlloc.Saga.Redis` library is `<IsAotCompatible>true</IsAotCompatible>`
 + `<EnableTrimAnalyzer>true</EnableTrimAnalyzer>` — builds clean under both
 analyzers. `StackExchange.Redis` 2.8+ supports AOT per its release notes.
 
-A truly `PublishAot=true` binary using the Redis backend has not been
-empirically verified yet (the test suite uses Testcontainers.Redis under
-JIT). A future `samples/AotSmokeRedis` mirroring `AotSmokeEfCore`'s
-JIT-with-AOT-analyzers pattern can land in a follow-up.
+`samples/AotSmokeRedis` publishes the Redis store together with the Redis
+outbox (`ZeroAlloc.Saga.Outbox.Redis`) with `PublishAot=true`, and the
+`aot-smoke` CI job fails on any trim or AOT warning from that publish. CI
+does not run the binary, because running it needs a Redis server; run it
+yourself with `REDIS_CONNECTION=host:port` for the full saga and outbox
+round trip under native AOT.
 
 ## See also
 

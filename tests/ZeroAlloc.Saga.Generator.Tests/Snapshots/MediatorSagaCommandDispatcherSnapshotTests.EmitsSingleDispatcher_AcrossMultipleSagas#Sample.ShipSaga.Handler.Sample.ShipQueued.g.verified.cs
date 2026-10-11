@@ -27,6 +27,14 @@ internal sealed class ShipSaga_ShipQueued_Handler : INotificationHandler<global:
     private readonly SagaRetryOptions _retry;
     private readonly ILogger<ShipSaga_ShipQueued_Handler> _log;
 
+    // Cached LoggerMessage delegates. A disabled level returns before any argument is boxed
+    // or any params array is built; the duplicate and late event paths run on every
+    // redelivery. Level, event id 0 and template match the former LogDebug/LogWarning calls.
+    private static readonly Action<ILogger, string, global::Sample.ShipId, Exception?> s_logLateEvent =
+        LoggerMessage.Define<string, global::Sample.ShipId>(LogLevel.Debug, new EventId(0), "Saga {Saga}: late ShipQueued for key {Key}; ignored");
+    private static readonly Action<ILogger, string, global::Sample.ShipId, int, int, Exception?> s_logConflictRetry =
+        LoggerMessage.Define<string, global::Sample.ShipId, int, int>(LogLevel.Warning, new EventId(0), "Saga {Saga}: OCC conflict on key {Key}, retry {Attempt}/{Max}");
+
     public ShipSaga_ShipQueued_Handler(IServiceScopeFactory scopeFactory, SagaLockManager<global::Sample.ShipId> locks, SagaRetryOptions retry, ILogger<ShipSaga_ShipQueued_Handler> log)
     {
         _scopeFactory = scopeFactory;
@@ -51,7 +59,7 @@ internal sealed class ShipSaga_ShipQueued_Handler : INotificationHandler<global:
                 var saga = await store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);
                 if (!saga.Fsm.TryFire(ShipSagaFsm.Trigger.ShipQueued))
                 {
-                    _log.LogDebug("Saga {Saga}: late ShipQueued for key {Key}; ignored", "ShipSaga", key);
+                    s_logLateEvent(_log, "ShipSaga", key, null);
                     return;
                 }
 
@@ -65,7 +73,7 @@ internal sealed class ShipSaga_ShipQueued_Handler : INotificationHandler<global:
             catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsBackendConflict(ex))
             {
                 attempts++;
-                _log.LogWarning("Saga {Saga}: OCC conflict on key {Key}, retry {Attempt}/{Max}", "ShipSaga", key, attempts, _retry.MaxRetryAttempts);
+                s_logConflictRetry(_log, "ShipSaga", key, attempts, _retry.MaxRetryAttempts, null);
                 var delay = _retry.UseExponentialBackoff
                     ? TimeSpan.FromTicks(_retry.RetryBaseDelay.Ticks * (1L << attempts))
                     : _retry.RetryBaseDelay;
