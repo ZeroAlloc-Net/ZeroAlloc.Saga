@@ -19,6 +19,16 @@ internal sealed class MultiFailureSaga_StockOutOfStock_Handler : INotificationHa
     private readonly SagaRetryOptions _retry;
     private readonly ILogger<MultiFailureSaga_StockOutOfStock_Handler> _log;
 
+    // Cached LoggerMessage delegates. A disabled level returns before any argument is boxed
+    // or any params array is built; the duplicate and late event paths run on every
+    // redelivery. Level, event id 0 and template match the former LogDebug/LogWarning calls.
+    private static readonly Action<ILogger, string, global::Sample.OrderId, Exception?> s_logOrphanEvent =
+        LoggerMessage.Define<string, global::Sample.OrderId>(LogLevel.Warning, new EventId(0), "Saga {Saga}: orphan StockOutOfStock for key {Key}; no instance to compensate");
+    private static readonly Action<ILogger, string, MultiFailureSagaFsm.State, global::Sample.OrderId, Exception?> s_logInvalidState =
+        LoggerMessage.Define<string, MultiFailureSagaFsm.State, global::Sample.OrderId>(LogLevel.Debug, new EventId(0), "Saga {Saga}: StockOutOfStock not valid in state {State} for key {Key}; ignored");
+    private static readonly Action<ILogger, string, global::Sample.OrderId, int, int, Exception?> s_logConflictRetry =
+        LoggerMessage.Define<string, global::Sample.OrderId, int, int>(LogLevel.Warning, new EventId(0), "Saga {Saga}: OCC conflict on compensation for key {Key}, retry {Attempt}/{Max}");
+
     public MultiFailureSaga_StockOutOfStock_Handler(IServiceScopeFactory scopeFactory, SagaLockManager<global::Sample.OrderId> locks, SagaRetryOptions retry, ILogger<MultiFailureSaga_StockOutOfStock_Handler> log)
     {
         _scopeFactory = scopeFactory;
@@ -44,14 +54,14 @@ internal sealed class MultiFailureSaga_StockOutOfStock_Handler : INotificationHa
                 var saga = await store.TryLoadAsync(key, ct).ConfigureAwait(false);
                 if (saga is null)
                 {
-                    _log.LogWarning("Saga {Saga}: orphan StockOutOfStock for key {Key}; no instance to compensate", "MultiFailureSaga", key);
+                    s_logOrphanEvent(_log, "MultiFailureSaga", key, null);
                     return;
                 }
 
                 var stateAtFailure = saga.Fsm.Current;
                 if (!saga.Fsm.TryFire(MultiFailureSagaFsm.Trigger.StockOutOfStock))
                 {
-                    _log.LogDebug("Saga {Saga}: StockOutOfStock not valid in state {State} for key {Key}; ignored", "MultiFailureSaga", stateAtFailure, key);
+                    s_logInvalidState(_log, "MultiFailureSaga", stateAtFailure, key, null);
                     return;
                 }
 
@@ -77,7 +87,7 @@ internal sealed class MultiFailureSaga_StockOutOfStock_Handler : INotificationHa
             catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsBackendConflict(ex))
             {
                 attempts++;
-                _log.LogWarning("Saga {Saga}: OCC conflict on compensation for key {Key}, retry {Attempt}/{Max}", "MultiFailureSaga", key, attempts, _retry.MaxRetryAttempts);
+                s_logConflictRetry(_log, "MultiFailureSaga", key, attempts, _retry.MaxRetryAttempts, null);
                 var delay = _retry.UseExponentialBackoff
                     ? TimeSpan.FromTicks(_retry.RetryBaseDelay.Ticks * (1L << attempts))
                     : _retry.RetryBaseDelay;

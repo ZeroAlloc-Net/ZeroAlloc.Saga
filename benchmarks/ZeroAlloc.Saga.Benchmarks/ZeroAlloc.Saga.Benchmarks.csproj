@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <Optimize>true</Optimize>
+    <!-- MA0048: benchmark fixtures share a file. CA1812: handlers are created by the mediator.
+         ZAM003: Mediator's "use readonly record struct" hint; the commands mirror the fixtures. -->
+    <NoWarn>$(NoWarn);MA0048;CA1812;ZAM003</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+    <PackageReference Include="ZeroAlloc.Mediator" />
+    <PackageReference Include="ZeroAlloc.Mediator.Generator" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ZeroAlloc.Saga\ZeroAlloc.Saga.csproj" />
+    <ProjectReference Include="..\..\src\ZeroAlloc.Saga.Generator\ZeroAlloc.Saga.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+  </ItemGroup>
+</Project>

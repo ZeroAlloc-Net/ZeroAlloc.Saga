@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -89,14 +88,6 @@ public static class SagaResilienceBuilderExtensions
         return builder;
     }
 
-    [UnconditionalSuppressMessage(
-        "Trimming",
-        "IL2026:RequiresUnreferencedCode",
-        Justification = "ActivatorUtilities.CreateInstance receives the user's own dispatcher Type from their DI registration; the user is responsible for keeping that type rooted under PublishAot=true. If a future SDK adds RequiresUnreferencedCode/RequiresDynamicCode annotations to CreateInstance, this suppression matches the existing trim contract documented in docs/resilience.md.")]
-    [UnconditionalSuppressMessage(
-        "AOT",
-        "IL3050:RequiresDynamicCode",
-        Justification = "Same: ActivatorUtilities.CreateInstance constructor lookup is non-generic; no dynamic code generation under AOT.")]
     private static ISagaCommandDispatcher ResolveInner(ServiceDescriptor descriptor, IServiceProvider sp)
     {
         if (descriptor.ImplementationInstance is ISagaCommandDispatcher instance)

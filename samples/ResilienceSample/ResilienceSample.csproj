@@ -6,6 +6,16 @@
     <RootNamespace>ResilienceSample</RootNamespace>
     <AssemblyName>ResilienceSample</AssemblyName>
 
+    <!-- Published with native AOT in CI and run, so ZeroAlloc.Saga.Resilience's decorator,
+         including its ActivatorUtilities path for a type-registered inner dispatcher, is
+         compiled and exercised natively. TreatWarningsAsErrors from Directory.Build.props
+         makes any trim or AOT warning fail the publish. -->
+    <PublishAot>true</PublishAot>
+    <IsAotCompatible>true</IsAotCompatible>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
+
     <!-- Sample relaxations.
          ZAM003: Mediator's "use readonly record struct" hint — sample mirrors
                  the saga test fixtures which use record class. -->

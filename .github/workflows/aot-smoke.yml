@@ -112,8 +112,11 @@ jobs:
         # GNU timeout exits 124 if the binary hangs, e.g. dotnet/runtime#134799.
         run: timeout --kill-after=10s 120s ./aot-out-outbox/AotSmokeOutbox
 
-  resilience-sample:
-    name: build + run ResilienceSample (linux-x64, JIT)
+  # Every job below publishes with PublishAot=true set in the sample's csproj. Directory.Build.props
+  # sets TreatWarningsAsErrors, which the ILCompiler targets turn into --warnaserror, so a trim or
+  # AOT warning in any package the sample reaches fails the publish.
+  aot-smoke-resilience:
+    name: publish + run ResilienceSample (linux-x64, resilience bridge)
     runs-on: ubuntu-latest
     # Typical run is about a minute; a hang must fail fast, not burn the 6h default.
     timeout-minutes: 15
@@ -130,13 +133,60 @@ jobs:
             10.0.x
       - name: Restore solution
         run: dotnet restore ZeroAlloc.Saga.slnx
-      # ResilienceSample is JIT-only — it demonstrates the Saga.Resilience bridge's
-      # retry policy recovering from transient receiver failures. The bridge itself
-      # has no AOT-specific concerns (pure DI-side decorator with hand-rolled
-      # ZeroAlloc.Resilience policy invocations), so a JIT smoke is sufficient. If
-      # AOT-specific verification ever becomes useful, mirror the AotSmokeOutbox
-      # publish-and-run pattern here.
-      - name: Build ResilienceSample
-        run: dotnet build samples/ResilienceSample/ResilienceSample.csproj -c Release
+      # Retries a flaky receiver through ZeroAlloc.Saga.Resilience's decorator, which builds a
+      # type-registered inner dispatcher with ActivatorUtilities. Needs no external service.
+      - name: Publish ResilienceSample
+        run: dotnet publish samples/ResilienceSample/ResilienceSample.csproj -c Release -o aot-out-resilience
       - name: Run ResilienceSample
-        run: timeout --kill-after=10s 180s dotnet run --project samples/ResilienceSample/ResilienceSample.csproj -c Release --no-build
+        run: timeout --kill-after=10s 120s ./aot-out-resilience/ResilienceSample
+
+  aot-smoke-orm:
+    name: publish + run AotSmokeOrm (linux-x64, ORM store + ORM outbox)
+    runs-on: ubuntu-latest
+    # Typical run is about a minute; a hang must fail fast, not burn the 6h default.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          # Installs the SDK global.json pins. Without it the job never installs
+          # that SDK at all and only works when the runner image happens to ship one
+          # satisfying the pin, which is how a publish failed on a lagging image.
+          global-json-file: global.json
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: Restore solution
+        run: dotnet restore ZeroAlloc.Saga.slnx
+      # ZeroAlloc.Saga.Orm and ZeroAlloc.Saga.Outbox.Orm against a SQLite file: migrations, the
+      # saga row's insert, update and delete, and the outbox rows written in the same
+      # transaction and dispatched by the worker. SQLite is in-process, so the binary runs here.
+      - name: Publish AotSmokeOrm
+        run: dotnet publish samples/AotSmokeOrm/AotSmokeOrm.csproj -c Release -o aot-out-orm
+      - name: Run AotSmokeOrm
+        run: timeout --kill-after=10s 120s ./aot-out-orm/AotSmokeOrm
+
+  aot-smoke-redis:
+    name: publish AotSmokeRedis (linux-x64, Redis store + Redis outbox)
+    runs-on: ubuntu-latest
+    # Typical run is about a minute; a hang must fail fast, not burn the 6h default.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          # Installs the SDK global.json pins. Without it the job never installs
+          # that SDK at all and only works when the runner image happens to ship one
+          # satisfying the pin, which is how a publish failed on a lagging image.
+          global-json-file: global.json
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: Restore solution
+        run: dotnet restore ZeroAlloc.Saga.slnx
+      # ZeroAlloc.Saga.Redis and ZeroAlloc.Saga.Outbox.Redis. Publish only: running needs a Redis
+      # server, which this smoke deliberately does not depend on. The publish still compiles
+      # every Redis code path Main reaches through ILC with warnings as errors. Run the binary
+      # locally with REDIS_CONNECTION=host:port for the full round trip.
+      - name: Publish AotSmokeRedis
+        run: dotnet publish samples/AotSmokeRedis/AotSmokeRedis.csproj -c Release -o aot-out-redis

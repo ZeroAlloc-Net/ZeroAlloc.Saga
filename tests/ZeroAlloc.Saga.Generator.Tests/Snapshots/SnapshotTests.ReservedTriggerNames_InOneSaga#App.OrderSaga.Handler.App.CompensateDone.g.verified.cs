@@ -19,6 +19,16 @@ internal sealed class OrderSaga_App_CompensateDone_Handler : INotificationHandle
     private readonly SagaRetryOptions _retry;
     private readonly ILogger<OrderSaga_App_CompensateDone_Handler> _log;
 
+    // Cached LoggerMessage delegates. A disabled level returns before any argument is boxed
+    // or any params array is built; the duplicate and late event paths run on every
+    // redelivery. Level, event id 0 and template match the former LogDebug/LogWarning calls.
+    private static readonly Action<ILogger, string, int, Exception?> s_logOrphanEvent =
+        LoggerMessage.Define<string, int>(LogLevel.Warning, new EventId(0), "Saga {Saga}: orphan App.CompensateDone for key {Key}; no instance to compensate");
+    private static readonly Action<ILogger, string, OrderSagaFsm.State, int, Exception?> s_logInvalidState =
+        LoggerMessage.Define<string, OrderSagaFsm.State, int>(LogLevel.Debug, new EventId(0), "Saga {Saga}: App.CompensateDone not valid in state {State} for key {Key}; ignored");
+    private static readonly Action<ILogger, string, int, int, int, Exception?> s_logConflictRetry =
+        LoggerMessage.Define<string, int, int, int>(LogLevel.Warning, new EventId(0), "Saga {Saga}: OCC conflict on compensation for key {Key}, retry {Attempt}/{Max}");
+
     public OrderSaga_App_CompensateDone_Handler(IServiceScopeFactory scopeFactory, SagaLockManager<int> locks, SagaRetryOptions retry, ILogger<OrderSaga_App_CompensateDone_Handler> log)
     {
         _scopeFactory = scopeFactory;
@@ -44,14 +54,14 @@ internal sealed class OrderSaga_App_CompensateDone_Handler : INotificationHandle
                 var saga = await store.TryLoadAsync(key, ct).ConfigureAwait(false);
                 if (saga is null)
                 {
-                    _log.LogWarning("Saga {Saga}: orphan App.CompensateDone for key {Key}; no instance to compensate", "OrderSaga", key);
+                    s_logOrphanEvent(_log, "OrderSaga", key, null);
                     return;
                 }
 
                 var stateAtFailure = saga.Fsm.Current;
                 if (!saga.Fsm.TryFire(OrderSagaFsm.Trigger.App_CompensateDone))
                 {
-                    _log.LogDebug("Saga {Saga}: App.CompensateDone not valid in state {State} for key {Key}; ignored", "OrderSaga", stateAtFailure, key);
+                    s_logInvalidState(_log, "OrderSaga", stateAtFailure, key, null);
                     return;
                 }
 
@@ -77,7 +87,7 @@ internal sealed class OrderSaga_App_CompensateDone_Handler : INotificationHandle
             catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsBackendConflict(ex))
             {
                 attempts++;
-                _log.LogWarning("Saga {Saga}: OCC conflict on compensation for key {Key}, retry {Attempt}/{Max}", "OrderSaga", key, attempts, _retry.MaxRetryAttempts);
+                s_logConflictRetry(_log, "OrderSaga", key, attempts, _retry.MaxRetryAttempts, null);
                 var delay = _retry.UseExponentialBackoff
                     ? TimeSpan.FromTicks(_retry.RetryBaseDelay.Ticks * (1L << attempts))
                     : _retry.RetryBaseDelay;

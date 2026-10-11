@@ -27,6 +27,14 @@ internal sealed class TypedIdFieldSaga_Activated_Handler : INotificationHandler<
     private readonly SagaRetryOptions _retry;
     private readonly ILogger<TypedIdFieldSaga_Activated_Handler> _log;
 
+    // Cached LoggerMessage delegates. A disabled level returns before any argument is boxed
+    // or any params array is built; the duplicate and late event paths run on every
+    // redelivery. Level, event id 0 and template match the former LogDebug/LogWarning calls.
+    private static readonly Action<ILogger, string, global::Sample.CustomerId, Exception?> s_logLateEvent =
+        LoggerMessage.Define<string, global::Sample.CustomerId>(LogLevel.Debug, new EventId(0), "Saga {Saga}: late Activated for key {Key}; ignored");
+    private static readonly Action<ILogger, string, global::Sample.CustomerId, int, int, Exception?> s_logConflictRetry =
+        LoggerMessage.Define<string, global::Sample.CustomerId, int, int>(LogLevel.Warning, new EventId(0), "Saga {Saga}: OCC conflict on key {Key}, retry {Attempt}/{Max}");
+
     public TypedIdFieldSaga_Activated_Handler(IServiceScopeFactory scopeFactory, SagaLockManager<global::Sample.CustomerId> locks, SagaRetryOptions retry, ILogger<TypedIdFieldSaga_Activated_Handler> log)
     {
         _scopeFactory = scopeFactory;
@@ -51,7 +59,7 @@ internal sealed class TypedIdFieldSaga_Activated_Handler : INotificationHandler<
                 var saga = await store.LoadOrCreateAsync(key, ct).ConfigureAwait(false);
                 if (!saga.Fsm.TryFire(TypedIdFieldSagaFsm.Trigger.Activated))
                 {
-                    _log.LogDebug("Saga {Saga}: late Activated for key {Key}; ignored", "TypedIdFieldSaga", key);
+                    s_logLateEvent(_log, "TypedIdFieldSaga", key, null);
                     return;
                 }
 
@@ -65,7 +73,7 @@ internal sealed class TypedIdFieldSaga_Activated_Handler : INotificationHandler<
             catch (Exception ex) when (attempts < _retry.MaxRetryAttempts && IsBackendConflict(ex))
             {
                 attempts++;
-                _log.LogWarning("Saga {Saga}: OCC conflict on key {Key}, retry {Attempt}/{Max}", "TypedIdFieldSaga", key, attempts, _retry.MaxRetryAttempts);
+                s_logConflictRetry(_log, "TypedIdFieldSaga", key, attempts, _retry.MaxRetryAttempts, null);
                 var delay = _retry.UseExponentialBackoff
                     ? TimeSpan.FromTicks(_retry.RetryBaseDelay.Ticks * (1L << attempts))
                     : _retry.RetryBaseDelay;
