@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.1](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v4.1.0...ZeroAlloc.Saga-v4.1.1) (2026-10-11)
+
+
+### Bug Fixes
+
+* remove a saga lock key once nobody holds or waits for it ([#251](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/251)) ([99a7181](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/99a718198da8f782139e16fe1e7a6ab7e9adbedb))
+
 ## [4.1.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v4.0.2...ZeroAlloc.Saga-v4.1.0) (2026-09-30)
 
 
