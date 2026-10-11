@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.2](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v4.1.1...ZeroAlloc.Saga-v4.1.2) (2026-10-11)
+
+
+### Performance Improvements
+
+* stop generated saga log calls from allocating when the level is disabled ([#253](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/253)) ([0ebf7be](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/0ebf7be407c79cd6965e9520e3e8c147cef09a72)), closes [#248](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/248)
+
 ## [4.1.1](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v4.1.0...ZeroAlloc.Saga-v4.1.1) (2026-10-11)
 
 
