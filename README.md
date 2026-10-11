@@ -339,9 +339,6 @@ worked example.
   don't yet cover the store's tracked `Set<>().AsTracking()...` shape).
   Use the EfCore backend on JITted hosts; stay on InMemory for AOT-published
   hosts. See [`docs/persistence-efcore.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/persistence-efcore.md).
-- **`SagaLockManager` grows monotonically** — one `SemaphoreSlim` per unique
-  correlation key seen, never evicted. Bounded by process lifetime; ~80 bytes
-  each. Eviction lands in v1.x for high-cardinality workloads.
 - **No timeouts.** v1.1 sagas wait indefinitely for the next event. Phase 4
   (v1.3) adds `[Step(TimeoutMs = ...)]` via Scheduling integration.
 - **No telemetry.** v1.1 emits no spans, counters, or histograms. Phase 5

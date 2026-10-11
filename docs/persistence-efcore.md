@@ -12,7 +12,7 @@ generator-emitted notification handler.
 |---|---|---|
 | Process-crash safety | None — all state lost | Row in DB; saga resumes after restart |
 | Multi-instance hosting | Single-instance only | Multi-instance with row-version OCC |
-| Correlation-key cardinality | Bounded by `SagaLockManager` (~80 B/key) | Bounded by table size |
+| Correlation-key cardinality | Bounded by memory: in-flight sagas live in the process | Bounded by table size |
 | Setup cost | One line: `services.AddSaga()` | DbContext + migration + `WithEfCoreStore<TContext>()` |
 | AOT-published binary | Fully supported | Library is AOT-clean; runtime needs JIT today (EF Core 9.0 limitation) |
 

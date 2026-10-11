@@ -158,9 +158,12 @@ every source added later.
 
 ## Concurrency
 
-The framework uses a per-saga `SemaphoreSlim` keyed by correlation ID so
+The framework uses a per-saga async lock keyed by correlation ID so
 that handlers for the same saga instance never run concurrently. Different
-saga instances run in parallel — there's no global lock. See `SagaLockManager<TKey>`.
+saga instances run in parallel. A key's lock exists only while a handler holds
+or waits for it; the last release removes it, so lock memory tracks the number
+of sagas being handled right now, not every correlation key ever seen. See
+`SagaLockManager<TKey>`.
 
 ## Persistence
 
