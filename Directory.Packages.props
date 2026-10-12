@@ -59,7 +59,7 @@
     <PackageVersion Include="ZeroAlloc.Resilience" Version="3.3.*" />
 
     <!-- Redis backend deps -->
-    <PackageVersion Include="StackExchange.Redis" Version="3.3.*" />
+    <PackageVersion Include="StackExchange.Redis" Version="3.4.*" />
     <PackageVersion Include="Testcontainers.Redis" Version="4.16.*" />
 
     <!-- Generator deps -->
