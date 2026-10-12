@@ -109,11 +109,9 @@ public sealed class E2ETests : IAsyncLifetime
         await PublishAsync(sp, new StockReserved(orderId));
         await PublishAsync(sp, new PaymentCharged(orderId));
 
-#pragma warning disable HLQ005
         Assert.Single(ledger.CommandsOfType<ReserveStockCommand>());
         Assert.Single(ledger.CommandsOfType<ChargeCustomerCommand>());
         Assert.Single(ledger.CommandsOfType<ShipOrderCommand>());
-#pragma warning restore HLQ005
 
         // Saga removed from Redis after final step.
         var keys = server.Keys(pattern: $"{keyPrefix}:*").ToArray();
@@ -135,10 +133,8 @@ public sealed class E2ETests : IAsyncLifetime
         // Reverse cascade: refund first, then cancel.
         var refunds = ledger.CommandsOfType<RefundPaymentCommand>();
         var cancels = ledger.CommandsOfType<CancelReservationCommand>();
-#pragma warning disable HLQ005
         Assert.Single(refunds);
         Assert.Single(cancels);
-#pragma warning restore HLQ005
 
         var idxRefund = ledger.AllCommands.ToList().IndexOf(refunds[0]);
         var idxCancel = ledger.AllCommands.ToList().IndexOf(cancels[0]);
@@ -157,9 +153,7 @@ public sealed class E2ETests : IAsyncLifetime
         await PublishAsync(sp, new StockReserved(orderId));
 
         var charges = ledger.CommandsOfType<ChargeCustomerCommand>();
-#pragma warning disable HLQ005
         Assert.Single(charges);
-#pragma warning restore HLQ005
         // The saga's Total field was set in Step 1 and survived a Save → Load round-trip
         // through the byte-encoded ISagaPersistableState in Redis.
         Assert.Equal(999.99m, charges[0].Total);
@@ -185,8 +179,6 @@ public sealed class E2ETests : IAsyncLifetime
         // FSM state (step1 → step2) for ChargeCustomer to fire.
         await PublishAsync(sp, new StockReserved(orderId));
 
-#pragma warning disable HLQ005
         Assert.Single(ledger.CommandsOfType<ChargeCustomerCommand>());
-#pragma warning restore HLQ005
     }
 }
