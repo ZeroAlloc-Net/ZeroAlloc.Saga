@@ -185,9 +185,7 @@ public sealed class E2ETests : IAsyncLifetime
         // Run the worker: it dispatches via the saga's dispatcher → SagaCommandRegistry → mediator → ledger.
         await RunWorkerUntilDispatchedAsync(host, expected: 1);
 
-#pragma warning disable HLQ005
         Assert.Single(ledger.CommandsOfType<ReserveStockCommand>());
-#pragma warning restore HLQ005
 
         // Pending now empty; succeeded set has the entry.
         Assert.Empty(await db.SortedSetRangeByRankAsync($"{dbKeyPrefix}{outboxPrefix}:pending"));
@@ -249,9 +247,7 @@ public sealed class E2ETests : IAsyncLifetime
         // 4. Running the worker dispatches exactly once.
         await RunWorkerUntilDispatchedAsync(host, expected: 1);
 
-#pragma warning disable HLQ005
         Assert.Single(ledger.CommandsOfType<ReserveStockCommand>());
-#pragma warning restore HLQ005
     }
 
     [Fact]

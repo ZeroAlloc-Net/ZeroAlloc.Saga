@@ -176,10 +176,8 @@ public sealed class E2ETests
             var ctx = scope.ServiceProvider.GetRequiredService<OutboxE2EDbContext>();
             var sagas = await ctx.Set<SagaInstanceEntity>().AsNoTracking().ToListAsync();
             var outboxes = await ctx.Set<OutboxMessageEntity>().AsNoTracking().ToListAsync();
-#pragma warning disable HLQ005
             Assert.Single(sagas);
             Assert.Single(outboxes);
-#pragma warning restore HLQ005
             Assert.Equal(typeof(ReserveStockCommand).FullName, outboxes[0].TypeName);
             Assert.Equal(OutboxMessageStatus.Pending, outboxes[0].Status);
         }
@@ -194,9 +192,7 @@ public sealed class E2ETests
         await RunWorkerUntilDispatchedAsync(host, expected: 1);
 
         // Now ReserveStockCommand has been dispatched exactly once.
-#pragma warning disable HLQ005
         Assert.Single(ledger.CommandsOfType<ReserveStockCommand>());
-#pragma warning restore HLQ005
         Assert.Equal(orderId, ledger.CommandsOfType<ReserveStockCommand>()[0].OrderId);
         Assert.Equal(199m, ledger.CommandsOfType<ReserveStockCommand>()[0].Total);
 
@@ -206,9 +202,7 @@ public sealed class E2ETests
         {
             var ctx = scope.ServiceProvider.GetRequiredService<OutboxE2EDbContext>();
             var outboxes = await ctx.Set<OutboxMessageEntity>().AsNoTracking().ToListAsync();
-#pragma warning disable HLQ005
             Assert.Single(outboxes);
-#pragma warning restore HLQ005
             Assert.Equal(OutboxMessageStatus.Succeeded, outboxes[0].Status);
         }
     }
@@ -357,10 +351,8 @@ public sealed class E2ETests
         {
             var ctx = scope.ServiceProvider.GetRequiredService<OutboxE2EDbContext>();
             var outboxes = await ctx.Set<OutboxMessageEntity>().AsNoTracking().ToListAsync();
-#pragma warning disable HLQ005
             Assert.Single(outboxes);
             Assert.Single(await ctx.Set<SagaInstanceEntity>().AsNoTracking().ToListAsync());
-#pragma warning restore HLQ005
             Assert.Equal(typeof(ReserveStockCommand).FullName, outboxes[0].TypeName);
         }
 
@@ -369,9 +361,7 @@ public sealed class E2ETests
         await RunWorkerUntilDispatchedAsync(host, expected: 1);
 
         var dispatched = ledger.CommandsOfType<ReserveStockCommand>();
-#pragma warning disable HLQ005
         Assert.Single(dispatched);
-#pragma warning restore HLQ005
         Assert.Equal(orderId, dispatched[0].OrderId);
     }
 
