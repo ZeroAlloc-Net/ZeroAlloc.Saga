@@ -12,7 +12,8 @@ namespace ZeroAlloc.Saga.Generator;
 /// <remarks>
 /// The emitted Snapshot() prefixes the body with a single version byte (constant
 /// <c>SagaStateVersion = 1</c>) and writes each state field via the typed
-/// <c>SagaStateWriter</c> primitives. Restore validates the version and throws
+/// <c>SagaStateWriter</c> primitives, into a per-thread scratch writer it reuses across calls,
+/// so the returned exact-size array is its only allocation. Restore validates the version and throws
 /// <c>SagaStateVersionMismatchException</c> on mismatch. Skipped entirely if any
 /// state field has Kind == Unsupported (ZASAGA014 already reported).
 /// </remarks>
@@ -40,17 +41,36 @@ internal static class SnapshotRestoreEmitter
         sb.AppendLine("    private const byte SagaStateVersion = 1;");
         sb.AppendLine();
 
-        // Snapshot()
+        // Snapshot() writes into a scratch writer that each thread keeps across calls, so the only
+        // allocation per call is the exact-size array it returns, #273. [ThreadStatic] makes
+        // concurrent saves on different threads use different writers. The writer leaves its slot
+        // while in use, so a nested Snapshot() on the same thread, say from a typed id's Value
+        // getter, gets a fresh writer instead of sharing this one. A writer that grew past the cap
+        // is dropped, so one large state does not pin a large buffer to the thread.
+        sb.AppendLine("    private const int SagaSnapshotBufferCapacity = 256;");
+        sb.AppendLine("    private const int SagaSnapshotBufferMaxRetainedCapacity = 4096;");
+        sb.AppendLine();
+        sb.AppendLine("    [global::System.ThreadStatic]");
+        sb.AppendLine("    private static global::System.Buffers.ArrayBufferWriter<byte>? __sagaSnapshotBuffer;");
+        sb.AppendLine();
         sb.AppendLine("    public byte[] Snapshot()");
         sb.AppendLine("    {");
-        sb.AppendLine("        var __buffer = new global::System.Buffers.ArrayBufferWriter<byte>(initialCapacity: 64);");
+        sb.AppendLine("        var __buffer = __sagaSnapshotBuffer ?? new global::System.Buffers.ArrayBufferWriter<byte>(SagaSnapshotBufferCapacity);");
+        sb.AppendLine("        __sagaSnapshotBuffer = null;");
         sb.AppendLine("        var __w = new global::ZeroAlloc.Saga.SagaStateWriter(__buffer);");
         sb.AppendLine("        __w.WriteByte(SagaStateVersion);");
         foreach (var field in model.StateFields)
         {
             sb.Append("        ").AppendLine(EmitWrite(field, "__w", $"this.{field.MemberName}"));
         }
-        sb.AppendLine("        return __buffer.WrittenSpan.ToArray();");
+        sb.AppendLine("        var __snapshot = __buffer.WrittenSpan.ToArray();");
+        sb.AppendLine("        if (__buffer.Capacity <= SagaSnapshotBufferMaxRetainedCapacity)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            // Clear zeroes the written bytes, so the thread does not keep a copy of the state.");
+        sb.AppendLine("            __buffer.Clear();");
+        sb.AppendLine("            __sagaSnapshotBuffer = __buffer;");
+        sb.AppendLine("        }");
+        sb.AppendLine("        return __snapshot;");
         sb.AppendLine("    }");
         sb.AppendLine();
 

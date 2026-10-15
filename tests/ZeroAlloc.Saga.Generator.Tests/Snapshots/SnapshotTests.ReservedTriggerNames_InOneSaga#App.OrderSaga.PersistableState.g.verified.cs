@@ -8,13 +8,27 @@ public partial class OrderSaga : global::ZeroAlloc.Saga.ISagaPersistableState
 {
     private const byte SagaStateVersion = 1;
 
+    private const int SagaSnapshotBufferCapacity = 256;
+    private const int SagaSnapshotBufferMaxRetainedCapacity = 4096;
+
+    [global::System.ThreadStatic]
+    private static global::System.Buffers.ArrayBufferWriter<byte>? __sagaSnapshotBuffer;
+
     public byte[] Snapshot()
     {
-        var __buffer = new global::System.Buffers.ArrayBufferWriter<byte>(initialCapacity: 64);
+        var __buffer = __sagaSnapshotBuffer ?? new global::System.Buffers.ArrayBufferWriter<byte>(SagaSnapshotBufferCapacity);
+        __sagaSnapshotBuffer = null;
         var __w = new global::ZeroAlloc.Saga.SagaStateWriter(__buffer);
         __w.WriteByte(SagaStateVersion);
         __w.WriteInt32(this.Id);
-        return __buffer.WrittenSpan.ToArray();
+        var __snapshot = __buffer.WrittenSpan.ToArray();
+        if (__buffer.Capacity <= SagaSnapshotBufferMaxRetainedCapacity)
+        {
+            // Clear zeroes the written bytes, so the thread does not keep a copy of the state.
+            __buffer.Clear();
+            __sagaSnapshotBuffer = __buffer;
+        }
+        return __snapshot;
     }
 
     public void Restore(global::System.ReadOnlySpan<byte> data)

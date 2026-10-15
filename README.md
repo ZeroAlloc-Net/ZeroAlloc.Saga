@@ -207,6 +207,11 @@ See [`docs/outbox.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main
 
 ### `ZeroAlloc.Saga` runtime
 
+- **The generated `Snapshot()` allocates only the array it returns.** It writes into a scratch
+  writer each thread keeps and reuses, and returns an exact-size `byte[]`. For the test saga's
+  21-byte state that is 48 B per call, down from 168 B, asserted by `SagaStateAllocationTests`
+  ([#273](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/273)). Every durable store
+  calls it once per saga step.
 - **`ISagaCommandDispatcher`** indirection: step handlers no longer
   depend on `IMediator` directly. Default impl (generator-emitted)
   forwards to `IMediator.Send`; `Saga.Outbox`'s `WithOutbox()` swaps
