@@ -14,7 +14,7 @@ generator-emitted notification handler.
 | Multi-instance hosting | Single-instance only | Multi-instance with row-version OCC |
 | Correlation-key cardinality | Bounded by memory: in-flight sagas live in the process | Bounded by table size |
 | Setup cost | One line: `services.AddSaga()` | DbContext + migration + `WithEfCoreStore<TContext>()` |
-| AOT-published binary | Fully supported | Library is AOT-clean; runtime needs JIT today (EF Core 9.0 limitation) |
+| AOT-published binary | Fully supported | Library is AOT-clean; runtime needs JIT today (EF Core NativeAOT limitation, [#16](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/16)) |
 
 If your sagas live entirely inside a single process and you can tolerate
 losing in-flight workflows on restart, stay on InMemory. As soon as you
@@ -200,7 +200,7 @@ load-bearing AOT contract for downstream JITted hosts (the runtime
 ships AOT-safe annotations, doesn't pull in reflection-based
 analyzer assets, etc.).
 
-True end-to-end **`PublishAot=true`** for an EF Core 9.0 application
+True end-to-end **`PublishAot=true`** for an EF Core application
 is still experimental upstream:
 
 - The EF Core team marks `DbContext` ctor + `EnsureCreatedAsync`
