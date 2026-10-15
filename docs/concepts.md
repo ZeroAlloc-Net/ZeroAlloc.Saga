@@ -89,6 +89,9 @@ For every `[Saga]` class the generator emits the files below. Once per assembly 
    nothing is resolved with open generics at runtime.
 6. **`<Saga>.PersistableState.g.cs`** — the saga's `ISagaPersistableState` implementation,
    `Snapshot()` and `Restore()`, which durable stores use to save and load its state.
+   `Snapshot()` writes into a scratch buffer each thread reuses, so the exact-size `byte[]` it
+   returns is its only allocation, and `Restore()` allocates only the `string` and `byte[]`
+   field values it reads.
 
 `<Saga>` and `<Event>` are the saga's and the event's full names: the namespace, then any
 containing types joined by `+`, each with its generic arity, for example

@@ -133,14 +133,15 @@ public class SagaStateAllocationTests
     }
 
     [Fact]
-    public void Generated_Snapshot_AllocatesItsBufferAndTheReturnedArray()
+    public void Generated_Snapshot_AllocatesOnlyTheReturnedArray()
     {
         ISagaPersistableState state = new ZeroAlloc.Saga.Tests.Fixtures.OrderFulfillmentSaga();
-        var bytes = AllocationGate.MeasureBytesPerCall(Iterations, () => _ = state.Snapshot());
 
-        // Snapshot() returns a new byte[], 21 bytes of state here, 48 B as an array. The other
-        // 120 B are the ArrayBufferWriter and its 64-byte initial buffer, created per call by the
-        // generated code, #273.
-        Assert.Equal(168, bytes);
+        // Snapshot() returns a new byte[] of exactly the state's size: 21 bytes here, the version
+        // byte, an int id and a decimal, which is a 48 B array. The scratch writer it fills is
+        // kept per thread and reused, #273; it cost another 120 B per call when it was not.
+        AllocationGate.AssertBudget(48, Iterations, () => _ = state.Snapshot(),
+            "generated Snapshot, OrderId + decimal");
+        Assert.Equal(21, state.Snapshot().Length);
     }
 }
