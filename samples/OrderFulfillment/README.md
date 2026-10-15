@@ -15,7 +15,7 @@ flows of a 3-step order saga.
 ## Run
 
 ```bash
-# Default: in-memory store (matches v1.0 behaviour)
+# Default: in-memory store
 dotnet run --project samples/OrderFulfillment/
 
 # Or wire the EfCore + SQLite backend (creates ./saga-demo.db)
@@ -29,26 +29,15 @@ so the demo always starts fresh).
 
 ## How the wiring works
 
-The sample uses a `FakeMediator` that, on each command it receives, prints the
-command and (optionally) publishes the next event back through the saga
-handlers. That self-driving loop is what lets a single console app exercise
-the entire orchestration without any external services.
+The sample uses the real ZeroAlloc.Mediator, with an `IRequestHandler` per step
+command in `Handlers/CommandHandlers.cs`. Each handler hands the command to a
+`FakeMediator` demo object, which prints it and queues the next event, such as
+`StockReserved` after `ReserveStock`. A `SagaDriver` publishes that queued event
+once the current saga handler has returned. That self-driving loop is what lets
+a single console app exercise the entire orchestration without any external
+services.
 
-In a real system you would:
-
-1. Register normal `IRequestHandler<TCommand>` instances behind `IMediator.Send`.
-2. Have those handlers do their work and publish an `INotification` for the next
-   step (or arrange for an outbox / message bus to do so).
-
-The saga itself doesn't change between the demo and production — only the
-command-side handlers do.
-
-## Note on `IMediator` partial
-
-The `IMediatorPartial.cs` file hand-rolls the typed `Send` overloads the saga
-generator emits calls to. Normally those overloads are emitted by
-`ZeroAlloc.Mediator.Generator`. The published 2.0.x generator nupkg shipped its
-analyzer DLL under `lib/` instead of `analyzers/dotnet/cs/` (fixed in 2.0.1),
-which is why this sample hand-rolls the surface area. Once 2.0.1+ is the
-resolved version on this repo's central package pin, that partial can be
-deleted and the generator package referenced directly.
+In a real system the command handlers do the actual work and publish the next
+`INotification` themselves, or leave it to an outbox or message bus. The saga
+itself doesn't change between the demo and production — only the command-side
+handlers do.
