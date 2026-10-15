@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.3](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v4.1.2...ZeroAlloc.Saga-v4.1.3) (2026-10-15)
+
+
+### Performance Improvements
+
+* reuse a per-thread scratch writer in the generated Snapshot ([#278](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/278)) ([637db6b](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/637db6b68fec3343396ca90bcfe98cc85d375c30)), closes [#273](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/273)
+
+
+### Documentation
+
+* bring saga readme up to date with 4.x ([#274](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/274)) ([a1a6df9](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/a1a6df9adf5283c20883868dee96f8032fa86cd0))
+
+
+### Tests
+
+* pin patched system.security.cryptography.pkcs for cve-2026-84008 ([#276](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/276)) ([ae4a49a](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/ae4a49a4f4a16ecc6a427c1d704d4fcf698a4701))
+
 ## [4.1.2](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v4.1.1...ZeroAlloc.Saga-v4.1.2) (2026-10-11)
 
 
