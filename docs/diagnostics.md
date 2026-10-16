@@ -14,26 +14,26 @@ backend bridges (EfCore, Redis, etc.) get `ZASAGA1xx`, `ZASAGA2xx`, …
 - `warning` — generator output compiles but the design is suspicious.
 - `info` — nothing is wrong; the diagnostic points at something to be aware of.
 
-| ID | Severity | Code-fix |
-|---|---|---|
-| [ZASAGA001](#zasaga001) | error | `Make partial` |
-| [ZASAGA002](#zasaga002) | error | — |
-| [ZASAGA003](#zasaga003) | error | — |
-| [ZASAGA004](#zasaga004) | error | — |
-| [ZASAGA005](#zasaga005) | error | — |
-| [ZASAGA006](#zasaga006) | error | — |
-| [ZASAGA007](#zasaga007) | error | `Renumber steps` |
-| [ZASAGA008](#zasaga008) | error | — |
-| [ZASAGA009](#zasaga009) | error | `Add compensation method` |
-| [ZASAGA010](#zasaga010) | error | — |
-| [ZASAGA011](#zasaga011) | warning | — |
-| [ZASAGA012](#zasaga012) | warning | — |
-| [ZASAGA013](#zasaga013) | warning | — |
-| [ZASAGA014](#zasaga014) | error | — |
-| [ZASAGA015](#zasaga015) | info | — |
-| [ZASAGA016](#zasaga016) | retired | — |
-| [ZASAGA017](#zasaga017) | info | — |
-| [ZASAGA018](#zasaga018) | removed in 4.0 | — |
+| ID | What | Severity | Code-fix |
+|---|---|---|---|
+| [ZASAGA001](#zasaga001) | `[Saga]` class not partial | error | `Make partial` |
+| [ZASAGA002](#zasaga002) | Saga is static, abstract, generic, or nested | error | — |
+| [ZASAGA003](#zasaga003) | Saga lacks parameterless ctor | error | — |
+| [ZASAGA004](#zasaga004) | Step input event missing `[CorrelationKey]` | error | — |
+| [ZASAGA005](#zasaga005) | `[CorrelationKey]` methods return inconsistent types | error | — |
+| [ZASAGA006](#zasaga006) | `[CorrelationKey]` method has wrong signature | error | — |
+| [ZASAGA007](#zasaga007) | `[Step(Order = ...)]` values have gaps or duplicates | error | `Renumber steps` |
+| [ZASAGA008](#zasaga008) | `[Step]` method has wrong signature | error | — |
+| [ZASAGA009](#zasaga009) | `[Step.Compensate]` target missing or mis-shaped | error | `Add compensation method` |
+| [ZASAGA010](#zasaga010) | `[Step.CompensateOn]` event missing `[CorrelationKey]` | error | — |
+| [ZASAGA011](#zasaga011) | `[CorrelationKey]` method appears to mutate state | warning | — |
+| [ZASAGA012](#zasaga012) | `Compensate` without `CompensateOn` — dead code | warning | — |
+| [ZASAGA013](#zasaga013) | Two sagas correlate on same event with different key types | warning | — |
+| [ZASAGA014](#zasaga014) | Saga state member has a type the state serializer does not support | error | — |
+| [ZASAGA015](#zasaga015) | Durable backend detected: step commands should be idempotent | info | — |
+| [ZASAGA016](#zasaga016) | Step command type should be partial for the auto-applied serializer attribute | retired | — |
+| [ZASAGA017](#zasaga017) | Step command type is in a referenced assembly, so the outbox needs its `ISerializer<T>` | info | — |
+| [ZASAGA018](#zasaga018) | Legacy `Add{Saga}Saga()` shim | removed in 4.0 | — |
 
 ---
 
