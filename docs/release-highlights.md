@@ -1,7 +1,7 @@
 # Release highlights
 
 The narrative "what's new" notes that used to sit in the README, kept here as written. The
-complete, per-release list of changes is in [CHANGELOG.md](../CHANGELOG.md); upgrade steps for
+complete, per-release list of changes is in [CHANGELOG.md](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/CHANGELOG.md); upgrade steps for
 4.0 are in [Migrating to v4](migrating-to-v4.md).
 
 ## Status at 4.x
