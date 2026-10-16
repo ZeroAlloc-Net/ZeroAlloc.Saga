@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.5](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v4.1.4...ZeroAlloc.Saga-v4.1.5) (2026-10-16)
+
+
+### Bug Fixes
+
+* bring the mediator generator with zeroalloc.saga ([#288](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/288)) ([77bb38e](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/77bb38e22380e0bf00e634f8100b2f62f3e53f9d)), closes [#285](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/285)
+* give the docs site a home page so saga.zeroalloc.net stops returning 404 ([#289](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/289)) ([09c19d1](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/09c19d1e0d64327e14b49a3a81feb9cd20cf0afa))
+
 ## [4.1.4](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v4.1.3...ZeroAlloc.Saga-v4.1.4) (2026-10-16)
 
 
