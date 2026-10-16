@@ -24,7 +24,6 @@
 
   <ItemGroup>
     <PackageReference Include="ZeroAlloc.Mediator" />
-    <PackageReference Include="ZeroAlloc.Mediator.Generator" PrivateAssets="all" />
     <PackageReference Include="ZeroAlloc.Serialisation" />
     <PackageReference Include="ZeroAlloc.Outbox.Orm" />
     <PackageReference Include="ZeroAlloc.ORM" />

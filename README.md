@@ -19,19 +19,21 @@ Source-generated sagas for .NET: declare steps and their compensation on a parti
 
 ```bash
 dotnet add package ZeroAlloc.Saga
-dotnet add package ZeroAlloc.Mediator.Generator
 ```
 
-`ZeroAlloc.Saga` carries its own generator. Saga commands and events flow through ZeroAlloc.Mediator, whose generator you reference directly.
+`ZeroAlloc.Saga` carries its own generator and brings ZeroAlloc.Mediator, whose generator emits the `IMediator` that saga commands and events flow through. One package reference is enough.
 
 ## Quick start
 
 ```csharp
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using ZeroAlloc.Mediator;
 using ZeroAlloc.Saga;
 
-var services = new ServiceCollection().AddLogging().AddTransient<Warehouse>().AddTransient<Payments>();
+var services = new ServiceCollection().AddTransient<Warehouse>().AddTransient<Payments>();
+services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>)); // a host app's AddLogging() covers this
 services.AddSaga().WithCheckoutSaga(); // generated for the [Saga] class
 await using var provider = services.BuildServiceProvider();
 var mediator = provider.GetRequiredService<IMediator>();

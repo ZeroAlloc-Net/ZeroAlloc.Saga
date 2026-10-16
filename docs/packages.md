@@ -21,13 +21,18 @@ generator (bundled as an analyzer asset). No separate `ZeroAlloc.Saga.Generator`
 install.
 
 `IMediator` and the handler dispatch are emitted by the ZeroAlloc.Mediator source generator, which
-NuGet does not flow through `ZeroAlloc.Saga`'s dependency on `ZeroAlloc.Mediator`. Reference it
-directly in the project that declares your sagas, or the generated saga code fails to compile with
-`CS0246: The type or namespace name 'IMediator' could not be found`:
+ships as its own package, `ZeroAlloc.Mediator.Generator`. `ZeroAlloc.Saga` depends on it with its
+analyzer assets flowing, so it runs in your project without a reference of its own. Every optional
+package below depends on `ZeroAlloc.Saga` and brings both generators the same way.
 
-```bash
-dotnet add package ZeroAlloc.Mediator.Generator
-```
+The generator floor is `ZeroAlloc.Mediator.Generator` 6.6.1, the first version that dispatches every
+handler interface a class implements. A project that references `ZeroAlloc.Mediator.Generator`
+directly, for example to pin a newer version, still gets one generator: NuGet resolves the two
+references to a single package.
+
+Because the Mediator generator now runs in every project that references `ZeroAlloc.Saga`, such a
+project gets its own internal `IMediator`, and the generator reports `ZAM001` for any `IRequest` in it
+that has no handler.
 
 Version floors for the bridges: `ZeroAlloc.Saga.Outbox` requires `ZeroAlloc.Outbox` 4.4.3 or later
 and `ZeroAlloc.Serialisation` 2.8.1 or later, `ZeroAlloc.Saga.Resilience` requires
@@ -36,6 +41,7 @@ later. EF Core users of the outbox bridge also need the matching 4.x `ZeroAlloc.
 
 Hard dependencies pulled in transitively:
 
-- `ZeroAlloc.Mediator` — for `INotification`, `IRequest`, `IMediator.Send`
+- `ZeroAlloc.Mediator` — for `INotification`, `IRequest`, `IRequestHandler`
+- `ZeroAlloc.Mediator.Generator` — emits `IMediator` and its `Send`/`Publish` dispatch, as an analyzer
 - `Microsoft.Extensions.DependencyInjection` — for `AddSaga()`, `WithXxxSaga()`
 - `Microsoft.Extensions.Logging.Abstractions` — for the saga-handler loggers

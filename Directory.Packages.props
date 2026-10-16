@@ -11,7 +11,12 @@
     <PackageVersion Include="ZeroAlloc.TestHelpers" Version="1.7.*" />
     <PackageVersion Include="ZeroAlloc.Mediator" Version="5.1.*" />
     <PackageVersion Include="ZeroAlloc.Pipeline" Version="1.4.*" />
-    <PackageVersion Include="ZeroAlloc.Mediator.Generator" Version="5.1.*" />
+    <!-- ZeroAlloc.Saga ships this generator to consumers as a package dependency, #285, so its floor
+         is what a project that references only ZeroAlloc.Saga compiles with. 6.6.1 is the first
+         version that dispatches every handler interface a class implements, Mediator#334; with
+         5.1.x the README quick start fails with ZAM001. The generator's output compiles against
+         the ZeroAlloc.Mediator 5.1 runtime floor above, so the runtime floor stays where it is. -->
+    <PackageVersion Include="ZeroAlloc.Mediator.Generator" Version="6.6.*" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.12" />

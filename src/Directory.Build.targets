@@ -1,0 +1,18 @@
+<Project>
+  <!--
+    ZeroAlloc.Saga declares ZeroAlloc.Mediator.Generator as a package dependency with its analyzers
+    flowing, so a consumer gets IMediator from one package reference, see #285. Over a
+    ProjectReference that flow reaches every library in src too. Run there, the generator would emit
+    an IMediator and dispatch code into the shipped ZeroAlloc.Saga*.dll assemblies, which hold no
+    sagas and need neither. It is taken out of their compilations here; the package dependency
+    in the packed nuspec is unaffected.
+  -->
+  <Target Name="ExcludeMediatorGeneratorFromLibraryCompilation"
+          AfterTargets="ResolveLockFileAnalyzers"
+          BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <Analyzer Remove="@(Analyzer)"
+                Condition="'%(Analyzer.NuGetPackageId)' == 'ZeroAlloc.Mediator.Generator'" />
+    </ItemGroup>
+  </Target>
+</Project>

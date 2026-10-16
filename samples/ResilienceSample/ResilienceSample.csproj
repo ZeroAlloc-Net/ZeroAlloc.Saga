@@ -24,7 +24,6 @@
 
   <ItemGroup>
     <PackageReference Include="ZeroAlloc.Mediator" />
-    <PackageReference Include="ZeroAlloc.Mediator.Generator" PrivateAssets="all" />
     <PackageReference Include="ZeroAlloc.Resilience" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
