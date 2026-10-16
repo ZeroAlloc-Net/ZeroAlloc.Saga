@@ -243,9 +243,9 @@ backend.
 
 ## See also
 
-- [`samples/AotSmokeEfCore/`](../samples/AotSmokeEfCore/) — minimal saga
+- [`samples/AotSmokeEfCore/`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/tree/main/samples/AotSmokeEfCore/) — minimal saga
   end-to-end with EfCore + SQLite in-memory; AOT-clean build.
-- [`samples/OrderFulfillment/`](../samples/OrderFulfillment/) —
+- [`samples/OrderFulfillment/`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/tree/main/samples/OrderFulfillment/) —
   full demo. Pass `--efcore` to wire the EfCore backend.
 - [`docs/concepts.md`](concepts.md) — saga lifecycle and generator output.
 - [`docs/diagnostics.md`](diagnostics.md) — every `ZASAGA0XX`
