@@ -1,400 +1,128 @@
 # ZeroAlloc.Saga
 
-Source-generated long-running process orchestration for the ZeroAlloc ecosystem.
-
-> **Status:** AOT compatible. The generator-emitted saga handler runs
-> each OCC retry attempt in a fresh `IServiceScope`, and the
-> `ZeroAlloc.Saga.Outbox` bridge commits every step command's dispatch
-> row atomically with the saga state save on the EF Core store, and on
-> the Redis store with `WithRedisOutbox()`, and on the ORM store with
-> `WithOrmOutbox()` — together they eliminate Saga 1.1's "OCC retry can
-> dispatch twice" caveat for both cross-process races and same-process
-> retries.
-> Durable persistence via `ZeroAlloc.Saga.EfCore` (single shared `SagaInstance` table,
-> row-version OCC, retry-on-conflict) is unchanged. InMemory remains
-> the default backend; switch to EfCore with one fluent call, and opt
-> into the outbox bridge with `.WithOutbox()`. See
-> [`docs/persistence-efcore.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/persistence-efcore.md) and
-> [`docs/outbox.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox.md).
-
 [![NuGet](https://img.shields.io/nuget/v/ZeroAlloc.Saga.svg)](https://www.nuget.org/packages/ZeroAlloc.Saga)
 [![Build](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/actions/workflows/build.yml/badge.svg)](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/LICENSE)
 [![AOT](https://img.shields.io/badge/AOT--Compatible-passing-brightgreen)](https://learn.microsoft.com/dotnet/core/deploying/native-aot/)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/MarcelRoozekrans?style=flat&logo=githubsponsors&color=ea4aaa&label=Sponsor)](https://github.com/sponsors/MarcelRoozekrans)
 
-## Overview
+Source-generated sagas for .NET: declare steps and their compensation on a partial class, and get a state machine with no reflection that runs under NativeAOT, on in-memory, EF Core, ZeroAlloc.ORM or Redis storage.
 
-`ZeroAlloc.Saga` lets you express multi-step business workflows declaratively
-as a partial class. The source generator emits state-machine code,
-notification handlers, and dispatch wiring. Compensation runs in reverse on
-failure. No reflection, no open-generic resolution at runtime — the whole
-runtime is Native AOT-compatible and exercised by an `aot-smoke` CI job
-that publishes a sample with `PublishAot=true` and asserts end-to-end execution.
+## Why ZeroAlloc.Saga
 
-```csharp
-[Saga]
-public partial class OrderFulfillmentSaga
-{
-    public OrderId OrderId { get; private set; }
-    public decimal Total { get; private set; }
-
-    [CorrelationKey] public OrderId Correlation(OrderPlaced e)     => e.OrderId;
-    [CorrelationKey] public OrderId Correlation(StockReserved e)   => e.OrderId;
-    [CorrelationKey] public OrderId Correlation(PaymentCharged e)  => e.OrderId;
-    [CorrelationKey] public OrderId Correlation(PaymentDeclined e) => e.OrderId;
-
-    [Step(Order = 1, Compensate = nameof(CancelReservation))]
-    public ReserveStockCommand ReserveStock(OrderPlaced e)
-    {
-        OrderId = e.OrderId; Total = e.Total;
-        return new ReserveStockCommand(e.OrderId, e.Total);
-    }
-
-    [Step(Order = 2, Compensate = nameof(RefundPayment), CompensateOn = typeof(PaymentDeclined))]
-    public ChargeCustomerCommand ChargeCustomer(StockReserved e) => new(OrderId, Total);
-
-    [Step(Order = 3)]
-    public ShipOrderCommand ShipOrder(PaymentCharged e) => new(OrderId);
-
-    public CancelReservationCommand CancelReservation() => new(OrderId);
-    public RefundPaymentCommand RefundPayment() => new(OrderId);
-}
-```
-
-Wiring (one line per saga):
-
-```csharp
-// AddSaga() calls AddMediator() for you. A separate AddMediator() call is
-// not needed, though it remains harmless (idempotent TryAdd*).
-services.AddSaga()
-    .WithOrderFulfillmentSaga();           // generator-emitted extension
-```
-
-That's it. Publish `OrderPlaced` via `IMediator.Publish` and the saga drives
-itself: each `[Step]` runs in correlation-key order, returned commands flow
-through `IMediator.Send`, downstream events advance the FSM, and a terminal
-`Completed` (or `Compensated`) state removes the saga from the store
-automatically.
-
-## What's new
-
-### `ZeroAlloc.Saga.Outbox.Orm` (new package)
-
-Atomic outbox dispatch on the ZeroAlloc.ORM saga store. A saga step's outbox rows are written in
-the same database transaction as the saga row, through ZeroAlloc.Outbox.Orm, so a failed save or
-removal discards both.
-
-```csharp
-services.AddOutbox().WithOrm(OutboxOrmDialect.SqlServer);
-services.AddSaga()
-    .WithOrmStore()
-    .WithOutbox()
-    .WithOrmOutbox()          // <-- commits the outbox rows in the saga store's transaction
-    .WithOrderFulfillmentSaga();
-```
-
-Requires ZeroAlloc.Outbox 4.4.3 or later. See
-[`docs/outbox.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox.md#zeroallocsagaorm-atomic-with-withormoutbox).
-
-### `ZeroAlloc.Saga.Outbox.Redis` (new package — closes Phase 3a-2)
-
-Redis-native atomic dispatch. Saga state save and outbox-row write commit
-together in a single Redis `MULTI/EXEC`, so a failed save discards both —
-matching the `Saga.EfCore + Saga.Outbox.EfCore` story for Redis-backed
-sagas.
-
-```csharp
-services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect("..."));
-services.AddOutbox();         // ZeroAlloc.Outbox's worker dispatches the saga commands
-services.AddSaga()
-    .WithRedisStore()
-    .WithOutbox()
-    .WithRedisOutbox()        // <-- enlists outbox writes into the saga store's MULTI/EXEC
-    .WithOrderFulfillmentSaga();
-```
-
-See [`docs/outbox-redis.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox-redis.md) for the full atomicity
-contract, the `IRedisSagaTransactionContributor` extension point, and how dispatch claims entries
-under a lease.
-
-### `ZeroAlloc.Saga.Redis` (new package)
-
-Second durable backend, mirroring `Saga.EfCore`. One Redis Hash per saga
-instance with `state` (bytes) + `version` (Guid) fields; OCC via
-`WATCH/MULTI/EXEC`; conflicts surface as `RedisSagaConcurrencyException`
-which the generator-emitted handler's retry loop catches alongside EfCore's
-exceptions.
-
-```csharp
-services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect("..."));
-services.AddSaga()
-    .WithRedisStore(opts => opts.KeyPrefix = "myapp:saga")
-    .WithOrderFulfillmentSaga();
-```
-
-Mutually exclusive with `WithEfCoreStore<TContext>()`. Composition with
-`WithOutbox()` alone is at best at-least-once, and fails at startup with an EF Core outbox store;
-add `ZeroAlloc.Saga.Outbox.Redis` and `WithRedisOutbox()` for full atomic-commit guarantees,
-see above. Requires `StackExchange.Redis` 3.4 or later. See [`docs/persistence-redis.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/persistence-redis.md).
-
-### `ISagaUnitOfWork` abstraction (Phase 3a-2 stage 1)
-
-The dispatch-side outbox enlistment now goes through `ISagaUnitOfWork`
-instead of `IOutboxStore` directly, opening the door for backend-specific
-unit-of-work implementations (Redis MULTI/EXEC, etc.). No behavior change
-for existing EfCore + Outbox consumers — the default
-`OutboxStoreSagaUnitOfWork` is a passthrough.
-
-### Builder API: `Add{Saga}Saga()` → `With{Saga}Saga()`
-
-The generator-emitted per-saga registration method is renamed from
-`Add{Saga}Saga()` to `With{Saga}Saga()` so it aligns with the rest of
-the builder API (`WithEfCoreStore`, `WithOutbox`, `WithResilience`).
-The legacy `Add`-prefixed shim, which emitted diagnostic `ZASAGA018`,
-was removed in 4.0.
-
-```csharp
-services.AddSaga()
-    .WithEfCoreStore<AppDbContext>()
-    .WithOrderFulfillmentSaga();
-```
-
-### `ZeroAlloc.Saga.Resilience` (new package)
-
-Optional bridge that wraps every saga step command's dispatch in a
-`ZeroAlloc.Resilience` policy stack — retry, timeout, circuit-breaker,
-rate-limit. One fluent call configures the pipeline:
-
-```csharp
-services.AddSaga()
-    .WithEfCoreStore<AppDbContext>(opts => opts.MaxRetryAttempts = 3)
-    .WithOrderFulfillmentSaga()
-    .WithResilience(r =>
-    {
-        r.Retry = new RetryPolicy(maxAttempts: 5, backoffMs: 200, jitter: true, perAttemptTimeoutMs: 5_000);
-        r.CircuitBreaker = new CircuitBreakerPolicy(maxFailures: 10, resetMs: 30_000, halfOpenProbes: 1);
-    });
-```
-
-Composition order is outermost-first: `circuit-breaker → rate-limit →
-timeout → retry → inner.DispatchAsync`. Caller cancellation propagates
-as `OperationCanceledException`; policy denials surface as
-`ResilienceException(Policy: ...)` so consumers can disambiguate.
-Requires `ZeroAlloc.Resilience` 3.3 or later. See [`docs/resilience.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/resilience.md).
-
-### `ZeroAlloc.Saga.Outbox` (new package)
-
-Optional bridge that routes every saga step command through
-`ZeroAlloc.Outbox` so dispatch is committed in the same database
-transaction as the saga state save. Eliminates the cross-process race
-where a state update can succeed without the corresponding command being
-delivered.
-
-```csharp
-services.AddOutbox().WithEfCore<AppDbContext>();   // the worker that dispatches saga commands
-services.AddSaga()
-    .WithEfCoreStore<AppDbContext>(opts => opts.MaxRetryAttempts = 3)
-    .WithOutbox()                        // <-- one fluent call
-    .WithOrderFulfillmentSaga();
-```
-
-Requires `ZeroAlloc.Outbox` 4.4.3+ and `ZeroAlloc.Serialisation` 2.8.1+. EF Core users also need
-the matching 4.x `ZeroAlloc.Outbox.EfCore`; Saga's floor on `ZeroAlloc.Outbox` does not raise it.
-See [`docs/outbox.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox.md) for the full setup, the
-`ISerializer<T>` each step command needs, `ZASAGA017`, and dispatch options. Upgrading from 3.x: see
-[`docs/migrating-to-v4.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/migrating-to-v4.md).
-
-### `ZeroAlloc.Saga` runtime
-
-- **The generated `Snapshot()` allocates only the array it returns.** It writes into a scratch
-  writer each thread keeps and reuses, and returns an exact-size `byte[]`. For the test saga's
-  21-byte state that is 48 B per call, down from 168 B, asserted by `SagaStateAllocationTests`
-  ([#273](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/273)). Every durable store
-  calls it once per saga step.
-- **`ISagaCommandDispatcher`** indirection: step handlers no longer
-  depend on `IMediator` directly. Default impl (generator-emitted)
-  forwards to `IMediator.Send`; `Saga.Outbox`'s `WithOutbox()` swaps
-  it in for transactional dispatch.
-- **`SagaCommandRegistry`** generator-emitted in consumer assemblies —
-  central deserialise+dispatch lookup keyed by `typeof(T).FullName`,
-  resolves `ISerializer<T>` from DI.
-- **`ZASAGA016` / `ZASAGA017`** new diagnostics, and an auto-`[ZeroAllocSerializable]`
-  partial extension on step command types. The extension and `ZASAGA016` were later
-  removed, because ZeroAlloc.Serialisation's generator never saw the generated attribute
-  ([#207](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/207)). Apply
-  `[ZeroAllocSerializable]` or register an `ISerializer<T>` for each outbox step command.
-
-## Earlier releases: durable persistence
-
-### `ZeroAlloc.Saga` 1.2.0
-
-- **`ISagaPersistableState`** + `SagaStateWriter` / `SagaStateReader` ref
-  structs. The writer writes into your `IBufferWriter<byte>` and allocates
-  0 B; the reader allocates 0 B apart from the `string` and `byte[]` values
-  it returns. The generated `Snapshot()` returns a new `byte[]` per call.
-  Every `[Saga]` class implements the
-  interface via a generator-emitted partial; backends use it to round-trip
-  saga state across process boundaries. Supported state shapes: primitives,
-  enums, `string`, `DateTime` / `DateTimeOffset` / `TimeSpan` / `Guid`,
-  `[TypedId]`-attributed types, the common `record struct Foo(TPrim Bar)`
-  shape, `byte[]`, and `Nullable<T>` wrappers thereof.
-- **`[NotSagaState]`** escape-hatch attribute — exclude transient or
-  computed members from generator-emitted Snapshot/Restore.
-- **`SagaRetryOptions`** + **`ISagaStoreRegistrar`** — backend-agnostic
-  retry knobs and a typed registrar indirection so durable backends
-  swap themselves in without `MakeGenericType`.
-- **EfCore-aware handler emit** — when the generator detects
-  `WithEfCoreStore` in the same compilation, the emitted notification
-  handlers wrap the load → step → save loop in a configurable retry
-  catching `DbUpdateConcurrencyException`.
-- **2 new diagnostics**:
-  - `ZASAGA014` (Error) — saga state field has an unsupported type.
-  - `ZASAGA015` (Info, suppressible) — saga commands should be idempotent
-    under durable backends; fires when `WithEfCoreStore` / `WithRedisStore`
-    is detected in the same compilation.
-- **Implicit `AddMediator()`** — `AddSaga()` no longer requires a separate
-  `services.AddMediator()` call.
-- **InMemory backend unchanged** — v1.0 users see no behavioural change.
-
-### `ZeroAlloc.Saga.EfCore` 1.0.0 (new package)
-
-First durable backend for `ZeroAlloc.Saga`. Single shared `SagaInstance`
-table keyed by `(SagaType, CorrelationKey)`; provider-agnostic row-version
-optimistic concurrency; automatic retry-on-conflict driven by
-`EfCoreSagaStoreOptions`. See
-[`docs/persistence-efcore.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/persistence-efcore.md) for the full
-guide.
-
-```csharp
-services.AddDbContext<AppDbContext>(opts => opts.UseSqlServer(connStr));
-
-services.AddSaga()
-    .WithEfCoreStore<AppDbContext>()
-    .WithOrderFulfillmentSaga();
-```
-
-Plus, in your `DbContext`:
-
-```csharp
-protected override void OnModelCreating(ModelBuilder mb) => mb.AddSagas();
-```
-
-## Documentation
-
-- [`docs/concepts.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/concepts.md) — saga lifecycle, generator output, AOT story
-- [`docs/correlation.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/correlation.md) — `[CorrelationKey]` rules, multi-saga subscription, composite keys
-- [`docs/compensation.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/compensation.md) — `Compensate` / `CompensateOn`, reverse cascade, `ISagaManager.CompensateAsync`
-- [`docs/persistence-efcore.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/persistence-efcore.md) — durable persistence with `ZeroAlloc.Saga.EfCore`: setup, migrations, OCC, idempotency, AOT story
-- [`docs/persistence-redis.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/persistence-redis.md) — durable persistence with `ZeroAlloc.Saga.Redis`: Hash layout, WATCH/MULTI/EXEC OCC
-- [`docs/outbox.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox.md) — atomic command dispatch with `ZeroAlloc.Saga.Outbox`, store pairings, serializers
-- [`docs/outbox-redis.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox-redis.md) — Redis-native atomic dispatch with `ZeroAlloc.Saga.Outbox.Redis`
-- [`docs/resilience.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/resilience.md) — retry, timeout, circuit-breaker and rate-limit policies with `ZeroAlloc.Saga.Resilience`
-- [`docs/diagnostics.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/diagnostics.md) — every `ZASAGA0XX` diagnostic with examples and fixes
-- [`docs/migrating-to-v4.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/migrating-to-v4.md) — upgrading from 3.x
-
-## Samples
-
-- [`samples/OrderFulfillment/`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/tree/main/samples/OrderFulfillment/) — full demo with happy path, compensation, orphan-event handling, and operator-initiated compensation. `dotnet run --project samples/OrderFulfillment/` (InMemory) or `dotnet run --project samples/OrderFulfillment/ -- --efcore` (EfCore + SQLite).
-- [`samples/AotSmoke/`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/tree/main/samples/AotSmoke/) — minimal saga end-to-end published with `PublishAot=true`. Run by the `aot-smoke` CI job on every push.
-- [`samples/AotSmokeEfCore/`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/tree/main/samples/AotSmokeEfCore/) — EfCore variant of the smoke. Builds under the same AOT/trim analyzer set; runs end-to-end with SQLite in-memory verifying RowVersion rotation and Completed-state row removal.
-- [`samples/AotSmokeOutbox/`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/tree/main/samples/AotSmokeOutbox/) — the outbox bridge published with `PublishAot=true` and run in CI.
-- [`samples/AotSmokeOrm/`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/tree/main/samples/AotSmokeOrm/) — `ZeroAlloc.Saga.Orm` and `ZeroAlloc.Saga.Outbox.Orm` published with `PublishAot=true` and run in CI against a SQLite file.
-- [`samples/AotSmokeRedis/`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/tree/main/samples/AotSmokeRedis/) — `ZeroAlloc.Saga.Redis` and `ZeroAlloc.Saga.Outbox.Redis` published with `PublishAot=true` in CI; running it needs a Redis server, so CI publishes only.
-- [`samples/ResilienceSample/`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/tree/main/samples/ResilienceSample/) — `ZeroAlloc.Saga.Resilience` retrying a flaky receiver, published with `PublishAot=true` and run in CI.
+- **A workflow is one partial class.** Steps, correlation keys and compensation are attributes. The generator emits the state machine, the event handlers and the command dispatch, and compensation runs in reverse automatically when a failure event arrives.
+- **Works under NativeAOT and trimming.** CI publishes and runs AOT samples for the core, the outbox bridge, the ORM store and the resilience bridge. The EF Core store runs on JIT hosts only, blocked upstream.
+- **Compile-time diagnostics.** 16 generator diagnostics catch authoring mistakes such as gaps in step order, missing correlation keys or a misshaped compensation method, three of them with code fixes.
+- **No double dispatch under retry.** With the outbox bridge on the EF Core, ORM or Redis store, each step command is committed atomically with the saga state, so an optimistic-concurrency retry cannot send a command twice.
 
 ## Install
 
 ```bash
-dotnet add package ZeroAlloc.Saga          # runtime + generator (single package)
+dotnet add package ZeroAlloc.Saga
+dotnet add package ZeroAlloc.Mediator.Generator
 ```
+
+`ZeroAlloc.Saga` carries its own generator. Saga commands and events flow through ZeroAlloc.Mediator, whose generator you reference directly.
+
+## Quick start
+
+```csharp
+using Microsoft.Extensions.DependencyInjection;
+using ZeroAlloc.Mediator;
+using ZeroAlloc.Saga;
+
+var services = new ServiceCollection().AddLogging().AddTransient<Warehouse>().AddTransient<Payments>();
+services.AddSaga().WithCheckoutSaga(); // generated for the [Saga] class
+await using var provider = services.BuildServiceProvider();
+var mediator = provider.GetRequiredService<IMediator>();
+
+await mediator.Publish(new OrderPlaced(42, 9.95m), default); // step 1 sends ReserveStock
+await mediator.Publish(new StockReserved(42), default);      // step 2 sends ChargeCard
+await mediator.Publish(new PaymentDeclined(42), default);    // compensation sends ReleaseStock
+
+public sealed record OrderPlaced(int OrderId, decimal Total) : INotification;
+public sealed record StockReserved(int OrderId) : INotification;
+public sealed record PaymentCharged(int OrderId) : INotification;
+public sealed record PaymentDeclined(int OrderId) : INotification;
+
+public readonly record struct ReserveStock(int OrderId) : IRequest;
+public readonly record struct ReleaseStock(int OrderId) : IRequest;
+public readonly record struct ChargeCard(int OrderId, decimal Total) : IRequest;
+public readonly record struct ShipOrder(int OrderId) : IRequest;
+
+[Saga]
+public partial class CheckoutSaga
+{
+    public int OrderId { get; private set; }
+    public decimal Total { get; private set; }
+
+    [CorrelationKey] public int Key(OrderPlaced e) => e.OrderId;
+    [CorrelationKey] public int Key(StockReserved e) => e.OrderId;
+    [CorrelationKey] public int Key(PaymentCharged e) => e.OrderId;
+    [CorrelationKey] public int Key(PaymentDeclined e) => e.OrderId;
+
+    [Step(Order = 1, Compensate = nameof(Release))]
+    public ReserveStock Reserve(OrderPlaced e) { (OrderId, Total) = (e.OrderId, e.Total); return new(OrderId); }
+
+    [Step(Order = 2, CompensateOn = typeof(PaymentDeclined))]
+    public ChargeCard Charge(StockReserved e) => new(OrderId, Total);
+
+    [Step(Order = 3)]
+    public ShipOrder Ship(PaymentCharged e) => new(OrderId);
+
+    public ReleaseStock Release() => new(OrderId);
+}
+
+public sealed class Warehouse : IRequestHandler<ReserveStock, Unit>, IRequestHandler<ReleaseStock, Unit>, IRequestHandler<ShipOrder, Unit>
+{
+    public ValueTask<Unit> Handle(ReserveStock c, CancellationToken ct) => Log($"Reserved stock for {c.OrderId}");
+    public ValueTask<Unit> Handle(ReleaseStock c, CancellationToken ct) => Log($"Released stock for {c.OrderId}");
+    public ValueTask<Unit> Handle(ShipOrder c, CancellationToken ct) => Log($"Shipped {c.OrderId}");
+    internal static ValueTask<Unit> Log(string what) { Console.WriteLine(what); return new(Unit.Value); }
+}
+
+public sealed class Payments : IRequestHandler<ChargeCard, Unit>
+{
+    public ValueTask<Unit> Handle(ChargeCard c, CancellationToken ct) => Warehouse.Log($"Charging {c.Total}");
+}
+```
+
+It prints `Reserved stock for 42`, `Charging 9.95` and `Released stock for 42`. A saga that reaches a terminal state is removed from the store automatically. [Concepts](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/concepts.md) explains the lifecycle and what the generator emits.
+
+## What you get
+
+- Correlation by any key type, including strongly typed IDs and composite keys.
+- Automatic compensation on a failure event, and manual compensation through `ISagaManager.CompensateAsync`.
+- Optimistic concurrency with retry on conflict, each attempt in a fresh DI scope.
+- In-memory storage by default; switch to a durable store with one fluent call.
 
 Optional packages:
 
-| Package | Adds |
-|---|---|
-| `ZeroAlloc.Saga.EfCore` | Durable saga store over an EF Core `DbContext` (`WithEfCoreStore<TContext>()`) |
-| `ZeroAlloc.Saga.Orm` | Durable saga store over ZeroAlloc.ORM (`WithOrmStore()`) |
-| `ZeroAlloc.Saga.Redis` | Durable saga store over Redis (`WithRedisStore()`) |
-| `ZeroAlloc.Saga.Outbox` | Step commands dispatched through ZeroAlloc.Outbox (`WithOutbox()`) |
-| `ZeroAlloc.Saga.Outbox.Orm` | Outbox rows committed in the ORM saga store's transaction (`WithOrmOutbox()`) |
-| `ZeroAlloc.Saga.Outbox.Redis` | Outbox rows committed in the Redis saga store's `MULTI/EXEC` (`WithRedisOutbox()`) |
-| `ZeroAlloc.Saga.Resilience` | Resilience policies around step dispatch (`WithResilience()`) |
+- [`ZeroAlloc.Saga.EfCore`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/persistence-efcore.md): durable store on your EF Core `DbContext`, with row-version concurrency.
+- [`ZeroAlloc.Saga.Orm`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox.md#zeroallocsagaorm-atomic-with-withormoutbox): durable store over ZeroAlloc.ORM, NativeAOT-ready.
+- [`ZeroAlloc.Saga.Redis`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/persistence-redis.md): durable store on Redis with `WATCH/MULTI/EXEC` concurrency.
+- [`ZeroAlloc.Saga.Outbox`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox.md): step commands dispatched through ZeroAlloc.Outbox, committed with the saga state.
+- [`ZeroAlloc.Saga.Outbox.Orm`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox.md#zeroallocsagaorm-atomic-with-withormoutbox): outbox rows in the ORM saga store's transaction.
+- [`ZeroAlloc.Saga.Outbox.Redis`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox-redis.md): outbox rows in the Redis saga store's `MULTI/EXEC`.
+- [`ZeroAlloc.Saga.Resilience`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/resilience.md): retry, timeout, circuit-breaker and rate-limit around step dispatch.
 
-The base `ZeroAlloc.Saga` package contains both the runtime and the source
-generator (bundled as an analyzer asset). No separate `.Generator` package to
-install.
+## Performance
 
-Hard dependencies pulled in transitively:
+Saga state is persisted through generated `Snapshot()` and `Restore()` methods. Exact budgets, asserted by `SagaStateAllocationTests`:
 
-- `ZeroAlloc.Mediator` — for `INotification`, `IRequest`, `IMediator.Send`
-- `Microsoft.Extensions.DependencyInjection` — for `AddSaga()`, `WithXxxSaga()`
-- `Microsoft.Extensions.Logging.Abstractions` — for the saga-handler loggers
+| Call | Allocation |
+|---|---:|
+| `SagaStateWriter`, every supported shape | 0 B |
+| Generated `Restore()` | 0 B |
+| Generated `Snapshot()`, a 21-byte state | 48 B, the returned array |
 
-## Diagnostics
+There is no published head-to-head against another saga library yet. Details: [docs/performance.md](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/performance.md).
 
-16 source-generator diagnostics catch authoring mistakes at compile time:
+## Learn more
 
-| ID | What | Severity |
-|---|---|---|
-| ZASAGA001 | `[Saga]` class not partial | error (code-fix: `Make partial`) |
-| ZASAGA002 | Saga is static, abstract, generic, or nested | error |
-| ZASAGA003 | Saga lacks parameterless ctor | error |
-| ZASAGA004 | Step input event missing `[CorrelationKey]` | error |
-| ZASAGA005 | `[CorrelationKey]` methods return inconsistent types | error |
-| ZASAGA006 | `[CorrelationKey]` method has wrong signature | error |
-| ZASAGA007 | `[Step(Order = ...)]` values have gaps or duplicates | error (code-fix: `Renumber steps`) |
-| ZASAGA008 | `[Step]` method has wrong signature | error |
-| ZASAGA009 | `[Step.Compensate]` target missing or mis-shaped | error (code-fix: `Add compensation method`) |
-| ZASAGA010 | `[Step.CompensateOn]` event missing `[CorrelationKey]` | error |
-| ZASAGA011 | `[CorrelationKey]` method appears to mutate state | warning |
-| ZASAGA012 | `Compensate` without `CompensateOn` — dead code | warning |
-| ZASAGA013 | Two sagas correlate on same event with different key types | warning |
-| ZASAGA014 | Saga state member has a type the state serializer does not support | error |
-| ZASAGA015 | Durable backend detected: step commands should be idempotent | info |
-| ZASAGA017 | Step command type is in a referenced assembly, so the outbox needs its `ISerializer<T>` | info |
-
-ZASAGA016 is retired, and ZASAGA018, the `Add{Saga}Saga()` legacy shim, was removed in 4.0;
-use `With{Saga}Saga()`.
-
-Every diagnostic links to [`docs/diagnostics.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/diagnostics.md) with a
-worked example.
-
-## Known limitations
-
-- **InMemory persistence is not durable.** Process crash loses all in-flight
-  sagas. Switch to `ZeroAlloc.Saga.EfCore`, `ZeroAlloc.Saga.Orm` or
-  `ZeroAlloc.Saga.Redis` for durability.
-- **`ZeroAlloc.Saga.EfCore` Native AOT publish** — the runtime library
-  itself is AOT-clean, but a fully `PublishAot=true` binary is blocked
-  upstream by EF Core's experimental NativeAOT support (precompiled queries
-  don't yet cover the store's tracked `Set<>().AsTracking()...` shape).
-  Use the EfCore backend on JITted hosts, or the ORM or Redis store, whose
-  smoke samples publish with `PublishAot=true` in CI. Tracked in
-  [#16](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/16). See
-  [`docs/persistence-efcore.md`](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/persistence-efcore.md).
-- **No step timeouts.** A saga waits indefinitely for its next event; there
-  is no per-step timeout or deadline.
-- **No built-in telemetry.** The saga runtime emits log entries but no
-  OpenTelemetry spans or metrics.
-
-## Roadmap
-
-Shipped, all at the current 4.x version:
-
-| Package | Provides |
-|---|---|
-| `ZeroAlloc.Saga` | runtime + generator + InMemory store + diagnostics + AOT, `ISagaCommandDispatcher` indirection, snapshot/rehydrate via `ISagaPersistableState` |
-| `ZeroAlloc.Saga.EfCore`, `ZeroAlloc.Saga.Orm`, `ZeroAlloc.Saga.Redis` | durable persistence with retry-on-OCC-conflict |
-| `ZeroAlloc.Saga.Outbox`, `.Outbox.Orm`, `.Outbox.Redis` | atomic command dispatch through the transactional outbox |
-| `ZeroAlloc.Saga.Resilience` | retry / timeout / circuit-breaker / rate-limit around step dispatch |
-
-Not yet started, no package exists:
-
-- per-step timeouts and deadlines, through ZeroAlloc.Scheduling
-- OpenTelemetry spans and metrics, and an operations dashboard
-- an event-sourced store and a choreography mode
-
-## License
-
-MIT
+- Documentation: [docs/](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/tree/main/docs), starting with [concepts](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/concepts.md), [correlation](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/correlation.md) and [compensation](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/compensation.md)
+- Reference: [packages and dependencies](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/packages.md), [diagnostics](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/diagnostics.md), [samples](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/samples.md), [limitations and roadmap](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/roadmap.md)
+- Upgrading: [migrating to v4](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/migrating-to-v4.md), [release highlights](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/release-highlights.md), [CHANGELOG](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/CHANGELOG.md)
+- Related: [ZeroAlloc.Mediator](https://github.com/ZeroAlloc-Net/ZeroAlloc.Mediator), [ZeroAlloc.Outbox](https://github.com/ZeroAlloc-Net/ZeroAlloc.Outbox), [ZeroAlloc.Resilience](https://github.com/ZeroAlloc-Net/ZeroAlloc.Resilience), [ZeroAlloc.EventSourcing](https://github.com/ZeroAlloc-Net/ZeroAlloc.EventSourcing)
+- Contributing: issues and pull requests are welcome on [GitHub](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues)
+- License: MIT, see [LICENSE](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/LICENSE)
