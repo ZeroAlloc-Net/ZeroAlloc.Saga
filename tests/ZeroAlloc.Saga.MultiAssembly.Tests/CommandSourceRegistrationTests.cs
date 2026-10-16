@@ -195,7 +195,16 @@ public sealed class CommandSourceRegistrationTests
         public T Deserialize(ReadOnlySpan<byte> buffer) => throw new NotSupportedException();
     }
 
-    private sealed record StrayCommand : IRequest;
+    internal readonly record struct StrayCommand : IRequest;
+
+    // ZeroAlloc.Saga brings the Mediator generator, see #285, so this host compilation runs it like
+    // a consumer's does, and it reports ZAM001 for a request with no handler. The handler exists
+    // only to satisfy that check: the routing dispatcher rejects StrayCommand because no saga
+    // source claims it, before the Mediator is involved.
+    internal sealed class StrayCommandHandler : IRequestHandler<StrayCommand, Unit>
+    {
+        public ValueTask<Unit> Handle(StrayCommand request, CancellationToken ct) => throw new NotSupportedException();
+    }
 
     private sealed class ClaimsIssueInvoiceSource : SagaCommandSource
     {

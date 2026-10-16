@@ -20,6 +20,24 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
+  <!--
+    The generated saga code calls IMediator, which ZeroAlloc.Mediator does not contain: the
+    ZeroAlloc.Mediator.Generator package emits it into each consuming compilation. So that one
+    `dotnet add package ZeroAlloc.Saga` is enough, this package declares the generator as a NuGet
+    dependency whose analyzer assets flow to the consumer. See #285.
+
+    PrivateAssets="none" overrides the package's developmentDependency default and keeps
+    Analyzers out of the nuspec dependency's exclude list. The generator DLL is not copied into
+    this package: a consumer who also references ZeroAlloc.Mediator.Generator directly gets one
+    resolved copy, not two generators.
+
+    The version is central, in Directory.Packages.props. src/Directory.Build.targets keeps the
+    generator out of this repository's own library compilations.
+  -->
+  <ItemGroup>
+    <PackageReference Include="ZeroAlloc.Mediator.Generator" PrivateAssets="none" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers">
       <PrivateAssets>all</PrivateAssets>

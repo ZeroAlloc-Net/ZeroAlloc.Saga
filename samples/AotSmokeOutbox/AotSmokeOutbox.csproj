@@ -24,9 +24,6 @@
 
   <ItemGroup>
     <PackageReference Include="ZeroAlloc.Mediator" />
-    <!-- Mediator source generator emits IMediator.Send/Publish overloads for the
-         in-project IRequest<T> / INotificationHandler<T> types. -->
-    <PackageReference Include="ZeroAlloc.Mediator.Generator" PrivateAssets="all" />
     <PackageReference Include="ZeroAlloc.Serialisation" />
     <PackageReference Include="ZeroAlloc.Outbox" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
