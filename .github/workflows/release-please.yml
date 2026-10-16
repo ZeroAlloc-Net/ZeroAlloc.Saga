@@ -22,6 +22,8 @@ jobs:
     outputs:
       releases_created: ${{ steps.release.outputs.releases_created }}
       version: ${{ steps.release.outputs.version }}
+      # The release tag, ZeroAlloc.Saga-v<version>, which the publish job builds.
+      tag_name: ${{ steps.release.outputs.tag_name }}
       # Read by ship-release-tracking. A step output is only visible to another job
       # when the job re-exports it here; without these the job's `if:` is always false.
       prs_created: ${{ steps.release.outputs.prs_created }}
@@ -68,66 +70,23 @@ jobs:
       # its push triggers the release PR's checks like release-please's own.
       RELEASE_BOT_PRIVATE_KEY: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
 
+  # Builds the release tag, packs every packable project, checks the versions inside the
+  # packages, pushes them, and waits until nuget.org serves every one of them. Shared from
+  # ZeroAlloc-Net/.github so a fix there reaches every repository; see ZeroAlloc-Net/.github#49.
+  # Destinations: nuget.org.
+  # dotnet-version keeps the 8.0.x SDK that build.yml and the previous publish job install.
   publish:
     needs: release-please
     if: needs.release-please.outputs.releases_created == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-dotnet@v6
-        with:
-          # Installs the SDK global.json pins. Without it the job never installs
-          # that SDK at all and only works when the runner image happens to ship one
-          # satisfying the pin, which is how a publish failed on a lagging image.
-          global-json-file: global.json
-          dotnet-version: |
-            8.0.x
-            10.0.x
-
-      - name: Restore
-        run: dotnet restore ZeroAlloc.Saga.slnx
-
-      - name: Build
-        run: dotnet build ZeroAlloc.Saga.slnx -c Release --no-restore -p:Version=${{ needs.release-please.outputs.version }}
-
-      - name: Test
-        run: dotnet test ZeroAlloc.Saga.slnx -c Release --no-build
-
-      # One version covers every package, so ProjectReference dependencies between them stamp
-      # correctly: Saga.EfCore at X depends on ZeroAlloc.Saga X. Under the old per-package
-      # versions, -p:PackageVersion applied globally and each sibling stamped its OWN number
-      # onto that dependency -- EfCore 1.3.0 shipped "depends on ZeroAlloc.Saga 1.3.0". See #98.
-      - name: Pack all packages at the release version
-        env:
-          VERSION: ${{ needs.release-please.outputs.version }}
-        run: |
-          set -euo pipefail
-          if [ -z "$VERSION" ]; then
-            echo "::error::release-please reported a release but produced no version"
-            exit 1
-          fi
-          mkdir -p ./nupkg
-          for csproj in src/*/*.csproj; do
-            if ! grep -q "<IsPackable>true</IsPackable>" "$csproj"; then
-              echo "Skipping $csproj (not packable)"
-              continue
-            fi
-            echo "Packing $csproj at $VERSION"
-            dotnet pack "$csproj" -c Release --no-build -p:PackageVersion="$VERSION" -o ./nupkg
-          done
-          ls -la ./nupkg
-          # Releasing nothing while reporting success is the failure mode #98 is about.
-          if ! ls ./nupkg/*.nupkg >/dev/null 2>&1; then
-            echo "::error::no packages were produced"
-            exit 1
-          fi
-
-      - name: Push to NuGet
-        run: |
-          dotnet nuget push ./nupkg/*.nupkg \
-            --api-key ${{ secrets.NUGET_API_KEY }} \
-            --source https://api.nuget.org/v3/index.json \
-            --skip-duplicate
+    uses: ZeroAlloc-Net/.github/.github/workflows/publish.yml@main
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+      version: ${{ needs.release-please.outputs.version }}
+      solution: ZeroAlloc.Saga.slnx
+      dotnet-version: |
+        8.0.x
+        10.0.x
+      github-packages: false
+      release-assets: false
+    secrets:
+      NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
