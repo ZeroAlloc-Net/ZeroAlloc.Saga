@@ -17,9 +17,9 @@
          5.1.x the README quick start fails with ZAM001. The generator's output compiles against
          the ZeroAlloc.Mediator 5.1 runtime floor above, so the runtime floor stays where it is. -->
     <PackageVersion Include="ZeroAlloc.Mediator.Generator" Version="6.6.*" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.13" />
 
     <!-- CVE-2025-6965 / GHSA-2m69-gcr7-jv3q: EF Core Sqlite pulls
          SQLitePCLRaw.lib.e_sqlite3 2.1.11 (bundles SQLite < 3.50.2). Pin the native
@@ -47,12 +47,12 @@
   <!-- EFCore 10 dropped net8.0 support, so we pin per-TFM:
        net8.0 consumers stay on EFCore 9; net10.0 gets EFCore 10. -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.20" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.20" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.21" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.21" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.13" />
   </ItemGroup>
 
   <ItemGroup>
@@ -62,9 +62,9 @@
     <PackageVersion Include="ZeroAlloc.Outbox.EfCore" Version="4.4.5" />
     <PackageVersion Include="ZeroAlloc.Outbox.Orm" Version="4.4.5" />
     <PackageVersion Include="ZeroAlloc.Serialisation" Version="2.8.3" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.13" />
 
     <!-- Resilience bridge deps -->
     <PackageVersion Include="ZeroAlloc.Resilience" Version="3.3.*" />
