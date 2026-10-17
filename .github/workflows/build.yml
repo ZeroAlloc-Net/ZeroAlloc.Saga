@@ -5,6 +5,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # Codecov upload via OIDC, no token secret
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -18,7 +21,16 @@ jobs:
             10.0.x
       - run: dotnet restore ZeroAlloc.Saga.slnx
       - run: dotnet build ZeroAlloc.Saga.slnx --configuration Release --no-restore
-      - run: dotnet test ZeroAlloc.Saga.slnx --configuration Release --no-build --verbosity normal
+      - run: dotnet test ZeroAlloc.Saga.slnx --configuration Release --no-build --verbosity normal --settings coverage.runsettings --results-directory TestResults
+
+      - name: Upload coverage to Codecov
+        if: '!cancelled()'
+        uses: codecov/codecov-action@v5
+        with:
+          use_oidc: true
+          files: "TestResults/**/coverage.cobertura.xml"
+          disable_search: true   # only the files above, not every *.xml the search finds
+          fail_ci_if_error: false
 
   api-compat:
     uses: ZeroAlloc-Net/.github/.github/workflows/api-compat.yml@main
