@@ -40,8 +40,8 @@
          net10.0 test projects reference SqlClient, so no shipped package changes. Drop once
          SqlClient depends on a patched Pkcs. -->
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
-    <PackageVersion Include="ZeroAlloc.ORM" Version="2.3.4" />
-    <PackageVersion Include="ZeroAlloc.ORM.Generator" Version="2.3.4" />
+    <PackageVersion Include="ZeroAlloc.ORM" Version="2.4.0" />
+    <PackageVersion Include="ZeroAlloc.ORM.Generator" Version="2.4.0" />
   </ItemGroup>
 
   <!-- EFCore 10 dropped net8.0 support, so we pin per-TFM:
