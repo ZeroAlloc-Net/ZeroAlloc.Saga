@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.7](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v4.1.6...ZeroAlloc.Saga-v4.1.7) (2026-10-21)
+
+
+### Documentation
+
+* publish the generated-handler benchmark results ([#306](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/306)) ([aaf4025](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/aaf40255bf53b6e15d946af0b6cce2a798ec356d))
+
 ## [4.1.6](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v4.1.5...ZeroAlloc.Saga-v4.1.6) (2026-10-16)
 
 
