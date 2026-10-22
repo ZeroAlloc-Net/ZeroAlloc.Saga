@@ -58,9 +58,9 @@
   <ItemGroup>
 
     <!-- Outbox bridge deps -->
-    <PackageVersion Include="ZeroAlloc.Outbox" Version="4.4.5" />
-    <PackageVersion Include="ZeroAlloc.Outbox.EfCore" Version="4.4.5" />
-    <PackageVersion Include="ZeroAlloc.Outbox.Orm" Version="4.4.5" />
+    <PackageVersion Include="ZeroAlloc.Outbox" Version="4.4.6" />
+    <PackageVersion Include="ZeroAlloc.Outbox.EfCore" Version="4.4.6" />
+    <PackageVersion Include="ZeroAlloc.Outbox.Orm" Version="4.4.6" />
     <PackageVersion Include="ZeroAlloc.Serialisation" Version="2.8.5" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.13" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.13" />
