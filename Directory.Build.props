@@ -58,6 +58,10 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <!-- Run the code-style (IDE*) rules on build, so the .editorconfig severities apply. -->
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- NuGetAudit as ci-baseline runs it, so a local restore shows the same advisories as CI. -->
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>moderate</NuGetAuditLevel>
     <!-- Lock the public API surface: missing/extra entries in PublicAPI.*.txt fail the build. -->
     <WarningsAsErrors>$(WarningsAsErrors);RS0016;RS0017</WarningsAsErrors>
 
