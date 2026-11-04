@@ -1,10 +1,12 @@
-# Codecov: coverage per PR. Rolled out 2026-10-17; both statuses are informational, so nothing
-# blocks a merge yet. Make patch a real check once the numbers settle.
+# Codecov: the project status is the ci-baseline v1 drop check and must stay as it is; the
+# coverage gate in build.yml refuses a weaker one. The patch status is informational and
+# outside the baseline, so it may stay.
 coverage:
   status:
     project:
       default:
-        informational: true
+        target: auto
+        threshold: 1%
     patch:
       default:
         target: 80%
