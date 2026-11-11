@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v4.1.7...ZeroAlloc.Saga-v4.2.0) (2026-11-11)
+
+
+### Features
+
+* add net11.0 target ([#349](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/349)) ([1ec7a0e](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/1ec7a0e0b887b2dd8498c38717c48beab2109681))
+
+
+### Documentation
+
+* add context7.json to claim the library on Context7 ([#345](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/345)) ([e6f52b4](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/e6f52b4c0703cc2836257a7c84ef4590ce846af8))
+
 ## [4.1.7](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v4.1.6...ZeroAlloc.Saga-v4.1.7) (2026-10-21)
 
 
