@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <TargetFrameworks>net8.0;net10.0;net11.0</TargetFrameworks>
     <PackageId>ZeroAlloc.Saga</PackageId>
     <Description>Source-generated long-running process orchestration. Multi-step sagas with compensation, FSM via ZeroAlloc.StateMachine, dispatch via ZeroAlloc.Mediator. Native AOT compatible.</Description>
     <IsAotCompatible>true</IsAotCompatible>

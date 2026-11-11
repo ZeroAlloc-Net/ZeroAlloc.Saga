@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
     <IsPackable>false</IsPackable>
     <!-- Same set the EF Core backend's tests waive, for the same reasons. -->
     <NoWarn>$(NoWarn);MA0048;MA0051;ZAM003</NoWarn>

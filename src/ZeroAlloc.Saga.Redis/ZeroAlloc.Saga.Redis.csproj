@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <TargetFrameworks>net8.0;net10.0;net11.0</TargetFrameworks>
     <PackageId>ZeroAlloc.Saga.Redis</PackageId>
     <Description>Redis-backed durable persistence for ZeroAlloc.Saga. WATCH/MULTI/EXEC-based optimistic concurrency, hash-per-saga storage, byte-encoded state via ISagaPersistableState. Native AOT compatible.</Description>
     <PackageTags>saga;redis;persistence;orchestration;mediator;cqrs;zeroalloc</PackageTags>
