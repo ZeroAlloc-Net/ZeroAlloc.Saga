@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <!-- net10.0 only, like ZeroAlloc.Saga.Orm: ZeroAlloc.ORM ships net10.0 only. -->
-    <TargetFramework>net10.0</TargetFramework>
+    <!-- net10.0;net11.0 without net8.0, like ZeroAlloc.Saga.Orm: ZeroAlloc.ORM ships net10.0 only. -->
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
     <PackageId>ZeroAlloc.Saga.Outbox.Orm</PackageId>
     <Description>Transactional outbox unit of work for ZeroAlloc.Saga.Outbox + ZeroAlloc.Saga.Orm. A saga step's outbox rows commit in the same database transaction as the saga state, through ZeroAlloc.Outbox.Orm, or roll back with it. Native AOT compatible.</Description>
     <PackageTags>zeroalloc;saga;outbox;orm;mediator;cqrs;nativeaot</PackageTags>

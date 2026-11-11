@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <TargetFrameworks>net8.0;net10.0;net11.0</TargetFrameworks>
     <PackageId>ZeroAlloc.Saga.Resilience</PackageId>
     <Description>Resilience bridge for ZeroAlloc.Saga — wraps step-command dispatch in retry / timeout / circuit-breaker / rate-limit policies from ZeroAlloc.Resilience. Native AOT compatible.</Description>
     <PackageTags>saga;resilience;retry;circuit-breaker;timeout;mediator;cqrs;zeroalloc</PackageTags>
