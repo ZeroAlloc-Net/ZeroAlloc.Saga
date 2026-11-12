@@ -16,7 +16,7 @@
          version that dispatches every handler interface a class implements, Mediator#334; with
          5.1.x the README quick start fails with ZAM001. The generator's output compiles against
          the ZeroAlloc.Mediator 5.1 runtime floor above, so the runtime floor stays where it is. -->
-    <PackageVersion Include="ZeroAlloc.Mediator.Generator" Version="6.6.*" />
+    <PackageVersion Include="ZeroAlloc.Mediator.Generator" Version="6.7.*" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.14" />
