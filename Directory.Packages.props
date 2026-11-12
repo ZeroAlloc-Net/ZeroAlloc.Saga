@@ -10,7 +10,7 @@
     <!-- Runtime deps -->
     <PackageVersion Include="ZeroAlloc.TestHelpers" Version="1.10.*" />
     <PackageVersion Include="ZeroAlloc.Mediator" Version="5.1.*" />
-    <PackageVersion Include="ZeroAlloc.Pipeline" Version="1.4.*" />
+    <PackageVersion Include="ZeroAlloc.Pipeline" Version="1.5.*" />
     <!-- ZeroAlloc.Saga ships this generator to consumers as a package dependency, #285, so its floor
          is what a project that references only ZeroAlloc.Saga compiles with. 6.6.1 is the first
          version that dispatches every handler interface a class implements, Mediator#334; with
