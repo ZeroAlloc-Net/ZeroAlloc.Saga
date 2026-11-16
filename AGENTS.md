@@ -78,6 +78,7 @@ Local pack: no version fails with `ZAVERSION001`, and a `--no-build` pack of an 
 fails with `ZAVERSION002`. Pass the version to every build step:
 
 ```bash
+SHA=$(git rev-parse --short HEAD)
 dotnet pack src/ZeroAlloc.Saga -c Release -p:Version=9.9.9-local.$SHA -o ./packout
 ```
 
