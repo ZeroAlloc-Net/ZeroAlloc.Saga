@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.1](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v4.2.0...ZeroAlloc.Saga-v4.2.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* embed PDBs so Go to Definition shows the package source ([#367](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/367)) ([5c7d3d9](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/5c7d3d972505152ba67024e5ed0abccae7834a9c))
+
 ## [4.2.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v4.1.7...ZeroAlloc.Saga-v4.2.0) (2026-11-11)
 
 
