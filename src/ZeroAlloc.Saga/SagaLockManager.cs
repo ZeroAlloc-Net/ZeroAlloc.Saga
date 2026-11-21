@@ -106,7 +106,7 @@ public sealed class SagaLockManager<TKey>
         public TKey Key { get; set; } = default!;
 
         /// <summary>The generation the current holder was granted. Caller holds the gate.</summary>
-        public int Generation { get; private set; }
+        public long Generation { get; private set; }
 
         /// <summary>Queues a waiter. Caller holds the owner's gate.</summary>
         public Waiter Enqueue(CancellationToken ct)
@@ -117,18 +117,18 @@ public sealed class SagaLockManager<TKey>
             return waiter;
         }
 
-        internal override void Release(int generation)
+        internal override void Release(long generation)
         {
             Waiter? next = null;
-            int granted;
+            long granted;
             lock (_owner._gate)
             {
                 if (generation != Generation)
                     throw new InvalidOperationException("The saga lock was released more often than it was acquired.");
 
-                // Unchecked: a wrap-around after 2^32 grants of one entry only needs to differ
-                // from the generation the stale releaser carries.
-                granted = Generation = unchecked(Generation + 1);
+                // A long never repeats in practice, so a stale releaser can never match a later
+                // grant of the same entry.
+                granted = ++Generation;
 
                 var first = _waiters?.First;
                 if (first is not null)

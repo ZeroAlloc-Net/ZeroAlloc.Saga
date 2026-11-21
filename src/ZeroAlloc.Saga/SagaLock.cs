@@ -14,9 +14,9 @@ namespace ZeroAlloc.Saga;
 public readonly struct SagaLock : IDisposable
 {
     private readonly SagaLockEntry? _entry;
-    private readonly int _generation;
+    private readonly long _generation;
 
-    internal SagaLock(SagaLockEntry entry, int generation)
+    internal SagaLock(SagaLockEntry entry, long generation)
     {
         _entry = entry;
         _generation = generation;

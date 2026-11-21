@@ -7,5 +7,5 @@ namespace ZeroAlloc.Saga;
 internal abstract class SagaLockEntry
 {
     /// <summary>Releases the grant identified by <paramref name="generation"/>.</summary>
-    internal abstract void Release(int generation);
+    internal abstract void Release(long generation);
 }

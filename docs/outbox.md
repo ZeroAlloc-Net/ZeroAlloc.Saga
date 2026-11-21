@@ -96,7 +96,7 @@ each write itself:
 | Any saga store except `WithEfCoreStore<TContext>()` on the same `TContext` | `AddOutbox().WithEfCore<TContext>()` | **Fails at startup** |
 | `WithOrmStore()` without `WithOrmOutbox()` | `AddOutbox().WithOrm()` | **Fails at startup** |
 
-The last row can never work. `WithOutbox()` enlists each command through
+The `AddOutbox().WithEfCore<TContext>()` row can never work. `WithOutbox()` enlists each command through
 `IOutboxStore.EnqueueDeferredAsync`, and the EF Core outbox store implements that by adding the
 row to its scoped `DbContext` without saving it. Only the EF Core saga store on that same
 `DbContext` saves it. With any other saga store, including an EF Core saga store on another
