@@ -6,7 +6,7 @@
   ],
   "packageRules": [
     {
-      "description": "Skip EFCore major bumps \u2014 EFCore 10 dropped net8.0 support; pin via Directory.Packages.props per-TFM until we drop net8.0.",
+      "description": "Skip EFCore major bumps: an EF Core 11 floor would force net11.0 consumers onto EF Core 11, which current providers such as Npgsql 10.x do not support. See Directory.Packages.props and #350.",
       "matchPackagePrefixes": [
         "Microsoft.EntityFrameworkCore"
       ],

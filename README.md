@@ -22,7 +22,7 @@ Source-generated sagas for .NET: declare steps and their compensation on a parti
 dotnet add package ZeroAlloc.Saga
 ```
 
-`ZeroAlloc.Saga` carries its own generator and brings ZeroAlloc.Mediator, whose generator emits the `IMediator` that saga commands and events flow through. One package reference is enough.
+The packages target .NET 10 and .NET 11. `ZeroAlloc.Saga` carries its own generator and brings ZeroAlloc.Mediator, whose generator emits the `IMediator` that saga commands and events flow through. One package reference is enough.
 
 ## Quick start
 

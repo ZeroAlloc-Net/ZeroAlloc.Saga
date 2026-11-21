@@ -37,11 +37,7 @@ namespace ZeroAlloc.Saga.Outbox.Redis;
 public sealed class RedisSagaUnitOfWork : ISagaUnitOfWork
 {
     private readonly List<PendingWrite> _pending = new();
-#if NET9_0_OR_GREATER
     private readonly System.Threading.Lock _gate = new();
-#else
-    private readonly object _gate = new();
-#endif
 
     /// <inheritdoc />
     public ValueTask EnlistOutboxRowAsync(string typeName, ReadOnlyMemory<byte> payload, CancellationToken ct)

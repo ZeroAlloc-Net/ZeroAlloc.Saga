@@ -18,7 +18,6 @@ jobs:
           # satisfying the pin, which is how a publish failed on a lagging image.
           global-json-file: global.json
           dotnet-version: |
-            8.0.x
             10.0.x
       # Restore the whole solution so the saga generator + its analyzer
       # ProjectReference resolve before AotSmoke is published.
@@ -53,7 +52,6 @@ jobs:
           # satisfying the pin, which is how a publish failed on a lagging image.
           global-json-file: global.json
           dotnet-version: |
-            8.0.x
             10.0.x
       - name: Restore solution
         run: dotnet restore ZeroAlloc.Saga.slnx
@@ -92,7 +90,6 @@ jobs:
           # satisfying the pin, which is how a publish failed on a lagging image.
           global-json-file: global.json
           dotnet-version: |
-            8.0.x
             10.0.x
       - name: Restore solution
         run: dotnet restore ZeroAlloc.Saga.slnx
@@ -129,7 +126,6 @@ jobs:
           # satisfying the pin, which is how a publish failed on a lagging image.
           global-json-file: global.json
           dotnet-version: |
-            8.0.x
             10.0.x
       - name: Restore solution
         run: dotnet restore ZeroAlloc.Saga.slnx
@@ -154,7 +150,6 @@ jobs:
           # satisfying the pin, which is how a publish failed on a lagging image.
           global-json-file: global.json
           dotnet-version: |
-            8.0.x
             10.0.x
       - name: Restore solution
         run: dotnet restore ZeroAlloc.Saga.slnx
@@ -180,7 +175,6 @@ jobs:
           # satisfying the pin, which is how a publish failed on a lagging image.
           global-json-file: global.json
           dotnet-version: |
-            8.0.x
             10.0.x
       - name: Restore solution
         run: dotnet restore ZeroAlloc.Saga.slnx

@@ -23,8 +23,8 @@
 
     <!-- CVE-2025-6965 / GHSA-2m69-gcr7-jv3q: EF Core Sqlite pulls
          SQLitePCLRaw.lib.e_sqlite3 2.1.11 (bundles SQLite < 3.50.2). Pin the native
-         binary to 3.50.3 (SQLite 3.50.3) via transitive pinning; satisfies both the
-         net8.0/EFCore9 and net10.0/EFCore10 graphs. core/provider stay on 2.x
+         binary to 3.50.3 (SQLite 3.50.3) via transitive pinning for the EF Core 10 graph
+         on net10.0 and net11.0. core/provider stay on 2.x
          (the sqlite3 C ABI is stable). Drop once EF Core ships a bumped SQLitePCLRaw. -->
     <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.50.3" />
 
@@ -44,17 +44,11 @@
     <PackageVersion Include="ZeroAlloc.ORM.Generator" Version="2.16.1" />
   </ItemGroup>
 
-  <!-- EFCore 10 dropped net8.0 support, so we pin per-TFM:
-       net8.0 consumers stay on EFCore 9; net10.0 and net11.0 get EFCore 10. net11.0 stays on the
-       10.0 line on purpose: a package floor of 11.0.0 would force every net11.0 consumer onto
-       EF Core 11, and provider packages such as Npgsql.EntityFrameworkCore.PostgreSQL 10.x
-       require EF Core below 11. A consumer can still use EF Core 11 on net11.0.
-       ZeroAlloc-Net/ZeroAlloc.Saga#350 tracks testing against EF Core 11. -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.23" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.23" />
-  </ItemGroup>
-  <ItemGroup Condition="'$(TargetFramework)' != 'net8.0'">
+  <!-- EF Core stays on the 10.0 line for net10.0 and net11.0 on purpose: a package floor of
+       11.0.0 would force every net11.0 consumer onto EF Core 11, and provider packages such as
+       Npgsql.EntityFrameworkCore.PostgreSQL 10.x require EF Core below 11. A consumer can still
+       use EF Core 11 on net11.0. ZeroAlloc-Net/ZeroAlloc.Saga#350 tracks testing against EF Core 11. -->
+  <ItemGroup>
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.15" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.15" />
   </ItemGroup>

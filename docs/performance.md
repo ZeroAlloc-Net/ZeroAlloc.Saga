@@ -34,14 +34,14 @@ the store and dispatcher each attempt resolves:
 dotnet run --project benchmarks/ZeroAlloc.Saga.Benchmarks -c Release -- --filter "*" --launchCount 3
 ```
 
-Measured 2026-10-21 on an otherwise idle machine, out of process in three launches, pinned to two
-performance cores:
+Measured 2026-11-21 on a Linux virtual machine under light load, out of process in three
+launches:
 
 ```
-BenchmarkDotNet v0.15.8, Windows 11 (10.0.26300.9711)
-12th Gen Intel Core i9-12900HK 2.50GHz, 1 CPU, 20 logical and 14 physical cores
-.NET SDK 10.0.402
-  [Host] : .NET 10.0.13 (10.0.13, 10.0.1326.50504), X64 RyuJIT x86-64-v3
+BenchmarkDotNet v0.15.8, Linux Debian GNU/Linux 13 (trixie)
+Intel Core Ultra 7 255H 3.69GHz, 1 CPU, 12 logical and 12 physical cores
+.NET SDK 11.0.100
+  [Host] : .NET 10.0.14 (10.0.14, 10.0.1426.52326), X64 RyuJIT x86-64-v3
 ```
 
 > Allocations are exact. Speed is shown as same-run ratios; absolute timings are not published.
@@ -51,12 +51,16 @@ lowest and highest of the three launches in brackets.
 
 | Benchmark | What one operation does | Ratio | Allocated |
 |---|---|---:|---:|
-| `DuplicateEvent` | A forward step whose trigger the saga already consumed; logs at Debug and returns | 1.00 | 400 B |
-| `OrphanCompensation` | A compensation event with no saga to compensate; logs at Warning and returns | 0.96 (0.95–0.98) | 400 B |
-| `FullLifecycle` | A whole saga: create, two saves, completion and removal, three dispatches | 4.67 (4.63–4.76) | 1,576 B |
+| `DuplicateEvent` | A forward step whose trigger the saga already consumed; logs at Debug and returns | 1.00 | 360 B |
+| `OrphanCompensation` | A compensation event with no saga to compensate; logs at Warning and returns | 0.99 (0.98–1.01) | 360 B |
+| `FullLifecycle` | A whole saga: create, two saves, completion and removal, three dispatches | 4.78 (4.58–4.89) | 1,456 B |
 
-The 400 B on the two early-return paths is what every handler attempt costs: the key lock, the
-per-attempt DI scope and the store and dispatcher it resolves. Both paths also log, so a log call
+The 360 B on the two early-return paths is what every handler attempt costs: the per-attempt DI
+scope and the store and dispatcher it resolves. The key lock allocates nothing when no other
+handler holds the same key and a pooled lock entry is available for reuse; before 5.0 it cost 40 B per
+attempt (#250). The first acquire allocates a lock entry, and so does any acquire that finds the pool
+empty, for example when concurrent distinct keys use up the pooled entries. The pool keeps at most 64
+released entries. Both paths also log, so a log call
 that allocated while its level is disabled would show up in these two rows; see #248.
 
 There is no published head-to-head against another saga library yet.

@@ -7,41 +7,50 @@ namespace ZeroAlloc.Saga;
 /// instances run in parallel.
 /// </summary>
 /// <remarks>
+/// <para>
 /// A key is tracked only while someone holds or waits for its lock. The last release
 /// removes it, so memory stays proportional to the number of keys in use, not to every
 /// key ever seen.
+/// </para>
+/// <para>
+/// Acquiring an idle key allocates nothing once the manager has warmed up: the lock is
+/// returned as a <see cref="SagaLock"/> struct, and the per-key entry behind it is pooled.
+/// Waiting for a held key still allocates the wait.
+/// </para>
 /// </remarks>
 public sealed class SagaLockManager<TKey>
     where TKey : notnull, IEquatable<TKey>
 {
-    // One gate guards the dictionary and every entry in it. Each critical section is a
-    // dictionary operation or a queue step, so a single gate is cheap, and it makes
+    // Entries kept for reuse once their key is released. A bound keeps an idle manager small
+    // after a burst of distinct keys; beyond it a released entry is left to the GC.
+    internal const int MaxPooledEntries = 64;
+
+    // One gate guards the dictionary, the pool and every entry. Each critical section is a
+    // dictionary operation, a pool step or a queue step, so a single gate is cheap, and it makes
     // "remove the key" and "join the key's queue" mutually exclusive by construction.
-#if NET9_0_OR_GREATER
     private readonly System.Threading.Lock _gate = new();
-#else
-    private readonly object _gate = new();
-#endif
     private readonly Dictionary<TKey, KeyLock> _held = new();
+    private readonly Stack<KeyLock> _pool = new();
 
     /// <summary>
     /// Acquires the lock for <paramref name="key"/>, blocking asynchronously
-    /// if another caller already holds it. The returned disposable releases
-    /// the lock when disposed; dispose it exactly once.
+    /// if another caller already holds it. Dispose the returned <see cref="SagaLock"/>
+    /// exactly once to release the lock.
     /// </summary>
-    public ValueTask<IDisposable> AcquireAsync(TKey key, CancellationToken ct)
+    public ValueTask<SagaLock> AcquireAsync(TKey key, CancellationToken ct)
     {
         if (ct.IsCancellationRequested)
-            return ValueTask.FromCanceled<IDisposable>(ct);
+            return ValueTask.FromCanceled<SagaLock>(ct);
 
         Waiter waiter;
         lock (_gate)
         {
             if (!_held.TryGetValue(key, out var entry))
             {
-                entry = new KeyLock(this, key);
+                entry = _pool.Count > 0 ? _pool.Pop() : new KeyLock(this);
+                entry.Key = key;
                 _held.Add(key, entry);
-                return new ValueTask<IDisposable>(entry);
+                return new ValueTask<SagaLock>(new SagaLock(entry, entry.Generation));
             }
 
             waiter = entry.Enqueue(ct);
@@ -60,7 +69,17 @@ public sealed class SagaLockManager<TKey>
         }
     }
 
-    private static async ValueTask<IDisposable> WaitAsync(Waiter waiter, CancellationToken ct)
+    /// <summary>Number of released entries kept for reuse. Test hook for #250.</summary>
+    internal int PooledEntryCount
+    {
+        get
+        {
+            lock (_gate)
+                return _pool.Count;
+        }
+    }
+
+    private static async ValueTask<SagaLock> WaitAsync(Waiter waiter, CancellationToken ct)
     {
         var registration = ct.CanBeCanceled
             ? ct.Register(static state => ((Waiter)state!).Cancel(), waiter)
@@ -72,22 +91,22 @@ public sealed class SagaLockManager<TKey>
     }
 
     /// <summary>
-    /// The lock for one key, present in the dictionary exactly while it is held. The holder
-    /// receives the entry itself as its releaser, so a lock costs one allocation per
-    /// acquisition of an idle key, the same count as the releaser it replaces.
+    /// The lock for one key, present in the dictionary exactly while it is held. Each grant
+    /// carries the entry's generation; every release advances it, so a releaser that was
+    /// already disposed, or that outlived the entry's return to the pool, no longer matches.
     /// </summary>
-    private sealed class KeyLock : IDisposable
+    private sealed class KeyLock : SagaLockEntry
     {
         private readonly SagaLockManager<TKey> _owner;
-        private readonly TKey _key;
         private LinkedList<Waiter>? _waiters;
-        private bool _released;
 
-        public KeyLock(SagaLockManager<TKey> owner, TKey key)
-        {
-            _owner = owner;
-            _key = key;
-        }
+        public KeyLock(SagaLockManager<TKey> owner) => _owner = owner;
+
+        /// <summary>The key this entry locks while it is in the dictionary. Caller holds the gate.</summary>
+        public TKey Key { get; set; } = default!;
+
+        /// <summary>The generation the current holder was granted. Caller holds the gate.</summary>
+        public long Generation { get; private set; }
 
         /// <summary>Queues a waiter. Caller holds the owner's gate.</summary>
         public Waiter Enqueue(CancellationToken ct)
@@ -98,13 +117,18 @@ public sealed class SagaLockManager<TKey>
             return waiter;
         }
 
-        public void Dispose()
+        internal override void Release(long generation)
         {
             Waiter? next = null;
+            long granted;
             lock (_owner._gate)
             {
-                if (_released)
+                if (generation != Generation)
                     throw new InvalidOperationException("The saga lock was released more often than it was acquired.");
+
+                // A long never repeats in practice, so a stale releaser can never match a later
+                // grant of the same entry.
+                granted = ++Generation;
 
                 var first = _waiters?.First;
                 if (first is not null)
@@ -117,14 +141,15 @@ public sealed class SagaLockManager<TKey>
                 }
                 else
                 {
-                    // Nobody holds or waits: forget the key. A later acquirer creates a
-                    // fresh entry; this one is never handed out again.
-                    _released = true;
-                    _owner._held.Remove(_key);
+                    // Nobody holds or waits: forget the key and keep the entry for another one.
+                    _owner._held.Remove(Key);
+                    Key = default!;
+                    if (_owner._pool.Count < MaxPooledEntries)
+                        _owner._pool.Push(this);
                 }
             }
 
-            next?.TrySetResult(this);
+            next?.TrySetResult(new SagaLock(this, granted));
         }
 
         /// <summary>Removes a cancelled waiter; false when it was already handed the lock.</summary>
@@ -142,7 +167,7 @@ public sealed class SagaLockManager<TKey>
         }
     }
 
-    private sealed class Waiter : TaskCompletionSource<IDisposable>
+    private sealed class Waiter : TaskCompletionSource<SagaLock>
     {
         private readonly KeyLock _entry;
         private readonly CancellationToken _ct;

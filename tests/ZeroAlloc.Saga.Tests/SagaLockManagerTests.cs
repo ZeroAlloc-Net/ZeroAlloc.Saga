@@ -4,12 +4,15 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ZeroAlloc.Saga;
+using ZeroAlloc.TestHelpers;
 
 namespace ZeroAlloc.Saga.Tests;
 
 /// <summary>
 /// <see cref="SagaLockManager{TKey}"/> must serialize per key, run different keys in
-/// parallel, and forget a key once nobody holds or waits for its lock. See #247.
+/// parallel, and forget a key once nobody holds or waits for its lock. See #247. Its
+/// <see cref="SagaLock"/> releaser is a struct over a pooled entry, so an uncontended acquire
+/// allocates nothing, and a stale release is detected by generation. See #250.
 /// </summary>
 public class SagaLockManagerTests
 {
@@ -121,7 +124,7 @@ public class SagaLockManagerTests
                     ? new CancellationTokenSource(TimeSpan.FromTicks(random.Next(1, 2_000)))
                     : null;
 
-                IDisposable held;
+                SagaLock held;
                 try
                 {
                     held = await locks.AcquireAsync(key, cts?.Token ?? CancellationToken.None).ConfigureAwait(false);
@@ -151,5 +154,105 @@ public class SagaLockManagerTests
         Assert.Equal(0, overlaps);
         Assert.Equal(Workers * IterationsPerWorker, entered.Sum() + cancelled);
         Assert.Equal(0, locks.TrackedKeyCount);
+    }
+
+    [Fact]
+    public async Task DoubleDispose_Throws_AndLeavesTheLockReleasedOnce()
+    {
+        var locks = new SagaLockManager<int>();
+
+        var held = await locks.AcquireAsync(1, CancellationToken.None);
+        held.Dispose();
+
+        Assert.Throws<InvalidOperationException>(() => held.Dispose());
+        Assert.Equal(0, locks.TrackedKeyCount);
+    }
+
+    [Fact]
+    public async Task StaleDispose_AfterTheEntryWasReused_DoesNotReleaseTheNewHolder()
+    {
+        // The released entry goes back to the pool and is handed out for another key. A second
+        // Dispose of the first grant must not release whoever holds the recycled entry now.
+        var locks = new SagaLockManager<int>();
+
+        var first = await locks.AcquireAsync(1, CancellationToken.None);
+        first.Dispose();
+        Assert.Equal(1, locks.PooledEntryCount);
+
+        var second = await locks.AcquireAsync(2, CancellationToken.None);
+        Assert.Equal(0, locks.PooledEntryCount);
+
+        Assert.Throws<InvalidOperationException>(() => first.Dispose());
+        Assert.Equal(1, locks.TrackedKeyCount);
+
+        // Key 2 is still held: a new acquire waits until the real holder releases it.
+        var third = locks.AcquireAsync(2, CancellationToken.None);
+        Assert.False(third.IsCompleted);
+
+        second.Dispose();
+        (await third.AsTask().WaitAsync(TimeSpan.FromSeconds(10))).Dispose();
+        Assert.Equal(0, locks.TrackedKeyCount);
+    }
+
+    [Fact]
+    public async Task StaleDispose_AfterAHandOff_DoesNotReleaseTheWaiterThatGotTheLock()
+    {
+        var locks = new SagaLockManager<int>();
+
+        var first = await locks.AcquireAsync(1, CancellationToken.None);
+        var pending = locks.AcquireAsync(1, CancellationToken.None);
+        first.Dispose();
+        var second = await pending.AsTask().WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Throws<InvalidOperationException>(() => first.Dispose());
+
+        var third = locks.AcquireAsync(1, CancellationToken.None);
+        Assert.False(third.IsCompleted);
+
+        second.Dispose();
+        (await third.AsTask().WaitAsync(TimeSpan.FromSeconds(10))).Dispose();
+        Assert.Equal(0, locks.TrackedKeyCount);
+    }
+
+    [Fact]
+    public void DefaultLock_DisposesAsANoOp()
+    {
+        var none = default(SagaLock);
+        none.Dispose();
+        none.Dispose();
+    }
+
+    [Fact]
+    public void ThePool_IsBounded()
+    {
+        var locks = new SagaLockManager<int>();
+        var held = new List<SagaLock>();
+        for (var key = 0; key < 1_000; key++)
+            held.Add(RunSync(locks.AcquireAsync(key, CancellationToken.None)));
+
+        foreach (var l in held)
+            l.Dispose();
+
+        Assert.Equal(0, locks.TrackedKeyCount);
+        Assert.Equal(SagaLockManager<int>.MaxPooledEntries, locks.PooledEntryCount);
+    }
+
+    [Fact]
+    public void UncontendedAcquireAndRelease_AllocatesNothing()
+    {
+        var locks = new SagaLockManager<int>();
+        var key = 0;
+
+        AllocationGate.AssertBudget(0, 10_000, () =>
+        {
+            // A new key each time: the entry comes from the pool, not from the previous key.
+            RunSync(locks.AcquireAsync(key++ & 1023, CancellationToken.None)).Dispose();
+        }, "SagaLockManager.AcquireAsync, uncontended");
+    }
+
+    private static SagaLock RunSync(ValueTask<SagaLock> pending)
+    {
+        Assert.True(pending.IsCompletedSuccessfully);
+        return pending.Result;
     }
 }

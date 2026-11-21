@@ -77,7 +77,7 @@ races (each replica has its own scope) and same-process OCC retries
 |---|---|
 | `ZeroAlloc.Saga.EfCore` backend | **Use the bridge.** This is the primary deployment shape it was designed for. |
 | `ZeroAlloc.Saga.Redis` backend | **Use the bridge with `WithRedisOutbox()`**, which makes it atomic. Without it, dispatch is at-least-once. See [`outbox-redis.md`](outbox-redis.md). |
-| `ZeroAlloc.Saga.Orm` backend | **Use the bridge with `WithOrmOutbox()`** from `ZeroAlloc.Saga.Outbox.Orm`, and `AddOutbox().WithOrm()`, which makes it atomic. Without `WithOrmOutbox()`, dispatch is at-least-once. See [below](#zeroallocsagaorm-atomic-with-withormoutbox). |
+| `ZeroAlloc.Saga.Orm` backend | **Use the bridge with `WithOrmOutbox()`** from `ZeroAlloc.Saga.Outbox.Orm`, and `AddOutbox().WithOrm()`, which makes it atomic. Without `WithOrmOutbox()`, the host fails to start. See [below](#zeroallocsagaorm-atomic-with-withormoutbox). |
 | `ZeroAlloc.Saga` InMemory backend | Don't bother. InMemory writes are atomic by construction; the bridge adds latency and a worker for no benefit. If you use it anyway, pick an outbox store that writes each row itself, not the EF Core one. |
 | Cross-process / multi-replica deployments | **Use the bridge** with EF Core, with Redis and `WithRedisOutbox()`, or with the ORM store and `WithOrmOutbox()`. This is exactly the race it fixes. |
 | Single-process, single-replica, fire-and-forget commands | Optional; the bridge converts synchronous dispatch into asynchronous dispatch (worker cadence). Either is correct. |
@@ -92,16 +92,21 @@ each write itself:
 | `WithEfCoreStore<TContext>()` | `AddOutbox().WithEfCore<TContext>()`, the same `TContext` | Atomic with the saga state save |
 | `WithRedisStore()` | `WithOutbox().WithRedisOutbox()`, with `AddOutbox()` for the worker | Atomic, see [`outbox-redis.md`](outbox-redis.md) |
 | `WithOrmStore()` | `WithOutbox().WithOrmOutbox()`, with `AddOutbox().WithOrm()` | Atomic, see [below](#zeroallocsagaorm-atomic-with-withormoutbox) |
-| `WithOrmStore()` without `WithOrmOutbox()` | `AddOutbox().WithOrm()` | At-least-once, and the host logs a warning at start |
-| Any saga store, including InMemory and `WithRedisStore()` without `WithRedisOutbox()` | A store that writes each row itself, such as `AddOutbox().WithOrm()` | At-least-once |
+| Any saga store except `WithOrmStore()`, including InMemory and `WithRedisStore()` without `WithRedisOutbox()` | A store that writes each row itself, such as `AddOutbox().WithOrm()` | At-least-once |
 | Any saga store except `WithEfCoreStore<TContext>()` on the same `TContext` | `AddOutbox().WithEfCore<TContext>()` | **Fails at startup** |
+| `WithOrmStore()` without `WithOrmOutbox()` | `AddOutbox().WithOrm()` | **Fails at startup** |
 
-The last row can never work. `WithOutbox()` enlists each command through
+The `AddOutbox().WithEfCore<TContext>()` row can never work. `WithOutbox()` enlists each command through
 `IOutboxStore.EnqueueDeferredAsync`, and the EF Core outbox store implements that by adding the
 row to its scoped `DbContext` without saving it. Only the EF Core saga store on that same
 `DbContext` saves it. With any other saga store, including an EF Core saga store on another
 `DbContext`, the row is dropped with the scope and every saga command is lost, with no error and
 no log. The [startup check](#startup-check) therefore refuses to start the host.
+
+`WithOrmStore()` with `AddOutbox().WithOrm()` but without `WithOrmOutbox()` would work at least
+once, but each concurrency retry enqueues the command again, and `WithOrmOutbox()` makes the same
+pairing atomic. The startup check refuses that setup too, so add `WithOrmOutbox()` after
+`WithOutbox()`.
 
 With `WithRedisOutbox()`, the worker must claim from the `RedisOutboxStore` it registers. Don't
 register another outbox store after it, such as `AddOutbox().WithEfCore<TContext>()`: the worker
@@ -226,12 +231,12 @@ which the host calls on every such service before it starts any `IHostedService`
   `WithRedisOutbox()` and `WithOrmOutbox()` do, commits the rows itself.
 
 - The saga store is `WithOrmStore()` and the outbox store is `AddOutbox().WithOrm()`, but
-  `WithOrmOutbox()` is missing. This one does not fail the start, because at-least-once is a
-  supported mode. It logs a warning instead:
+  `WithOrmOutbox()` is missing. That setup would enqueue a command again on every concurrency
+  retry, while `WithOrmOutbox()` makes it atomic:
 
   > ZeroAlloc.Saga.Outbox.WithOutbox(): the saga store WithOrmStore() is paired with the outbox
-  > store OrmOutboxStore without WithOrmOutbox(), so saga command dispatch is at-least-once:
-  > [...] Add WithOrmOutbox() from ZeroAlloc.Saga.Outbox.Orm after WithOutbox() to commit the
+  > store OrmOutboxStore without WithOrmOutbox(). Without it each outbox row is written when the
+  > step dispatches, [...] Add WithOrmOutbox() from ZeroAlloc.Saga.Outbox.Orm after WithOutbox() to commit the
   > outbox rows in the saga store's transaction. [...]
 
 - Two `IOutboxTypeDispatcher`s claim the same saga command type name — see below.
@@ -530,11 +535,12 @@ that also holds the outbox's rows, and ZeroAlloc.ORM refuses to upgrade it: the 
 `ZeroAllocOrmMigrationConflictException` and leaves the table untouched. Run your combined source
 again, or move the rows as above.
 
-Without `WithOrmOutbox()`, `WithOrmStore().WithOutbox()` with `AddOutbox().WithOrm()` still works,
-but it is at-least-once: `WithOutbox()`'s default unit of work enlists each command through
+Without `WithOrmOutbox()`, `WithOrmStore().WithOutbox()` with `AddOutbox().WithOrm()` would be
+at-least-once: `WithOutbox()`'s default unit of work enlists each command through
 `IOutboxStore.EnqueueDeferredAsync`, which the ORM outbox store implements by writing the row at
 once. A save that then raises `OrmSagaConcurrencyException` leaves the row committed, and the retry
-enqueues the command again. The [startup check](#startup-check) logs a warning for that setup.
+enqueues the command again. The [startup check](#startup-check) therefore fails the host start
+for that setup.
 
 The ORM saga store cannot be paired with `WithEfCore<TContext>()`: the EF Core outbox store defers
 its row to a `SaveChangesAsync` that the ORM saga store never calls, so the command would be lost.

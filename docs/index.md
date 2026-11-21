@@ -105,5 +105,6 @@ It prints `Reserved stock for 42`, `Charging 9.95` and `Released stock for 42`. 
 | [Performance](performance.md) | Allocation budgets and supported state shapes |
 | [Samples](samples.md) | Runnable projects, including the NativeAOT smoke tests |
 | [Limitations and roadmap](roadmap.md) | What is not supported yet |
+| [Migrating to v5](migrating-to-v5.md) | .NET 10, `WithOrmOutbox()` and the `SagaLock` struct |
 | [Migrating to v4](migrating-to-v4.md) | Upgrading the outbox bridge to ZeroAlloc.Outbox 3 |
 | [Release highlights](release-highlights.md) | The what's new notes from earlier releases |
