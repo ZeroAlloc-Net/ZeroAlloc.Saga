@@ -1,1 +1,5 @@
 #nullable enable
+ZeroAlloc.Saga.SagaLock
+ZeroAlloc.Saga.SagaLock.Dispose() -> void
+ZeroAlloc.Saga.SagaLock.SagaLock() -> void
+ZeroAlloc.Saga.SagaLockManager<TKey>.AcquireAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Saga.SagaLock>

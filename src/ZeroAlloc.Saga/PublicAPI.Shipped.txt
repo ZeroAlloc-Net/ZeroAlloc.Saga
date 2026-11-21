@@ -66,7 +66,6 @@ ZeroAlloc.Saga.SagaConcurrencyException.CorrelationKey.get -> string!
 ZeroAlloc.Saga.SagaConcurrencyException.SagaConcurrencyException(string! sagaType, string! correlationKey, int attempts, System.Exception? inner) -> void
 ZeroAlloc.Saga.SagaConcurrencyException.SagaType.get -> string!
 ZeroAlloc.Saga.SagaLockManager<TKey>
-ZeroAlloc.Saga.SagaLockManager<TKey>.AcquireAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<System.IDisposable!>
 ZeroAlloc.Saga.SagaLockManager<TKey>.SagaLockManager() -> void
 ZeroAlloc.Saga.SagaManager<TSaga, TKey>
 ZeroAlloc.Saga.SagaManager<TSaga, TKey>.CompensateAsync(TKey key, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask

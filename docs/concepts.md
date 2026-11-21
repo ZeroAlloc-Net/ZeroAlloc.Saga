@@ -165,8 +165,11 @@ The framework uses a per-saga async lock keyed by correlation ID so
 that handlers for the same saga instance never run concurrently. Different
 saga instances run in parallel. A key's lock exists only while a handler holds
 or waits for it; the last release removes it, so lock memory tracks the number
-of sagas being handled right now, not every correlation key ever seen. See
-`SagaLockManager<TKey>`.
+of sagas being handled right now, not every correlation key ever seen.
+`SagaLockManager<TKey>.AcquireAsync` returns a `SagaLock` struct and reuses the
+per-key entries, so taking an idle key's lock allocates nothing. Dispose the
+`SagaLock` exactly once, normally with `using var _ = await locks.AcquireAsync(key, ct);`.
+A second `Dispose` throws `InvalidOperationException`.
 
 ## Persistence
 
