@@ -14,8 +14,7 @@ packages from one release-please component, so every package carries the same ve
   one reference. `src/Directory.Build.targets` strips it from every `src` library's own compilation.
 - Mediator floors differ on purpose: runtime 5.1.x, generator 6.7.x, both in `Directory.Packages.props`
   with the reasons in comments. `ZeroAlloc.Saga.Generator.Tests` overrides the runtime to 6.7.*.
-- Packable libraries: `ZeroAlloc.Saga`, `.EfCore`, `.Outbox`, `.Redis`, `.Resilience` target
-  `net8.0;net10.0;net11.0`; `.Orm`, `.Outbox.Orm` and the test projects target `net10.0;net11.0`.
+- Packable libraries and the test projects target `net10.0;net11.0`.
 - `tests/ZeroAlloc.Saga.MultiAssembly.*` check sagas split across assemblies.
 - `samples/AotSmoke*` and `samples/ResilienceSample` are the AOT smokes that CI publishes, not shipped code.
 - Generator snapshots are the `*.verified.cs` files under `tests/ZeroAlloc.Saga.Generator.Tests/Snapshots`.
@@ -24,8 +23,7 @@ packages from one release-please component, so every package carries the same ve
 ## Build and test
 
 SDK: `global.json` pins 11.0.100 with `rollForward: latestMinor`. Runtimes: test projects target `net10.0` and
-`net11.0`, so both runtimes must be installed. The libraries also target `net8.0`, which CI builds with the
-.NET 8 SDK installed alongside; no test needs the .NET 8 runtime. The Redis, Outbox.Redis, Orm and Outbox.Orm
+`net11.0`, so both runtimes must be installed. The Redis, Outbox.Redis, Orm and Outbox.Orm
 test projects start Testcontainers, so they need a running Docker daemon.
 
 Job `build` in `.github/workflows/build.yml`:

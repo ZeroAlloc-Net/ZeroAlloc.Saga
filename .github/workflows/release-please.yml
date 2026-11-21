@@ -74,7 +74,7 @@ jobs:
   # packages, pushes them, and waits until nuget.org serves every one of them. Shared from
   # ZeroAlloc-Net/.github so a fix there reaches every repository; see ZeroAlloc-Net/.github#49.
   # Destinations: nuget.org.
-  # dotnet-version keeps the 8.0.x SDK that build.yml and the previous publish job install.
+  # dotnet-version installs the 10.0 runtime next to the 11.0 SDK, like build.yml.
   publish:
     needs: release-please
     if: needs.release-please.outputs.releases_created == 'true'
@@ -84,7 +84,6 @@ jobs:
       version: ${{ needs.release-please.outputs.version }}
       solution: ZeroAlloc.Saga.slnx
       dotnet-version: |
-        8.0.x
         10.0.x
         11.0.x
       github-packages: false
@@ -133,7 +132,6 @@ jobs:
         with:
           global-json-file: global.json
           dotnet-version: |
-            8.0.x
             10.0.x
 
       - name: Build the release
