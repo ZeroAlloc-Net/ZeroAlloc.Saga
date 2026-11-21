@@ -41,5 +41,6 @@ allocates.
   that holds generated saga handlers fails with `MissingMethodException` until it is rebuilt.
 - Code that calls `AcquireAsync` itself compiles unchanged with `using var _ = await ...`. Code
   that stores the result as `IDisposable` either stores a `SagaLock` or boxes it, which allocates.
-- Dispose a `SagaLock` exactly once. A second `Dispose` throws `InvalidOperationException`, as a
-  second `Dispose` of the 4.x releaser did, and never releases a later holder of the same entry.
+- Dispose a `SagaLock` exactly once. A second `Dispose` throws `InvalidOperationException`. In 4.x
+  it threw only when no other caller was waiting; after a hand-off it silently released the next
+  holder's lock. It never releases a later holder now.
