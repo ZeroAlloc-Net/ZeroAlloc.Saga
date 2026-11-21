@@ -23,8 +23,8 @@
 
     <!-- CVE-2025-6965 / GHSA-2m69-gcr7-jv3q: EF Core Sqlite pulls
          SQLitePCLRaw.lib.e_sqlite3 2.1.11 (bundles SQLite < 3.50.2). Pin the native
-         binary to 3.50.3 (SQLite 3.50.3) via transitive pinning; satisfies both the
-         net8.0/EFCore9 and net10.0/EFCore10 graphs. core/provider stay on 2.x
+         binary to 3.50.3 (SQLite 3.50.3) via transitive pinning for the EF Core 10 graph
+         on net10.0 and net11.0. core/provider stay on 2.x
          (the sqlite3 C ABI is stable). Drop once EF Core ships a bumped SQLitePCLRaw. -->
     <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.50.3" />
 
