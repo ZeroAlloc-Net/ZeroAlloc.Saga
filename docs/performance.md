@@ -57,7 +57,10 @@ lowest and highest of the three launches in brackets.
 
 The 360 B on the two early-return paths is what every handler attempt costs: the per-attempt DI
 scope and the store and dispatcher it resolves. The key lock allocates nothing when no other
-handler holds the same key; before 5.0 it cost 40 B per attempt (#250). Both paths also log, so a log call
+handler holds the same key and a pooled lock entry is available for reuse; before 5.0 it cost 40 B per
+attempt (#250). The first acquire allocates a lock entry, and so does any acquire that finds the pool
+empty, for example when concurrent distinct keys use up the pooled entries. The pool keeps at most 64
+released entries. Both paths also log, so a log call
 that allocated while its level is disabled would show up in these two rows; see #248.
 
 There is no published head-to-head against another saga library yet.
