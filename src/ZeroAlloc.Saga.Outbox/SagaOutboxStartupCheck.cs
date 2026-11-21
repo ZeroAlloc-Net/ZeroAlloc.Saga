@@ -5,8 +5,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using ZeroAlloc.Outbox;
 
 namespace ZeroAlloc.Saga.Outbox;
@@ -44,7 +42,8 @@ namespace ZeroAlloc.Saga.Outbox;
 /// <para>
 /// ZeroAlloc.Outbox.Orm's store writes each row itself, so it works with any saga store, at
 /// least once. With the ORM saga store, <c>WithOrmOutbox()</c> makes that pairing atomic, and the
-/// check logs a warning when it is missing, without failing the start.
+/// check fails the start when it is missing: the atomic setup is one call away, and the
+/// at-least-once mode enqueues a command again on every concurrency retry.
 /// </para>
 /// </remarks>
 internal sealed class SagaOutboxStartupCheck : IHostedLifecycleService
@@ -73,7 +72,7 @@ internal sealed class SagaOutboxStartupCheck : IHostedLifecycleService
         "  WithEfCoreStore<TContext>() and AddOutbox().WithEfCore<TContext>(), on the same TContext: atomic.\n" +
         "  WithRedisStore() and WithOutbox().WithRedisOutbox(): atomic.\n" +
         "  WithOrmStore() and WithOutbox().WithOrmOutbox(), with AddOutbox().WithOrm(): atomic.\n" +
-        "  Any saga store and an outbox store that writes each row itself, such as AddOutbox().WithOrm(): " +
+        "  Any other saga store and an outbox store that writes each row itself, such as AddOutbox().WithOrm(): " +
         "at-least-once.\n" +
         "AddOutbox().WithEfCore<TContext>() only stages its rows, so it works with WithEfCoreStore<TContext>() " +
         "alone.\n" +
@@ -88,10 +87,10 @@ internal sealed class SagaOutboxStartupCheck : IHostedLifecycleService
 
     internal const string OrmWithoutOrmOutboxMessage =
         "ZeroAlloc.Saga.Outbox.WithOutbox(): the saga store WithOrmStore() is paired with the outbox store " +
-        "OrmOutboxStore without WithOrmOutbox(), so saga command dispatch is at-least-once: each outbox row is " +
-        "written when the step dispatches, before the saga state is saved, and a concurrency retry enqueues " +
-        "the command again. Add WithOrmOutbox() from ZeroAlloc.Saga.Outbox.Orm after WithOutbox() to commit " +
-        "the outbox rows in the saga store's transaction. " +
+        "OrmOutboxStore without WithOrmOutbox(). Without it each outbox row is written when the step " +
+        "dispatches, before the saga state is saved, so a concurrency retry enqueues the command again. " +
+        "Add WithOrmOutbox() from ZeroAlloc.Saga.Outbox.Orm after WithOutbox() to commit the outbox rows " +
+        "in the saga store's transaction. " +
         "See https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/blob/main/docs/outbox.md#zeroallocsagaorm-atomic-with-withormoutbox";
 
     internal const string NoSagaRegisteredMessage =
@@ -201,7 +200,7 @@ internal sealed class SagaOutboxStartupCheck : IHostedLifecycleService
         var storeType = store.GetType();
         if (string.Equals(storeType.FullName, OrmOutboxStoreTypeName, StringComparison.Ordinal))
         {
-            WarnOnOrmWithoutOrmOutbox();
+            ThrowOnOrmWithoutOrmOutbox();
             return;
         }
 
@@ -244,17 +243,14 @@ internal sealed class SagaOutboxStartupCheck : IHostedLifecycleService
     }
 
     // The ORM outbox store writes each row itself, so it works with any saga store, at-least-once.
-    // With the ORM saga store, WithOrmOutbox() makes the pairing atomic instead. This warns rather
-    // than fails: at-least-once is a supported mode, and an application that already runs it with
-    // idempotent step handlers keeps starting.
-    private void WarnOnOrmWithoutOrmOutbox()
+    // With the ORM saga store, WithOrmOutbox() makes the pairing atomic instead, so leaving it out
+    // fails the start: the at-least-once mode duplicates a command on every concurrency retry, and
+    // a warning in a log is easy to miss. #223
+    private void ThrowOnOrmWithoutOrmOutbox()
     {
         var sagaOptionsType = _services.GetRequiredService<SagaRetryOptions>().GetType();
-        if (!string.Equals(sagaOptionsType.FullName, OrmSagaStoreOptionsTypeName, StringComparison.Ordinal))
-            return;
-
-        var log = _services.GetService<ILogger<SagaOutboxStartupCheck>>() ?? NullLogger<SagaOutboxStartupCheck>.Instance;
-        log.LogWarning(OrmWithoutOrmOutboxMessage);
+        if (string.Equals(sagaOptionsType.FullName, OrmSagaStoreOptionsTypeName, StringComparison.Ordinal))
+            throw new InvalidOperationException(OrmWithoutOrmOutboxMessage);
     }
 
     private static string DescribeSagaStore(Type sagaOptionsType)
