@@ -23,7 +23,7 @@ public sealed class SagaLockManager<TKey>
 {
     // Entries kept for reuse once their key is released. A bound keeps an idle manager small
     // after a burst of distinct keys; beyond it a released entry is left to the GC.
-    private const int MaxPooledEntries = 64;
+    internal const int MaxPooledEntries = 64;
 
     // One gate guards the dictionary, the pool and every entry. Each critical section is a
     // dictionary operation, a pool step or a queue step, so a single gate is cheap, and it makes

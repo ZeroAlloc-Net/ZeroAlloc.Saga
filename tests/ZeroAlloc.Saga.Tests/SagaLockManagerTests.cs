@@ -234,7 +234,7 @@ public class SagaLockManagerTests
             l.Dispose();
 
         Assert.Equal(0, locks.TrackedKeyCount);
-        Assert.InRange(locks.PooledEntryCount, 1, 64);
+        Assert.Equal(SagaLockManager<int>.MaxPooledEntries, locks.PooledEntryCount);
     }
 
     [Fact]
