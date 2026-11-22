@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v4.2.1...ZeroAlloc.Saga-v5.0.0) (2026-11-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* net8.0 assets are no longer shipped; WithOrmStore with the ORM outbox store but without WithOrmOutbox now fails the host start; SagaLockManager.AcquireAsync returns ValueTask of the SagaLock struct instead of IDisposable, so assemblies with generated saga handlers must be rebuilt; a stale or double SagaLock Dispose now always throws InvalidOperationException. See the migration notes in the release and docs/migrating-to-v5.md.
+
+### Features
+
+* fail the host start for WithOrmStore with the ORM outbox store but no WithOrmOutbox ([84eaaee](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/84eaaee2546686260f57ce98ac42c7cb29a03070))
+* return a SagaLock struct from AcquireAsync so an uncontended acquire allocates nothing ([84eaaee](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/84eaaee2546686260f57ce98ac42c7cb29a03070))
+* target net10.0 and net11.0, drop net8.0 ([84eaaee](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/84eaaee2546686260f57ce98ac42c7cb29a03070))
+
+
+### Bug Fixes
+
+* drop the unused Microsoft.Extensions.Logging.Abstractions reference from ZeroAlloc.Saga.Outbox ([84eaaee](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/84eaaee2546686260f57ce98ac42c7cb29a03070))
+* throw on a stale or double SagaLock dispose instead of releasing the next holder of the key ([84eaaee](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/84eaaee2546686260f57ce98ac42c7cb29a03070))
+
 ## [4.2.1](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v4.2.0...ZeroAlloc.Saga-v4.2.1) (2026-11-16)
 
 
