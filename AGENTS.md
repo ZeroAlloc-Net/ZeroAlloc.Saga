@@ -80,7 +80,27 @@ SHA=$(git rev-parse --short HEAD)
 dotnet pack src/ZeroAlloc.Saga -c Release -p:Version=9.9.9-local.$SHA -o ./packout
 ```
 
+CI job `sdk10-consumer` (in `build.yml`) needs a 10.0.1xx SDK; `tests/ZeroAlloc.Saga.Sdk10Smoke/global.json` pins
+10.0.100 with `rollForward: latestPatch`, so a newer band cannot stand in for it. It builds and runs a
+consumer of the packed package with Roslyn 5.0:
+
+```bash
+dotnet pack src/ZeroAlloc.Saga -c Release -o artifacts -p:Version=9.9.9-local.<sha>
+cd tests/ZeroAlloc.Saga.Sdk10Smoke/Consumer
+dotnet run -c Release -p:ZeroAllocSagaVersion=9.9.9-local.<sha>
+```
+
+CI job `roslyn-floor` calls the shared `roslyn-floor.yml` from ZeroAlloc-Net/.github: it packs the
+solution and fails when a packed DLL references Roslyn above 5.0.0.
+
 ## Conventions and gotchas
+- The saga generator references `Microsoft.CodeAnalysis.CSharp` and `.Workspaces` 5.0.0, the compiler of SDK
+  band 10.0.1xx, the oldest supported SDK, set in `Directory.Packages.props`. A compiler older than the
+  Roslyn the DLL references skips the generator with `CS9057`, and nothing is generated. The shared
+  Renovate preset holds it below 5.1. If a newer Roslyn API is needed, change the code; raise the floor
+  only together with the minimum SDK. The generator test projects use 5.0.0 too. The saga's `IMediator`
+  comes from the `ZeroAlloc.Mediator.Generator` package dependency, so the `sdk10-consumer` job passes
+  only when that floor is a Mediator.Generator built against Roslyn 5.0; raise the floor when one ships.
 
 - `TreatWarningsAsErrors` and `EnforceCodeStyleInBuild` are on, and `RS0016`/`RS0017` are errors: every public
   API change needs an entry in that project's `PublicAPI.Unshipped.txt`. Move entries to `Shipped` only through

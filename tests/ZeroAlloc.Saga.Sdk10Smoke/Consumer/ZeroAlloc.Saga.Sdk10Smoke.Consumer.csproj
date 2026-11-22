@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Builds a consumer of the packed ZeroAlloc.Saga package with the oldest supported .NET SDK
+    band, 10.0.1xx, whose compiler is Roslyn 5.0. The package bundles the saga generator in
+    analyzers/dotnet/cs and depends on ZeroAlloc.Mediator.Generator, which emits IMediator. A
+    generator built against a newer Roslyn than the compiler that loads it is skipped with
+    CS9057, and then the saga class and IMediator do not exist, so the build fails with CS0246
+    or CS0103.
+
+    CS9057 itself is not an error here, and this job stays red until a Mediator.Generator built
+    against Roslyn 5.0 is on NuGet. Every published ZeroAlloc.Mediator.Generator, up to 7.0.0,
+    references Roslyn 5.9 or 5.12, which this SDK skips with that warning. It is tracked in
+    ZeroAlloc-Net/.github#77. Once it ships, raise the ZeroAlloc.Mediator.Generator floor in
+    Directory.Packages.props to it. To check the saga generator alone before then, pass
+    -p:ZeroAllocMediatorGeneratorVersion=<a local pack of the fixed Mediator.Generator>.
+
+    The parent folder's global.json pins the 10.0.1xx band with rollForward latestPatch, so a
+    newer band cannot stand in for it. Run locally with a 10.0.1xx SDK installed:
+      dotnet pack src/ZeroAlloc.Saga -c Release -o artifacts -p:Version=9.9.9-local.<sha>
+      cd tests/ZeroAlloc.Saga.Sdk10Smoke/Consumer
+      dotnet run -c Release -p:ZeroAllocSagaVersion=9.9.9-local.<sha>
+    Not part of the solution; the sdk10-consumer job in build.yml runs it.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <!-- The repository's Directory.Packages.props sits above this folder and NuGet still finds it. -->
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <WarningsAsErrors>$(WarningsAsErrors);CS8032</WarningsAsErrors>
+    <!-- ZAM003 is Mediator's hint to use readonly record struct; the records keep the sample short. -->
+    <NoWarn>$(NoWarn);ZAM003</NoWarn>
+  </PropertyGroup>
+
+  <Target Name="RequireZeroAllocSagaVersion" BeforeTargets="CollectPackageReferences">
+    <Error Condition="'$(ZeroAllocSagaVersion)' == ''"
+           Text="Pass the version of the packed package: -p:ZeroAllocSagaVersion=..." />
+  </Target>
+
+  <ItemGroup>
+    <PackageReference Include="ZeroAlloc.Saga" Version="[$(ZeroAllocSagaVersion)]" />
+    <PackageReference Include="ZeroAlloc.Mediator.Generator" Version="[$(ZeroAllocMediatorGeneratorVersion)]"
+                      Condition="'$(ZeroAllocMediatorGeneratorVersion)' != ''" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.*" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.*" />
+  </ItemGroup>
+</Project>

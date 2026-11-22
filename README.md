@@ -24,6 +24,8 @@ dotnet add package ZeroAlloc.Saga
 
 The packages target .NET 10 and .NET 11. `ZeroAlloc.Saga` carries its own generator and brings ZeroAlloc.Mediator, whose generator emits the `IMediator` that saga commands and events flow through. One package reference is enough.
 
+The generators need the .NET 10 SDK 10.0.100 or later, or Visual Studio 2026 or later. They are built against Roslyn 5.0, and an older compiler skips a generator with warning CS9057, after which the saga classes and `IMediator` are missing. Version 5.0.0 was built against Roslyn 5.12 and loads only in the .NET 11 SDK; on .NET 10, use 5.0.1 or later, with a ZeroAlloc.Mediator.Generator that is built against Roslyn 5.0 as well.
+
 ## Quick start
 
 ```csharp
