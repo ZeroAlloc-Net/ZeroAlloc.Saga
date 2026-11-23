@@ -42,8 +42,8 @@
          net10.0 test projects reference SqlClient, so no shipped package changes. Drop once
          SqlClient depends on a patched Pkcs. -->
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.15" />
-    <PackageVersion Include="ZeroAlloc.ORM" Version="2.16.1" />
-    <PackageVersion Include="ZeroAlloc.ORM.Generator" Version="2.16.1" />
+    <PackageVersion Include="ZeroAlloc.ORM" Version="2.17.2" />
+    <PackageVersion Include="ZeroAlloc.ORM.Generator" Version="2.17.2" />
   </ItemGroup>
 
   <!-- EF Core stays on the 10.0 line for net10.0 and net11.0 on purpose: a package floor of
@@ -58,16 +58,16 @@
   <ItemGroup>
 
     <!-- Outbox bridge deps -->
-    <PackageVersion Include="ZeroAlloc.Outbox" Version="4.7.2" />
-    <PackageVersion Include="ZeroAlloc.Outbox.EfCore" Version="4.7.2" />
-    <PackageVersion Include="ZeroAlloc.Outbox.Orm" Version="4.7.2" />
-    <PackageVersion Include="ZeroAlloc.Serialisation" Version="2.11.1" />
+    <PackageVersion Include="ZeroAlloc.Outbox" Version="4.7.4" />
+    <PackageVersion Include="ZeroAlloc.Outbox.EfCore" Version="4.7.4" />
+    <PackageVersion Include="ZeroAlloc.Outbox.Orm" Version="4.7.4" />
+    <PackageVersion Include="ZeroAlloc.Serialisation" Version="2.11.2" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.15" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.15" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.15" />
 
     <!-- Resilience bridge deps -->
-    <PackageVersion Include="ZeroAlloc.Resilience" Version="3.5.*" />
+    <PackageVersion Include="ZeroAlloc.Resilience" Version="3.6.0" />
 
     <!-- Redis backend deps -->
     <PackageVersion Include="StackExchange.Redis" Version="3.4.3*" />

@@ -23,7 +23,7 @@ dotnet add package ZeroAlloc.Mediator.Generator
 ZeroAlloc.Mediator, whose generator you reference directly. [Packages](packages.md) lists the
 optional stores and bridges.
 
-The generators need the .NET 10 SDK 10.0.100 or later, or Visual Studio 2026 or later. They are built against Roslyn 5.0, and an older compiler skips a generator with warning CS9057, after which the saga classes and `IMediator` are missing. Version 5.0.0 was built against Roslyn 5.12 and loads only in the .NET 11 SDK; on .NET 10, use 5.0.1 or later, with a ZeroAlloc.Mediator.Generator that is built against Roslyn 5.0 as well.
+The generators need the .NET 10 SDK 10.0.100 or later, or Visual Studio 2026 or later. They are built against Roslyn 5.0, and an older compiler skips a generator with warning CS9057, after which the saga classes and `IMediator` are missing. Version 5.0.0 was built against Roslyn 5.12 and loads only in the .NET 11 SDK; on .NET 10, use 5.0.1 or later, with a ZeroAlloc.Mediator.Generator that is built against Roslyn 5.0 as well. The Outbox and Resilience bridges need 5.0.2 or later: in 5.0.1, ZeroAlloc.Saga.Outbox, ZeroAlloc.Saga.Outbox.Orm, ZeroAlloc.Saga.Outbox.Redis and ZeroAlloc.Saga.Resilience depend on ZeroAlloc.Outbox 4.7.2, ZeroAlloc.Serialisation 2.11.1 and ZeroAlloc.Resilience 3.5.2, whose generators need SDK 10.0.4xx.
 
 ## Quick start
 

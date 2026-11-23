@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
     Builds a consumer of the packed ZeroAlloc.Saga package with the oldest supported .NET SDK
-    band, 10.0.1xx, whose compiler is Roslyn 5.0. The package bundles the saga generator in
+    band, 10.0.1xx, whose compiler is Roslyn 5.0. It also references ZeroAlloc.Saga.Outbox and
+    ZeroAlloc.Saga.Resilience, so the generators of their dependencies, ZeroAlloc.Outbox,
+    ZeroAlloc.Serialisation and ZeroAlloc.Resilience, load in the same compiler. The package bundles the saga generator in
     analyzers/dotnet/cs and depends on ZeroAlloc.Mediator.Generator, which emits IMediator. A
     generator built against a newer Roslyn than the compiler that loads it is skipped with
     CS9057, and then the saga class and IMediator do not exist, so the build fails with CS0246
@@ -16,6 +18,8 @@
     newer band cannot stand in for it. Run locally with a 10.0.1xx SDK installed:
       unset v; r=$(od -An -N4 -tx4 /dev/urandom | tr -d " ") && [ -n "$r" ] && v=9.9.9-local.sha$(git rev-parse HEAD | cut -c1-7).$(date +%s).r$r
       dotnet pack src/ZeroAlloc.Saga -c Release -o artifacts -p:Version=${v:?no random suffix}
+      dotnet pack src/ZeroAlloc.Saga.Outbox -c Release -o artifacts -p:Version=${v:?no random suffix}
+      dotnet pack src/ZeroAlloc.Saga.Resilience -c Release -o artifacts -p:Version=${v:?no random suffix}
       cd tests/ZeroAlloc.Saga.Sdk10Smoke/Consumer
       dotnet run -c Release -p:ZeroAllocSagaVersion=${v:?no random suffix}
     Each run packs a new version, so NuGet never restores an earlier pack from its cache. Each
@@ -43,6 +47,8 @@
 
   <ItemGroup>
     <PackageReference Include="ZeroAlloc.Saga" Version="[$(ZeroAllocSagaVersion)]" />
+    <PackageReference Include="ZeroAlloc.Saga.Outbox" Version="[$(ZeroAllocSagaVersion)]" />
+    <PackageReference Include="ZeroAlloc.Saga.Resilience" Version="[$(ZeroAllocSagaVersion)]" />
     <PackageReference Include="ZeroAlloc.Mediator.Generator" Version="[$(ZeroAllocMediatorGeneratorVersion)]"
                       Condition="'$(ZeroAllocMediatorGeneratorVersion)' != ''" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.1*" />
