@@ -82,11 +82,13 @@ dotnet pack src/ZeroAlloc.Saga -c Release -p:Version=9.9.9-local.$SHA -o ./packo
 
 CI job `sdk10-consumer` (in `build.yml`) needs a 10.0.1xx SDK; `tests/ZeroAlloc.Saga.Sdk10Smoke/global.json` pins
 10.0.100 with `rollForward: latestPatch`, so a newer band cannot stand in for it. It builds and runs a
-consumer of the packed package with Roslyn 5.0:
+consumer of the packed Saga, Saga.Outbox and Saga.Resilience packages with Roslyn 5.0:
 
 ```bash
 unset v; r=$(od -An -N4 -tx4 /dev/urandom | tr -d " ") && [ -n "$r" ] && v=9.9.9-local.sha$(git rev-parse --short HEAD).$(date +%s).r$r
 dotnet pack src/ZeroAlloc.Saga -c Release -o artifacts -p:Version="${v:?no random suffix}"
+dotnet pack src/ZeroAlloc.Saga.Outbox -c Release -o artifacts -p:Version="${v:?no random suffix}"
+dotnet pack src/ZeroAlloc.Saga.Resilience -c Release -o artifacts -p:Version="${v:?no random suffix}"
 cd tests/ZeroAlloc.Saga.Sdk10Smoke/Consumer
 dotnet run -c Release -p:ZeroAllocSagaVersion="${v:?no random suffix}"
 ```

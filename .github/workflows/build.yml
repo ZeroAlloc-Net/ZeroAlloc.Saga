@@ -44,7 +44,7 @@ jobs:
 
   # The generator runs in the consumer's compiler. A generator built against a newer Roslyn
   # than that compiler is skipped with CS9057, and IMediator and the generated saga code go missing.
-  # This builds a net10.0 consumer of the packed ZeroAlloc.Saga package with the oldest supported SDK band,
+  # This builds a net10.0 consumer of the packed ZeroAlloc.Saga, Saga.Outbox and Saga.Resilience packages with the oldest supported SDK band,
   # 10.0.1xx, whose compiler is Roslyn 5.0. See ZeroAlloc-Net/.github#77.
   sdk10-consumer:
     runs-on: ubuntu-latest
@@ -65,6 +65,8 @@ jobs:
           version="9.9.9-local.sha${GITHUB_SHA::7}"
           echo "SAGA_VERSION=$version" >> "$GITHUB_ENV"
           dotnet pack src/ZeroAlloc.Saga/ZeroAlloc.Saga.csproj -c Release -o artifacts -p:Version="$version"
+          dotnet pack src/ZeroAlloc.Saga.Outbox/ZeroAlloc.Saga.Outbox.csproj -c Release -o artifacts -p:Version="$version"
+          dotnet pack src/ZeroAlloc.Saga.Resilience/ZeroAlloc.Saga.Resilience.csproj -c Release -o artifacts -p:Version="$version"
 
       - name: Build and run the consumer
         working-directory: tests/ZeroAlloc.Saga.Sdk10Smoke/Consumer
