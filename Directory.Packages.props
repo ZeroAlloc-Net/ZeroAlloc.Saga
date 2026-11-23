@@ -15,7 +15,9 @@
          is what a project that references only ZeroAlloc.Saga compiles with. 6.6.1 is the first
          version that dispatches every handler interface a class implements, Mediator#334; with
          5.1.x the README quick start fails with ZAM001. The generator's output compiles against
-         the ZeroAlloc.Mediator 5.1 runtime floor above, so the runtime floor stays where it is. -->
+         the ZeroAlloc.Mediator 5.1 runtime floor above, so the runtime floor stays where it is.
+         6.7.3 is the first 6.x built against Roslyn 5.0, which every .NET 10 SDK loads. The float
+         resolves to the newest 6.7.x on NuGet, and pack writes that version as the dependency. -->
     <PackageVersion Include="ZeroAlloc.Mediator.Generator" Version="6.7.*" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.15" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.15" />

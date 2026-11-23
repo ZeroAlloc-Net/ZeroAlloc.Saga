@@ -85,10 +85,17 @@ CI job `sdk10-consumer` (in `build.yml`) needs a 10.0.1xx SDK; `tests/ZeroAlloc.
 consumer of the packed package with Roslyn 5.0:
 
 ```bash
-dotnet pack src/ZeroAlloc.Saga -c Release -o artifacts -p:Version=9.9.9-local.sha$(git rev-parse --short HEAD)
+unset v; r=$(od -An -N4 -tx4 /dev/urandom | tr -d " ") && [ -n "$r" ] && v=9.9.9-local.sha$(git rev-parse --short HEAD).$(date +%s).r$r
+dotnet pack src/ZeroAlloc.Saga -c Release -o artifacts -p:Version="${v:?no random suffix}"
 cd tests/ZeroAlloc.Saga.Sdk10Smoke/Consumer
-dotnet run -c Release -p:ZeroAllocSagaVersion=9.9.9-local.sha$(git rev-parse --short HEAD)
+dotnet run -c Release -p:ZeroAllocSagaVersion="${v:?no random suffix}"
 ```
+
+Each run packs a new version, so NuGet never restores an earlier pack, uncommitted edits included,
+from its global packages folder. Each step stops when the random suffix cannot be generated. Runs in
+one checkout share their `obj/` and `bin/` folders, so give each concurrent run its own worktree.
+`CS9057` is an error in the consumer, so a generator from any package in its graph that this SDK
+skips fails it, including the bundled `ZeroAlloc.Mediator.Generator`.
 
 CI job `roslyn-floor` calls the shared `roslyn-floor.yml` from ZeroAlloc-Net/.github: it packs the
 solution and fails when a packed DLL references Roslyn above 5.0.0.
