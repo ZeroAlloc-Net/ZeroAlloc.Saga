@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.1](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v5.0.0...ZeroAlloc.Saga-v5.0.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* build the generator against Roslyn 5.0 so every .NET 10 SDK loads it ([#380](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/380)) ([50a1d6e](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/50a1d6e67064feb802157a38bd3ec2dfee018379))
+
 ## [5.0.0](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v4.2.1...ZeroAlloc.Saga-v5.0.0) (2026-11-21)
 
 
