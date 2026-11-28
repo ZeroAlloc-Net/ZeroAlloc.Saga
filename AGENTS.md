@@ -82,13 +82,14 @@ dotnet pack src/ZeroAlloc.Saga -c Release -p:Version=9.9.9-local.$SHA -o ./packo
 
 CI job `sdk10-consumer` (in `build.yml`) needs a 10.0.1xx SDK; `tests/ZeroAlloc.Saga.Sdk10Smoke/global.json` pins
 10.0.100 with `rollForward: latestPatch`, so a newer band cannot stand in for it. It builds and runs a
-consumer of the packed Saga, Saga.Outbox and Saga.Resilience packages with Roslyn 5.0:
+consumer of every packed package with Roslyn 5.0:
 
 ```bash
 unset v; r=$(od -An -N4 -tx4 /dev/urandom | tr -d " ") && [ -n "$r" ] && v=9.9.9-local.sha$(git rev-parse --short HEAD).$(date +%s).r$r
-dotnet pack src/ZeroAlloc.Saga -c Release -o artifacts -p:Version="${v:?no random suffix}"
-dotnet pack src/ZeroAlloc.Saga.Outbox -c Release -o artifacts -p:Version="${v:?no random suffix}"
-dotnet pack src/ZeroAlloc.Saga.Resilience -c Release -o artifacts -p:Version="${v:?no random suffix}"
+for p in src/ZeroAlloc.Saga*/ZeroAlloc.Saga*.csproj; do
+  case "$p" in *.Generator.csproj) continue ;; esac
+  dotnet pack "$p" -c Release -o artifacts -p:Version="${v:?no random suffix}"
+done
 cd tests/ZeroAlloc.Saga.Sdk10Smoke/Consumer
 dotnet run -c Release -p:ZeroAllocSagaVersion="${v:?no random suffix}"
 ```
@@ -98,6 +99,9 @@ from its global packages folder. Each step stops when the random suffix cannot b
 one checkout share their `obj/` and `bin/` folders, so give each concurrent run its own worktree.
 `CS9057` is an error in the consumer, so a generator from any package in its graph that this SDK
 skips fails it, including the bundled `ZeroAlloc.Mediator.Generator`.
+The consumer references every package under `src`, the generator aside, because each brings its
+dependencies' generators: Saga.Orm and Saga.Outbox.Orm reach ZeroAlloc.AsyncEvents through
+AdoNet.Async.Adapters. CI fails when a packed package is missing from it.
 
 CI job `roslyn-floor` calls the shared `roslyn-floor.yml` from ZeroAlloc-Net/.github: it packs the
 solution and fails when a packed DLL references Roslyn above 5.0.0.

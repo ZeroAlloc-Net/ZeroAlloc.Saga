@@ -44,7 +44,7 @@ jobs:
 
   # The generator runs in the consumer's compiler. A generator built against a newer Roslyn
   # than that compiler is skipped with CS9057, and IMediator and the generated saga code go missing.
-  # This builds a net10.0 consumer of the packed ZeroAlloc.Saga, Saga.Outbox and Saga.Resilience packages with the oldest supported SDK band,
+  # This builds a net10.0 consumer of every packed package with the oldest supported SDK band,
   # 10.0.1xx, whose compiler is Roslyn 5.0. See ZeroAlloc-Net/.github#77.
   sdk10-consumer:
     runs-on: ubuntu-latest
@@ -64,9 +64,24 @@ jobs:
         run: |
           version="9.9.9-local.sha${GITHUB_SHA::7}"
           echo "SAGA_VERSION=$version" >> "$GITHUB_ENV"
-          dotnet pack src/ZeroAlloc.Saga/ZeroAlloc.Saga.csproj -c Release -o artifacts -p:Version="$version"
-          dotnet pack src/ZeroAlloc.Saga.Outbox/ZeroAlloc.Saga.Outbox.csproj -c Release -o artifacts -p:Version="$version"
-          dotnet pack src/ZeroAlloc.Saga.Resilience/ZeroAlloc.Saga.Resilience.csproj -c Release -o artifacts -p:Version="$version"
+          # Every package under src; the saga generator ships inside ZeroAlloc.Saga.
+          for project in src/ZeroAlloc.Saga*/ZeroAlloc.Saga*.csproj; do
+            case "$project" in *.Generator.csproj) continue ;; esac
+            dotnet pack "$project" -c Release -o artifacts -p:Version="$version"
+          done
+          # A package the consumer leaves out is a dependency graph nobody checks, so a new
+          # package fails here until the consumer references it.
+          # MSBuild evaluates the project, so a reference inside an XML comment does not count.
+          consumer=tests/ZeroAlloc.Saga.Sdk10Smoke/Consumer
+          referenced=$(cd "$consumer" && dotnet msbuild -getItem:PackageReference -p:ZeroAllocSagaVersion="$version" \
+            | python3 -c 'import json, sys; print("\n".join(i["Identity"] for i in json.load(sys.stdin)["Items"]["PackageReference"]))')
+          for package in artifacts/*."$version".nupkg; do
+            id=$(basename "$package" ".$version.nupkg")
+            if ! grep -qxF "$id" <<< "$referenced"; then
+              echo "::error::$consumer does not reference $id"
+              exit 1
+            fi
+          done
 
       - name: Build and run the consumer
         working-directory: tests/ZeroAlloc.Saga.Sdk10Smoke/Consumer
