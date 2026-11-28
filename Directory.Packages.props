@@ -19,9 +19,9 @@
          6.7.3 is the first 6.x built against Roslyn 5.0, which every .NET 10 SDK loads. The float
          resolves to the newest 6.7.x on NuGet, and pack writes that version as the dependency. -->
     <PackageVersion Include="ZeroAlloc.Mediator.Generator" Version="6.7.*" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.15" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.15" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.15" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="11.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="11.0.0" />
 
     <!-- CVE-2025-6965 / GHSA-2m69-gcr7-jv3q: EF Core Sqlite pulls
          SQLitePCLRaw.lib.e_sqlite3 2.1.11 (bundles SQLite < 3.50.2). Pin the native
@@ -32,7 +32,7 @@
 
     <!-- EfCore backend deps -->
     <PackageVersion Include="ZeroAlloc.ValueObjects.EfCore" Version="2.4.*" />
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.1*" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="11.0.*" />
     <PackageVersion Include="AdoNet.Async.Adapters" Version="1.6.2" />
     <PackageVersion Include="Testcontainers.MsSql" Version="4.17.0" />
     <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.1.2" />
@@ -41,7 +41,7 @@
          into the SQL Server test fixtures. Transitive pinning lifts it to a patched version; only
          net10.0 test projects reference SqlClient, so no shipped package changes. Drop once
          SqlClient depends on a patched Pkcs. -->
-    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.15" />
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="11.0.0" />
     <PackageVersion Include="ZeroAlloc.ORM" Version="2.17.3" />
     <PackageVersion Include="ZeroAlloc.ORM.Generator" Version="2.17.3" />
   </ItemGroup>
@@ -62,9 +62,9 @@
     <PackageVersion Include="ZeroAlloc.Outbox.EfCore" Version="4.7.4" />
     <PackageVersion Include="ZeroAlloc.Outbox.Orm" Version="4.7.4" />
     <PackageVersion Include="ZeroAlloc.Serialisation" Version="2.11.2" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.15" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.15" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.15" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="11.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="11.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="11.0.0" />
 
     <!-- Resilience bridge deps -->
     <PackageVersion Include="ZeroAlloc.Resilience" Version="3.6.0" />

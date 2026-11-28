@@ -57,7 +57,7 @@
     <PackageReference Include="ZeroAlloc.Saga.Redis" Version="[$(ZeroAllocSagaVersion)]" />
     <PackageReference Include="ZeroAlloc.Mediator.Generator" Version="[$(ZeroAllocMediatorGeneratorVersion)]"
                       Condition="'$(ZeroAllocMediatorGeneratorVersion)' != ''" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.1*" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.1*" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="11.0.*" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="11.0.*" />
   </ItemGroup>
 </Project>
