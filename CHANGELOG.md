@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.3](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v5.0.2...ZeroAlloc.Saga-v5.0.3) (2026-11-28)
+
+
+### Bug Fixes
+
+* depend on ZeroAlloc.ORM 2.17.3 and AdoNet.Async.Adapters 1.6.2 in the ORM stores ([#387](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/issues/387)) ([4ea9911](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/commit/4ea9911f26e2ae5ba28460b2305c26ae47c7ad86))
+
 ## [5.0.2](https://github.com/ZeroAlloc-Net/ZeroAlloc.Saga/compare/ZeroAlloc.Saga-v5.0.1...ZeroAlloc.Saga-v5.0.2) (2026-11-23)
 
 
