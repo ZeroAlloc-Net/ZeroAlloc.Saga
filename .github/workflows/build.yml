@@ -71,10 +71,13 @@ jobs:
           done
           # A package the consumer leaves out is a dependency graph nobody checks, so a new
           # package fails here until the consumer references it.
-          consumer=tests/ZeroAlloc.Saga.Sdk10Smoke/Consumer/ZeroAlloc.Saga.Sdk10Smoke.Consumer.csproj
+          # MSBuild evaluates the project, so a reference inside an XML comment does not count.
+          consumer=tests/ZeroAlloc.Saga.Sdk10Smoke/Consumer
+          referenced=$(cd "$consumer" && dotnet msbuild -getItem:PackageReference -p:ZeroAllocSagaVersion="$version" \
+            | python3 -c 'import json, sys; print("\n".join(i["Identity"] for i in json.load(sys.stdin)["Items"]["PackageReference"]))')
           for package in artifacts/*."$version".nupkg; do
             id=$(basename "$package" ".$version.nupkg")
-            if ! grep -q "Include=\"$id\"" "$consumer"; then
+            if ! grep -qxF "$id" <<< "$referenced"; then
               echo "::error::$consumer does not reference $id"
               exit 1
             fi
